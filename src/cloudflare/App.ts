@@ -20,6 +20,7 @@ import * as Executor from './internal/Executor.ts'
 import * as HandToken from './internal/HandToken.ts'
 import { headerJson, json } from './internal/Http.ts'
 import * as Metadata from './internal/Metadata.ts'
+import type * as Pickers from '../client/Pickers.ts'
 import * as PlanModels from '../client/Plans.ts'
 import * as Subagents from '../client/Subagents.ts'
 import * as Plans from './Plans.ts'
@@ -3206,6 +3207,10 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
         models: { claude, codex: 'gpt-6.1-sol' },
         auth: env.MODEL_AUTH ?? 'api_key',
       })
+    if (url.pathname === '/models')
+      return options.models
+        ? json({ harnesses: options.models })
+        : json({ error: 'the deployment lists no models: pass models to App.create' }, 404)
     const head = request.method === 'HEAD'
     if (url.pathname === '/metrics' && (request.method === 'GET' || head))
       return egress(env).fetch(
@@ -3359,6 +3364,7 @@ export declare namespace create {
       fetch?(authority: SessionAuthority, env: E, subagent?: Contracts.Subagent): typeof fetch
       store?(env: E): Contracts.McpStore | undefined
     }
+    models?: readonly Pickers.Harness[]
     payers?: readonly Contracts.Payer[]
     plans?: Plans.Options<E>
     recordSession?(account: string, name: string, env: E): Promise<boolean> | boolean

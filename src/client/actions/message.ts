@@ -1,5 +1,6 @@
 import * as Instance from '../internal/Instance.ts'
 import type * as Message from '../Message.ts'
+import type * as Model from '../Model.ts'
 import type * as Transcript from '../Transcript.ts'
 import type * as Transport from '../Transport.ts'
 
@@ -18,8 +19,10 @@ export declare namespace note {
   }
 }
 
-export function send(client: object, options: send.Options): Promise<void> {
-  return Instance.get(client).config.send(options.text, options.attachments)
+export async function send(client: object, options: send.Options): Promise<void> {
+  const instance = Instance.get(client)
+  await instance.ready()
+  return instance.config.send(options.text, options.attachments)
 }
 
 export declare namespace send {
@@ -27,6 +30,8 @@ export declare namespace send {
     attachments?: readonly Transport.Attachment[] | undefined
     text: string
   }
+
+  type ErrorType = Model.ListError
 }
 
 export function stop(client: object): Promise<void> {

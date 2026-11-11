@@ -1,4 +1,5 @@
 import type * as LiveEvent from '../client/LiveEvent.ts'
+import type * as ClientModel from '../client/Model.ts'
 import * as Pause from '../client/internal/Pause.ts'
 import * as Relay from '../client/Relay.ts'
 import * as ServerEvents from '../client/ServerEvents.ts'
@@ -399,6 +400,11 @@ export function create(options: create.Options): Transport {
       return (await listing()).hands
     },
     listing,
+    async models() {
+      const response = await fetch(`${url}?models`, { headers: headers() })
+      if (!response.ok) throw new Error(`${response.status} ${await response.text()}`)
+      return (await response.json()) as ClientModel.Listing
+    },
     crash(crash = {}) {
       return fetch(options.chaosUrl ?? url.replace(/chat$/, 'chaos'), {
         method: 'POST',

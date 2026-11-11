@@ -1,11 +1,19 @@
+import type * as Contracts from '../../Contracts.ts'
 import type * as Config from '../Config.ts'
 import type * as Conversation from '../Conversation.ts'
 import type * as Message from '../Message.ts'
+import type * as Model from '../Model.ts'
 
 export type Instance = {
   config: Config.Config
   conversation(): Conversation.State
   messages(): readonly Message.Message[]
+  model: {
+    get(): Model.State
+    select(id: string): void
+    setThinking(thinking: Contracts.Thinking): void
+  }
+  ready(): Promise<void>
 }
 
 const instances = new WeakMap<object, Instance>()

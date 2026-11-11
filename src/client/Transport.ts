@@ -1,6 +1,7 @@
 import type * as InternalFiles from '../internal/Files.ts'
 import * as Format from './internal/Format.ts'
 import type * as LiveEvent from './LiveEvent.ts'
+import type * as Model from './Model.ts'
 import type * as Storage from './Storage.ts'
 import type * as Subagents from './Subagents.ts'
 import type * as Transcript from './Transcript.ts'
@@ -9,6 +10,11 @@ export type Attachment = InternalFiles.Attachment
 
 export type Context = {
   headers(): Record<string, string>
+  selection(): Model.Selection
+  session: {
+    load(): Record<string, never>
+    save(session: { id?: string | undefined }): void
+  }
   storage: Storage.Storage
 }
 
@@ -34,6 +40,7 @@ export type Parameters = {
 export type Transport = {
   cancel?(): Promise<void>
   files?: Files
+  models?(): Promise<Model.Listing>
   restore?(state: unknown): void
   resume?(parameters: Omit<Parameters, 'prompt'>): Promise<void>
   send(parameters: Parameters): Promise<void>

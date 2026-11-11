@@ -1,4 +1,5 @@
 import * as LiveEvent from '../client/LiveEvent.ts'
+import type * as ClientModel from '../client/Model.ts'
 import * as Pause from '../client/internal/Pause.ts'
 import * as Relay from '../client/Relay.ts'
 import * as ServerEvents from '../client/ServerEvents.ts'
@@ -381,6 +382,11 @@ export function create(options: create.Options): create.ReturnType {
       return [...(await listing()).hands].filter((name): name is string => name !== null)
     },
     listing,
+    async models() {
+      const response = await fetch(`${base}models`, { headers: headers() })
+      if (!response.ok) throw new Error(`${response.status} ${await response.text()}`)
+      return (await response.json()) as ClientModel.Listing
+    },
     async health() {
       const open = await fetch(`${base}health`).catch(() => undefined)
       return open?.ok
