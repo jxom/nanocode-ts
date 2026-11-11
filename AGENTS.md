@@ -22,7 +22,7 @@ These principles come from nanocodexyz/nanocode's `AGENTS.md` and apply to every
 - Send models only the SDK's native prompts and tool text. nanocode-ts defines no system or developer instructions, workspace instructions, or tool description overrides. `instructions` stays an option for hosts.
 - Host-agnostic modules use only the standard web platform types: no Node APIs, no `@cloudflare/workers-types`, no Durable Object types. Hosts supply platform capabilities through the contracts in `Contracts.ts` or take an adapter's.
 - Every runtime is its own package subpath, and `package.json` marks no module as a side effect. A page that imports a browser transport bundles no Worker, Node, or WebAssembly code.
-- The React components are headless: they render `data-nc` elements, take a `Skin`, and carry no styles. Skins, themes, tokens, page chrome and every other Zyzz definition belong in nanocodexyz/nds.
+- `nanocode-ts/react` is headless: hooks that return state and functions, never props, refs or elements (its old components go as `nanocode-ts/ui` covers them). `nanocode-ts/ui` renders that state as parts styled with nanocodexyz/nds, the only module that holds Zyzz definitions here. Tokens, themes and generic components belong in nds, which imports nothing from nanocode-ts.
 - Limits come from host policy passed in, never from constants in this package.
 - The Rust side is single-threaded and keeps its state in `thread_local` cells, with no `Mutex` or `RwLock`.
 - TypeScript uses only erasable syntax (`erasableSyntaxOnly`, `verbatimModuleSyntax`), so Node 22.18 or newer runs the sources directly with type stripping from a checkout or a `file:` link.
@@ -202,7 +202,7 @@ Applies to this file, interface copy, and commit messages.
 
 ## UI Conventions
 
-- Keep the components free of styles: no Zyzz, no stylesheets, no class names of their own. A look is a `Skin`, and the nanocode looks live in nanocodexyz/nds.
+- Style only `src/ui/`, with nds's `style`, `variants` and tokens. Each part takes `render` and `className`, follows Base UI's anatomy (`Tool.Root`, `Tool.Trigger`), and exposes its state as `data-*` attributes through `useRender`'s `state`. A part's own root never takes a Zyzz variant, since a variant writes `data-*` attributes of its own.
 - Use accessible native controls with labels, visible focus, and `aria-live` for asynchronous status. Use an accessible primitive library only when a component needs coordinated behavior, such as a popup.
 - Respect reduced-motion preferences. Animate `transform` and `opacity`.
 - Keep components in the file that uses them until a second module needs them.
@@ -210,7 +210,7 @@ Applies to this file, interface copy, and commit messages.
 ## Repository Layout
 
 - `src/` holds flat PascalCase TypeScript modules for the host-agnostic API. `src/internal/` holds modules that no entrypoint exports.
-- Each platform adapter is a lowercase folder that names its platform or role, such as `src/cloudflare/`, `src/vercel/`, `src/bash/`, `src/machines/`, `src/react/`, and `src/sandbox/`. Its own modules are flat PascalCase files, and its `index.ts` re-exports them as namespaces.
+- Each platform adapter is a lowercase folder that names its platform or role, such as `src/cloudflare/`, `src/vercel/`, `src/bash/`, `src/machines/`, `src/react/`, `src/sandbox/`, and `src/ui/`. Its own modules are flat PascalCase files, and its `index.ts` re-exports them as namespaces.
 - `src/wasm.rs` and `src/wasm/` hold the WebAssembly crate. `interpreter/` holds the Python interpreter crate.
 - `scripts/` holds build, release, and measurement scripts. `bench/` holds the optimization and eval harness. `examples/` holds runnable hosts of a public entrypoint, such as `examples/feedback`.
 

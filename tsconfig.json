@@ -31,6 +31,9 @@
     "src/sandbox/Container.ts",
     "src/sandbox/internal/*.ts",
     "src/transports/*.ts",
+    "src/ui/*.ts",
+    "src/ui/*.tsx",
+    "src/ui/internal/*.ts",
     "src/vercel/Transport.ts"
   ]
 }

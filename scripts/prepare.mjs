@@ -111,6 +111,7 @@ function typescript() {
     'package.json',
     'package-lock.json',
     'scripts/pyodide.mjs',
+    'scripts/zyzz.mjs',
     ...readdirSync(root).filter((name) => /^tsconfig.*\.json$/.test(name)),
   ]
   for (const entry of readdirSync(join(root, 'src'), { recursive: true, withFileTypes: true })) {
