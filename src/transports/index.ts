@@ -11,6 +11,7 @@ export function cloudflare(options: cloudflare.Options = {}): Transport.Factory 
         const selection = context.selection()
         return {
           model: selection.model,
+          payer: selection.payer,
           provider: selection.harness,
           thinking: selection.thinking,
         }
@@ -38,6 +39,7 @@ export function vercel(options: vercel.Options = {}): Transport.Factory {
           effort: selection.thinking,
           harness: selection.harness,
           model: selection.model,
+          payer: selection.payer,
         }
       },
       session: context.session,

@@ -98,6 +98,10 @@
       "types": "./dist/sandbox/vercel.d.ts",
       "default": "./dist/sandbox/vercel.js"
     },
+    "./plugins": {
+      "types": "./dist/plugins/index.d.ts",
+      "default": "./dist/plugins/index.js"
+    },
     "./transports": {
       "types": "./dist/transports/index.d.ts",
       "default": "./dist/transports/index.js"

@@ -1,7 +1,8 @@
+import type * as Client from '../Client.ts'
 import * as Instance from '../internal/Instance.ts'
 import type * as Transport from '../Transport.ts'
 
-export function read(client: object, options: read.Options): Promise<Blob> {
+export function read(client: Client.Client, options: read.Options): Promise<Blob> {
   return files(client).read(options.path, options.signal)
 }
 
@@ -14,7 +15,10 @@ export declare namespace read {
   type ErrorType = UnavailableError
 }
 
-export function upload(client: object, options: upload.Options): Promise<Transport.Attachment> {
+export function upload(
+  client: Client.Client,
+  options: upload.Options,
+): Promise<Transport.Attachment> {
   return files(client).upload(options.file, options.name, options.signal)
 }
 
@@ -28,7 +32,7 @@ export declare namespace upload {
   type ErrorType = UnavailableError
 }
 
-function files(client: object): Transport.Files {
+function files(client: Client.Client): Transport.Files {
   const found = Instance.get(client).config.files
   if (!found) throw new UnavailableError()
   return found

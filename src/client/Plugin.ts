@@ -1,17 +1,31 @@
+import type * as Client from './Client.ts'
+import type * as Model from './Model.ts'
+import type * as Payer from './Payer.ts'
 import type * as Storage from './Storage.ts'
+import type * as Transport from './Transport.ts'
 
 export type Plugin<id extends string = string, actions = unknown, state = unknown> = {
   actions?: ((context: Context<state>) => actions) | undefined
+  beforeSend?: ((context: Context<state>) => Promise<void> | void) | undefined
   headers?: (() => Record<string, string>) | undefined
   id: id
   initial?: state | undefined
+  payers?: ((options: PayersOptions<state>) => readonly Payer.Payer[]) | undefined
   setup?: ((context: Context<state>) => void) | undefined
 }
 
 export type Context<state = unknown> = {
+  client: Client.Client
   emit(state: state): void
   getState(): state | undefined
+  headers(): Record<string, string>
   storage: Storage.Storage
+  transport: Transport.Transport
+}
+
+export type PayersOptions<state = unknown> = {
+  listing: Model.ListingState
+  state: state | undefined
 }
 
 export type Option = Plugin | false | null | undefined | readonly Option[]

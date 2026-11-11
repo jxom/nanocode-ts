@@ -1,14 +1,17 @@
 import type * as Contracts from '../Contracts.ts'
+import * as Keyring from '../machines/Keyring.ts'
 import * as conversation from './actions/conversation.ts'
 import * as file from './actions/file.ts'
 import * as message from './actions/message.ts'
 import * as model from './actions/model.ts'
+import * as payer from './actions/payer.ts'
 import * as Config from './Config.ts'
-import type * as Conversation from './Conversation.ts'
+import * as Conversation from './Conversation.ts'
 import * as Instance from './internal/Instance.ts'
 import type * as LiveEvent from './LiveEvent.ts'
 import * as Message from './Message.ts'
 import * as Model from './Model.ts'
+import * as Payer from './Payer.ts'
 import * as Plugin from './Plugin.ts'
 import * as Storage from './Storage.ts'
 import * as Transcript from './Transcript.ts'
@@ -44,6 +47,10 @@ export type Client<plugins extends readonly Plugin.Plugin[] = readonly Plugin.Pl
   }
   off: Listen<plugins>
   on: Listen<plugins>
+  payer: {
+    get(): Payer.State
+    select(options: payer.select.Options): void
+  }
   removeListener: Listen<plugins>
 } & Plugin.Namespaces<plugins>
 
@@ -52,6 +59,7 @@ export type Events<plugins extends readonly Plugin.Plugin[] = readonly Plugin.Pl
   event: LiveEvent.LiveEvent
   message: readonly Message.Message[]
   model: Model.State
+  payer: Payer.State
   state: State
 } & Plugin.States<plugins>
 
@@ -66,13 +74,10 @@ type Listen<plugins extends readonly Plugin.Plugin[]> = <name extends keyof Even
   listener: (value: Events<plugins>[name]) => void,
 ) => Client<plugins>
 
-type Listing =
-  | { error: Model.ListError; status: 'failed' }
-  | { harnesses: readonly Model.Harness[]; status: 'listed' }
-  | { status: 'loading' }
-
 type Saved = {
   bound: Record<string, string>
+  paid: Record<string, string>
+  payer?: string | undefined
   picked?: string | undefined
   thinking?: Record<string, Contracts.Thinking> | undefined
 }
@@ -110,14 +115,50 @@ export function create<const plugins extends readonly Plugin.Option[] = readonly
   const savedKey = `${storage.key}:models`
   const saved: Saved = {
     bound: {},
+    paid: {},
     ...(JSON.parse(storage.getItem(savedKey) ?? '{}') as Partial<Saved>),
   }
-  let listing: Listing = { status: 'loading' }
+  let listing: Model.ListingState = { status: 'loading' }
   let selected: Model.State | undefined
+  let paying: Payer.State | undefined
+
+  const payers = (): Payer.State => {
+    const deployment: Payer.Payer = {
+      id: 'deployment',
+      kind: 'deployment',
+      label: 'This deployment',
+      ...(listing.status === 'listed'
+        ? { harnesses: listing.listing.harnesses, status: 'ready' as const }
+        : listing),
+    }
+    const all = [
+      deployment,
+      ...plugins.flatMap(
+        (plugin) => plugin.payers?.({ listing, state: states.get(plugin.id) }) ?? [],
+      ),
+    ]
+    const id = config.getState().conversation
+    const wanted = (id && saved.paid[id]) || saved.payer
+    return { current: all.find((entry) => entry.id === wanted) ?? deployment, payers: all }
+  }
 
   const resolve = (): Model.State => {
-    if (listing.status !== 'listed') return listing
-    const choices = listing.harnesses.flatMap((harness) =>
+    const { current: paid } = paying!
+    if (paid.status === 'loading') return { status: 'loading' }
+    if (paid.status === 'failed')
+      return {
+        error:
+          paid.error instanceof Model.ListError
+            ? paid.error
+            : new Model.ListError({ cause: paid.error, reason: paid.error.message }),
+        status: 'failed',
+      }
+    if (paid.status === 'disconnected')
+      return {
+        error: new Model.ListError({ reason: `${paid.label} is not connected` }),
+        status: 'failed',
+      }
+    const choices = paid.harnesses.flatMap((harness) =>
       harness.models.map((entry) => ({ entry, harness: harness.id })),
     )
     const id = config.getState().conversation
@@ -125,13 +166,13 @@ export function create<const plugins extends readonly Plugin.Option[] = readonly
     const found = choices.find((choice) => choice.entry.id === wanted) ?? choices[0]
     if (!found)
       return {
-        error: new Model.ListError({ reason: 'the deployment lists no models' }),
+        error: new Model.ListError({ reason: `${paid.label} offers no models` }),
         status: 'failed',
       }
     return {
       current: found.entry,
       harness: found.harness,
-      harnesses: listing.harnesses,
+      harnesses: paid.harnesses,
       status: 'ready',
       thinking:
         saved.thinking?.[found.entry.id] ??
@@ -150,15 +191,34 @@ export function create<const plugins extends readonly Plugin.Option[] = readonly
     saved.bound = Object.fromEntries(
       Object.entries(saved.bound).filter((entry) => ids.has(entry[0])),
     )
+    saved.paid = Object.fromEntries(Object.entries(saved.paid).filter((entry) => ids.has(entry[0])))
     storage.setItem(savedKey, JSON.stringify(saved))
     refresh()
   }
 
+  const headers = (): Record<string, string> =>
+    Object.assign(
+      Keyring.visitorHeaders({ storage }),
+      ...plugins.map((plugin) => plugin.headers?.() ?? {}),
+    )
+
+  const rebind = (bound: Record<string, string>, id: string) => {
+    const conversation = config.getState().conversation
+    if (!conversation || !bound[conversation] || bound[conversation] === id) return
+    if (snapshot.conversation.status === 'locked') throw new Conversation.LockedError()
+    config.create()
+  }
+
   const transport = options.transport({
-    headers: () => Object.assign({}, ...plugins.map((plugin) => plugin.headers?.() ?? {})),
+    headers,
     selection: () => {
       const state = ready()
-      return { harness: state.harness, model: state.current.id, thinking: state.thinking }
+      return {
+        harness: state.harness,
+        model: state.current.id,
+        payer: paying!.current.kind,
+        thinking: state.thinking,
+      }
     },
     session: {
       load: () => ({}),
@@ -166,6 +226,7 @@ export function create<const plugins extends readonly Plugin.Option[] = readonly
         const id = config.getState().conversation
         if (!session.id || !id || saved.bound[id]) return
         saved.bound[id] = ready().current.id
+        saved.paid[id] = paying!.current.id
         persist()
       },
     },
@@ -181,7 +242,7 @@ export function create<const plugins extends readonly Plugin.Option[] = readonly
   const listed: Promise<void> = transport.models
     ? transport.models().then(
         (result) => {
-          listing = { harnesses: result.harnesses, status: 'listed' }
+          listing = { listing: result, status: 'listed' }
           refresh()
         },
         (cause: unknown) => {
@@ -203,6 +264,7 @@ export function create<const plugins extends readonly Plugin.Option[] = readonly
     }
 
   let snapshot = derive(config, undefined)
+  paying = payers()
   selected = resolve()
 
   function refresh() {
@@ -211,6 +273,11 @@ export function create<const plugins extends readonly Plugin.Option[] = readonly
     if (snapshot.messages !== previous.messages) emit('message', snapshot.messages)
     if (snapshot.state !== previous.state) emit('state', snapshot.state)
     if (snapshot.conversation !== previous.conversation) emit('conversation', snapshot.conversation)
+    const nextPayer = payers()
+    if (!samePayer(paying, nextPayer)) {
+      paying = nextPayer
+      emit('payer', nextPayer)
+    }
     const next = resolve()
     if (!same(selected, next)) {
       selected = next
@@ -224,6 +291,7 @@ export function create<const plugins extends readonly Plugin.Option[] = readonly
     if (name === 'conversation') return { value: snapshot.conversation }
     if (name === 'message') return { value: snapshot.messages }
     if (name === 'model') return { value: selected }
+    if (name === 'payer') return { value: paying }
     if (name === 'state') return { value: snapshot.state }
     if (typeof name === 'string' && states.has(name)) return { value: states.get(name) }
     return undefined
@@ -298,6 +366,10 @@ export function create<const plugins extends readonly Plugin.Option[] = readonly
     },
     off,
     on,
+    payer: {
+      get: () => payer.get(client),
+      select: (options: payer.select.Options) => payer.select(client, options),
+    },
     removeListener: off,
   } as unknown as Client<Plugin.Flatten<plugins>>
 
@@ -311,10 +383,8 @@ export function create<const plugins extends readonly Plugin.Option[] = readonly
         const state = ready()
         if (!state.harnesses.some((harness) => harness.models.some((entry) => entry.id === id)))
           throw new Model.NotFoundError({ id })
-        const conversation = config.getState().conversation
+        rebind(saved.bound, id)
         saved.picked = id
-        if (conversation && saved.bound[conversation] && saved.bound[conversation] !== id)
-          config.create()
         persist()
       },
       setThinking: (thinking) => {
@@ -326,24 +396,56 @@ export function create<const plugins extends readonly Plugin.Option[] = readonly
         persist()
       },
     },
+    payer: {
+      get: () => paying!,
+      select: (id) => {
+        const found = paying!.payers.find((entry) => entry.id === id)
+        if (!found)
+          throw new Payer.NotFoundError({ id, ids: paying!.payers.map((entry) => entry.id) })
+        if (found.status === 'disconnected') throw new Payer.DisconnectedError(found)
+        rebind(saved.paid, id)
+        saved.payer = id
+        persist()
+      },
+    },
     ready: async () => {
       await listed
-      if (listing.status === 'failed' && transport.models) throw listing.error
+      while (selected!.status === 'loading')
+        await new Promise<void>((resolve) => {
+          const listener = (state: Model.State) => {
+            if (state.status === 'loading') return
+            off('model', listener)
+            resolve()
+          }
+          on('model', listener)
+        })
+      if (
+        selected!.status === 'failed' &&
+        (paying!.current.kind !== 'deployment' || transport.models)
+      )
+        throw selected!.error
+      for (const plugin of plugins) await plugin.beforeSend?.(contexts.get(plugin)!)
     },
   })
 
+  const contexts = new Map<Plugin.Plugin, Plugin.Context>()
   for (const plugin of plugins) {
     const context: Plugin.Context = {
+      client,
       emit: (state) => {
         states.set(plugin.id, state)
         emit(plugin.id, state)
+        refresh()
       },
       getState: () => states.get(plugin.id),
+      headers,
       storage,
+      transport,
     }
+    contexts.set(plugin, context)
     if (plugin.actions) Object.assign(client, { [plugin.id]: plugin.actions(context) })
-    plugin.setup?.(context)
   }
+  for (const plugin of plugins) plugin.setup?.(contexts.get(plugin)!)
 
   return client
 }
@@ -368,6 +470,20 @@ function same(previous: Model.State | undefined, next: Model.State): boolean {
     )
   if (previous.status === 'failed' && next.status === 'failed') return previous.error === next.error
   return true
+}
+
+function samePayer(previous: Payer.State | undefined, next: Payer.State): boolean {
+  if (!previous || previous.current.id !== next.current.id) return false
+  if (previous.payers.length !== next.payers.length) return false
+  return previous.payers.every((entry, index) => {
+    const other = next.payers[index]!
+    if (entry.id !== other.id || entry.status !== other.status || entry.label !== other.label)
+      return false
+    if (entry.status === 'ready' && other.status === 'ready')
+      return entry.harnesses === other.harnesses
+    if (entry.status === 'failed' && other.status === 'failed') return entry.error === other.error
+    return true
+  })
 }
 
 export declare namespace events {

@@ -80,26 +80,33 @@ export type Prompt = {
   verificationUriFull: string | undefined
 }
 
-export type Options = {
-  name: string
-  relay: string
-  websiteUrl: string
+export type Options = Omit<create.Options, 'onPrompt' | 'storage'>
+
+export type Wallet = {
+  connect(): Promise<AccessKey>
+  forget(): void
+  fund(connected: AccessKey): Promise<unknown>
+  restore(): AccessKey | undefined
+  revoke(connected: AccessKey): Promise<void>
 }
 
-let options: Options = {
+let defaults: Options = {
   name: 'nanocode machines',
   relay: 'api/device/',
   websiteUrl: 'https://nanocode.xyz/machines/',
 }
 
+let prompted: (prompt: Prompt) => void = () => {}
+
+let shared: Wallet | undefined
+
+const fallback = () =>
+  (shared ??= create({ ...defaults, onPrompt: (next: Prompt) => prompted(next) }))
+
 export function configure(next: Partial<Options>) {
-  options = { ...options, ...next }
-  provider = undefined
+  defaults = { ...defaults, ...next }
+  shared = undefined
 }
-
-let provider: Promise<{ request(request: never): Promise<unknown> }> | undefined
-
-let prompt: (prompt: Prompt) => void = () => {}
 
 export function framed() {
   return document.documentElement.hasAttribute('data-xframe')
@@ -123,37 +130,135 @@ export function sandboxed() {
 }
 
 export function onPrompt(listener: (prompt: Prompt) => void) {
-  prompt = listener
+  prompted = listener
   return () => {
-    prompt = () => {}
+    prompted = () => {}
   }
 }
 
-function relay(input: RequestInfo | URL, init?: RequestInit) {
-  const url = String(input instanceof Request ? input.url : input)
-  const device = 'https://wallet.tempo.xyz/api/auth/device/'
-  return fetch(
-    url.startsWith(device)
-      ? new URL(`${options.relay}${url.slice(device.length)}`, location.href)
-      : input,
-    init,
-  )
+export function create(options: create.Options): Wallet {
+  const { onPrompt = () => {}, storage = localStorage } = options
+  let provider: Promise<{ request(request: never): Promise<unknown> }> | undefined
+
+  const relay = (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input)
+    const device = 'https://wallet.tempo.xyz/api/auth/device/'
+    return fetch(
+      url.startsWith(device)
+        ? new URL(`${options.relay}${url.slice(device.length)}`, location.href)
+        : input,
+      init,
+    )
+  }
+
+  const wallet = () =>
+    (provider ??= load().then(
+      ([{ Provider, tempoWallet }, { tempoWallet: deviceWallet }]) =>
+        Provider.create({
+          adapter: framed()
+            ? deviceWallet({
+                fetch: relay as typeof fetch,
+                meta: { name: options.name, websiteUrl: options.websiteUrl },
+                onPrompt,
+              })
+            : tempoWallet(),
+          mpp: false,
+        }) as never,
+    ))
+
+  return {
+    async connect() {
+      const [, , , { toHex }, { generatePrivateKey }, , { Account }, { tempo }] = await load()
+      const key = generatePrivateKey()
+      const access = Account.fromSecp256k1(key)
+      const expiry = Math.floor(Date.now() / 1000) + lifetime
+      const request = {
+        address: access.address,
+        chainId: toHex(tempo.id),
+        expiry,
+        keyType: 'secp256k1',
+        limits: [
+          { limit: toHex(allowance), token: mach.address },
+          { limit: toHex(feeAllowance), token: usdc.address },
+        ],
+        publicKey: access.publicKey,
+        scopes: [
+          { address: mach.address, selector: selectors.transferWithMemo },
+          { address: mach.address, recipients: [swapper], selector: selectors.approve },
+          { address: swapper, selector: selectors.swapTo },
+          ...[selectors.open, selectors.topUp, selectors.requestClose, selectors.withdraw].map(
+            (selector) => ({ address: escrow, selector }),
+          ),
+        ],
+      }
+      const result = (await (
+        await wallet()
+      ).request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { authorizeAccessKey: request }, chainId: tempo.id }],
+      } as never)) as {
+        accounts: readonly {
+          address: Address
+          capabilities?: { keyAuthorization?: KeyAuthorization.Rpc }
+        }[]
+      }
+      const account = result.accounts[0]
+      const authorization = account?.capabilities?.keyAuthorization
+      if (!account || !authorization) throw new Error('Tempo Wallet returned no approval.')
+      const connected: AccessKey = {
+        address: account.address,
+        authorization,
+        expiry,
+        key,
+        keyAddress: access.address,
+      }
+      storage.setItem(storageKey, JSON.stringify(connected))
+      return connected
+    },
+    forget() {
+      storage.removeItem(storageKey)
+    },
+    async fund(connected) {
+      const [[{ Mach }], client] = await Promise.all([load(), wallet()])
+      return Mach.fund(client as never, { address: connected.address, displayName: options.name })
+    },
+    restore() {
+      const saved = storage.getItem(storageKey)
+      if (!saved) return undefined
+      const parsed = JSON.parse(saved) as AccessKey
+      const fees = parsed.authorization.limits?.some(
+        (limit) => limit.token.toLowerCase() === usdc.address,
+      )
+      if (parsed.expiry * 1000 > Date.now() && fees) return parsed
+      storage.removeItem(storageKey)
+      return undefined
+    },
+    async revoke(connected) {
+      const [, , , { toHex }, , , , { tempo }] = await load()
+      await (
+        await wallet()
+      ).request({
+        method: 'wallet_revokeAccessKey',
+        params: [
+          {
+            accessKeyAddress: connected.keyAddress,
+            address: connected.address,
+            chainId: toHex(tempo.id),
+          },
+        ],
+      } as never)
+    },
+  }
 }
 
-function wallet() {
-  return (provider ??= load().then(
-    ([{ Provider, tempoWallet }, { tempoWallet: deviceWallet }]) =>
-      Provider.create({
-        adapter: framed()
-          ? deviceWallet({
-              fetch: relay as typeof fetch,
-              meta: { name: options.name, websiteUrl: options.websiteUrl },
-              onPrompt: (next) => prompt(next),
-            })
-          : tempoWallet(),
-        mpp: false,
-      }) as never,
-  ))
+export declare namespace create {
+  type Options = {
+    name: string
+    onPrompt?: ((prompt: Prompt) => void) | undefined
+    relay: string
+    storage?: Pick<Storage, 'getItem' | 'removeItem' | 'setItem'> | undefined
+    websiteUrl: string
+  }
 }
 
 export async function reader(): Promise<Client<Transport, typeof Chains.tempo>> {
@@ -162,89 +267,23 @@ export async function reader(): Promise<Client<Transport, typeof Chains.tempo>> 
 }
 
 export function restore(): AccessKey | undefined {
-  const saved = localStorage.getItem(storageKey)
-  if (!saved) return undefined
-  const parsed = JSON.parse(saved) as AccessKey
-  const fees = parsed.authorization.limits?.some(
-    (limit) => limit.token.toLowerCase() === usdc.address,
-  )
-  if (parsed.expiry * 1000 > Date.now() && fees) return parsed
-  localStorage.removeItem(storageKey)
-  return undefined
+  return fallback().restore()
 }
 
-export async function connect(): Promise<AccessKey> {
-  const [, , , { toHex }, { generatePrivateKey }, , { Account }, { tempo }] = await load()
-  const key = generatePrivateKey()
-  const access = Account.fromSecp256k1(key)
-  const expiry = Math.floor(Date.now() / 1000) + lifetime
-  const request = {
-    address: access.address,
-    chainId: toHex(tempo.id),
-    expiry,
-    keyType: 'secp256k1',
-    limits: [
-      { limit: toHex(allowance), token: mach.address },
-      { limit: toHex(feeAllowance), token: usdc.address },
-    ],
-    publicKey: access.publicKey,
-    scopes: [
-      { address: mach.address, selector: selectors.transferWithMemo },
-      { address: mach.address, recipients: [swapper], selector: selectors.approve },
-      { address: swapper, selector: selectors.swapTo },
-      ...[selectors.open, selectors.topUp, selectors.requestClose, selectors.withdraw].map(
-        (selector) => ({ address: escrow, selector }),
-      ),
-    ],
-  }
-  const result = (await (
-    await wallet()
-  ).request({
-    method: 'wallet_connect',
-    params: [{ capabilities: { authorizeAccessKey: request }, chainId: tempo.id }],
-  } as never)) as {
-    accounts: readonly {
-      address: Address
-      capabilities?: { keyAuthorization?: KeyAuthorization.Rpc }
-    }[]
-  }
-  const account = result.accounts[0]
-  const authorization = account?.capabilities?.keyAuthorization
-  if (!account || !authorization) throw new Error('Tempo Wallet returned no approval.')
-  const connected: AccessKey = {
-    address: account.address,
-    authorization,
-    expiry,
-    key,
-    keyAddress: access.address,
-  }
-  localStorage.setItem(storageKey, JSON.stringify(connected))
-  return connected
+export function connect(): Promise<AccessKey> {
+  return fallback().connect()
 }
 
-export async function revoke(connected: AccessKey) {
-  const [, , , { toHex }, , , , { tempo }] = await load()
-  await (
-    await wallet()
-  ).request({
-    method: 'wallet_revokeAccessKey',
-    params: [
-      {
-        accessKeyAddress: connected.keyAddress,
-        address: connected.address,
-        chainId: toHex(tempo.id),
-      },
-    ],
-  } as never)
+export function revoke(connected: AccessKey) {
+  return fallback().revoke(connected)
 }
 
 export function forget() {
-  localStorage.removeItem(storageKey)
+  fallback().forget()
 }
 
-export async function fund(connected: AccessKey) {
-  const [[{ Mach }], client] = await Promise.all([load(), wallet()])
-  return Mach.fund(client as never, { address: connected.address, displayName: options.name })
+export function fund(connected: AccessKey) {
+  return fallback().fund(connected)
 }
 
 export function fundingUrl(connected: AccessKey) {

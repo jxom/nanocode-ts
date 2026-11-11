@@ -459,7 +459,10 @@ export function create(options: create.Options) {
   async function GET(request: Request): Promise<Response> {
     const params = new URL(request.url).searchParams
     if (params.has('models'))
-      return Response.json({ harnesses }, { headers: { 'cache-control': 'no-store' } })
+      return Response.json(
+        { harnesses, payers: { plan: payerHarnesses?.plan, wallet: payerHarnesses?.wallet } },
+        { headers: { 'cache-control': 'no-store' } },
+      )
     if (params.has('file')) return file(request, params)
     if (params.has('subagents') && params.get('sessionId'))
       return subagents(request, params.get('sessionId')!)

@@ -5,13 +5,20 @@ export type Harness = Pickers.Harness
 
 export type Listing = {
   harnesses: readonly Harness[]
+  payers?: Partial<Record<'plan' | 'wallet', readonly Harness[]>> | undefined
 }
+
+export type ListingState =
+  | { error: ListError; status: 'failed' }
+  | { listing: Listing; status: 'listed' }
+  | { status: 'loading' }
 
 export type Model = Pickers.Model
 
 export type Selection = {
   harness: Contracts.ModelProvider
   model: string
+  payer: Contracts.Payer
   thinking: Contracts.Thinking
 }
 
@@ -30,7 +37,7 @@ export class ListError extends Error {
   override readonly name = 'Model.ListError'
 
   constructor(options: { cause?: unknown; reason: string }) {
-    super(`The deployment's models are not available: ${options.reason}`, { cause: options.cause })
+    super(`No models are available: ${options.reason}`, { cause: options.cause })
   }
 }
 

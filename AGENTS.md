@@ -31,6 +31,7 @@ These principles come from nanocodexyz/nanocode's `AGENTS.md` and apply to every
 
 - Treat `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess` as design constraints. Include `| undefined` when an optional property can explicitly receive `undefined`, and narrow indexed reads before use.
 - Use `readonly T[]` for array types. Preserve mutable arrays only when mutation is part of the contract.
+- Never type a value as `object`. Name its shape or use the type that owns it, such as `Client.Client`.
 - Use `type` for project-owned shapes. Use `interface` only when declaration merging or an external ambient contract requires it.
 - Include `.ts` extensions on relative imports and exports. Node's type stripping resolves only real file names, and `rewriteRelativeImportExtensions` rewrites them to `.js` in `dist/`.
 - Author every source file and script in TypeScript. Node runs TypeScript natively (`node script.ts`), so scripts need no build step. JavaScript is limited to code that runs inside QuickJS, such as `src/wasm/prelude.js`, and to the `.mjs` build and release scripts in `scripts/`.

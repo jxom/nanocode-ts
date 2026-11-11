@@ -5,18 +5,25 @@ export const visitorKey = 'nanocode.visitor'
 
 export const visitorHeader = 'x-nanocode-visitor'
 
-export function visitor(): string {
-  const saved = localStorage.getItem(visitorKey)
+export function visitor(options: visitor.Options = {}): string {
+  const { storage = localStorage } = options
+  const saved = storage.getItem(visitorKey)
   if (saved && /^[0-9a-f]{64}$/.test(saved)) return saved
   const created = [...crypto.getRandomValues(new Uint8Array(32))]
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('')
-  localStorage.setItem(visitorKey, created)
+  storage.setItem(visitorKey, created)
   return created
 }
 
-export function visitorHeaders(): Record<string, string> {
-  return { [visitorHeader]: visitor() }
+export declare namespace visitor {
+  type Options = {
+    storage?: Pick<Storage, 'getItem' | 'setItem'> | undefined
+  }
+}
+
+export function visitorHeaders(options: visitor.Options = {}): Record<string, string> {
+  return { [visitorHeader]: visitor(options) }
 }
 
 export type Keyring = {
