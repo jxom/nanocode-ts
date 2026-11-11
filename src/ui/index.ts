@@ -1,4 +1,5 @@
 export { appearance, vars } from 'nds'
+export { Agent } from './Agent.tsx'
 export {
   type Register,
   useChat,
