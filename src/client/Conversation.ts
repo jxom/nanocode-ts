@@ -1,4 +1,4 @@
-import type * as Config from './Config.ts'
+import type * as Config from './internal/Config.ts'
 
 export type Conversation = Config.Conversation
 

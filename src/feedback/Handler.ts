@@ -1,4 +1,4 @@
-import type * as Report from '../Report.ts'
+import type * as Report from './Report.ts'
 import * as Issue from './Issue.ts'
 
 export type Handler = { fetch(request: Request): Promise<Response> }

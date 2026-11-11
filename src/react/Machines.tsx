@@ -13,25 +13,17 @@ import {
 import type * as Relay from '../client/Relay.ts'
 import type * as Tool from '../client/Tool.ts'
 import type * as Transcript from '../client/Transcript.ts'
-import {
-  Cloud,
-  type Keyring,
-  Machine,
-  Models,
-  Payment,
-  Payments,
-  Wallet,
-} from '../machines/index.ts'
+import * as Cloud from '../machines/Cloud.ts'
+import type * as Keyring from '../machines/Keyring.ts'
+import * as Machine from '../machines/Machine.ts'
 import type * as Mcp from '../machines/Mcp.ts'
-import {
-  type Connection,
-  useConfig,
-  useConversations,
-  useHand,
-  usePart,
-  useSend,
-  useTranscript,
-} from './index.tsx'
+import * as Models from '../machines/Models.ts'
+import * as Payment from '../machines/Payment.ts'
+import * as Payments from '../machines/Payments.ts'
+import * as Wallet from '../machines/Wallet.ts'
+import type { Connection } from './Chat.tsx'
+import { useHand } from './Hand.tsx'
+import { useConfig, useConversations, usePart, useSend, useTranscript } from './Provider.tsx'
 
 export function useMachine(runtime: Machine.Runtime, options: useMachine.Options) {
   const { model } = options

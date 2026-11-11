@@ -1,6 +1,6 @@
 import type * as Contracts from '../../Contracts.ts'
 import type * as Client from '../Client.ts'
-import type * as Config from '../Config.ts'
+import type * as Config from './Config.ts'
 import type * as Conversation from '../Conversation.ts'
 import type * as Message from '../Message.ts'
 import type * as Model from '../Model.ts'

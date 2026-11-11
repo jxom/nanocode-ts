@@ -1,7 +1,7 @@
-import type * as Feedback from './Feedback.ts'
+import type * as Widget from './Widget.ts'
 import * as Report from './Report.ts'
 
-export function create(options: create.Options): Feedback.Target {
+export function create(options: create.Options): Widget.Target {
   const origin = new URL(options.url).origin
 
   return {

@@ -1,4 +1,4 @@
-import * as Styles from './Feedback.styles.ts'
+import * as Styles from './Widget.styles.ts'
 import * as Report from './Report.ts'
 
 export type Link = { href: string; text: string }

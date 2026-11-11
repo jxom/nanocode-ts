@@ -1,4 +1,4 @@
-import * as Report from '../Report.ts'
+import * as Report from './Report.ts'
 
 export type Issue = {
   at: number

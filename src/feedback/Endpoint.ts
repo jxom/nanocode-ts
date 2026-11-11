@@ -1,6 +1,6 @@
-import type * as Feedback from './Feedback.ts'
+import type * as Widget from './Widget.ts'
 
-export function create(options: create.Options = {}): Feedback.Target {
+export function create(options: create.Options = {}): Widget.Target {
   const url = options.url ?? '/feedback'
 
   return {
@@ -39,11 +39,11 @@ export function create(options: create.Options = {}): Feedback.Target {
         return {
           help: options.help,
           ready: false,
-          reason: `Nothing answers at ${url}. Serve Handler.feedback from nanocode-ts/feedback/server there.`,
+          reason: `Nothing answers at ${url}. Serve Feedback.Handler.feedback from nanocode-ts there.`,
         }
 
       const body = (await response.json().catch(() => undefined)) as
-        | { detail?: unknown; help?: Feedback.Link; ready?: unknown; reason?: unknown }
+        | { detail?: unknown; help?: Widget.Link; ready?: unknown; reason?: unknown }
         | undefined
       if (response.ok && body?.ready === true) return { ready: true }
       return {
@@ -56,7 +56,7 @@ export function create(options: create.Options = {}): Feedback.Target {
 }
 
 export declare namespace create {
-  type Options = { help?: Feedback.Link | undefined; url?: string | undefined }
+  type Options = { help?: Widget.Link | undefined; url?: string | undefined }
 }
 
 function text(body: { detail?: unknown; reason?: unknown } | undefined) {

@@ -1,4 +1,4 @@
-import * as Config from '../client/Config.ts'
+import * as Config from '../client/internal/Config.ts'
 import * as LiveEvent from '../client/LiveEvent.ts'
 import type * as Transcript from '../client/Transcript.ts'
 import * as Cloud from './Cloud.ts'

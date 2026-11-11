@@ -11,15 +11,12 @@ import {
   useSyncExternalStore,
 } from 'react'
 import type * as Client from '../client/Client.ts'
-import type * as Config from '../client/Config.ts'
+import type * as Config from '../client/internal/Config.ts'
 import * as Instance from '../client/internal/Instance.ts'
 import type * as Tool from '../client/Tool.ts'
 import * as Transcript from '../client/Transcript.ts'
 import type * as Transport from '../client/Transport.ts'
-
-export type Token = { content: string; color?: string; italic?: boolean }
-
-export type Highlighter = (code: string, language: string) => Token[][]
+import * as Highlight from '../Highlight.ts'
 
 export type Part =
   | 'attach'
@@ -197,10 +194,12 @@ export function useLinks() {
   return useContext(LinkContext)
 }
 
-const HighlightContext = createContext<{ highlighter?: Highlighter; request?(): void }>({})
+const HighlightContext = createContext<{ highlighter?: Highlight.Highlighter; request?(): void }>(
+  {},
+)
 
 export function NanocodeProvider(props: NanocodeProvider.Props) {
-  const [highlighter, setHighlighter] = useState<Highlighter>()
+  const [highlighter, setHighlighter] = useState<Highlight.Highlighter>()
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set())
   const toggle = useCallback(
     (id: string, value?: boolean) =>
@@ -255,7 +254,7 @@ export declare namespace NanocodeProvider {
   type Props = {
     children: ReactNode
     client: Client.Client
-    highlight?: () => Promise<Highlighter>
+    highlight?: () => Promise<Highlight.Highlighter>
     links?(href: string): string | undefined
     skin?: Skin
   }
@@ -401,16 +400,16 @@ export function useNote(): (kind: Transcript.EntryKind, text: string) => void {
   return useConfig().note
 }
 
-let fallback: Promise<Highlighter> | undefined
+let fallback: Promise<Highlight.Highlighter> | undefined
 
-export function useHighlighter(wanted = true): Highlighter | undefined {
+export function useHighlighter(wanted = true): Highlight.Highlighter | undefined {
   const { highlighter: provided, request } = useContext(HighlightContext)
-  const [loaded, setLoaded] = useState<Highlighter>()
+  const [loaded, setLoaded] = useState<Highlight.Highlighter>()
   useEffect(() => {
     if (provided || !wanted) return
     if (request) return request()
     let active = true
-    fallback ??= import('../Highlight.ts').then((module) => module.highlight)
+    fallback ??= Highlight.load()
     fallback.then(
       (highlighter) => {
         if (active) setLoaded(() => highlighter)

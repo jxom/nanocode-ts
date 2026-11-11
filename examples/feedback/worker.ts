@@ -1,4 +1,4 @@
-import { Handler } from '../../src/feedback/server/index.ts'
+import { Handler } from '../../src/feedback/index.ts'
 
 type Env = {
   ASSETS: { fetch(request: Request): Promise<Response> }

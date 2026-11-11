@@ -1,4 +1,6 @@
 export * as Endpoint from './Endpoint.ts'
-export * as Feedback from './Feedback.ts'
 export * as Gateway from './Gateway.ts'
+export * as Handler from './Handler.ts'
+export * as Issue from './Issue.ts'
 export * as Report from './Report.ts'
+export * as Widget from './Widget.ts'

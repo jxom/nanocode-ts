@@ -1,7 +1,7 @@
-import * as LiveEvent from './LiveEvent.ts'
-import * as Tool from './Tool.ts'
-import * as Transcript from './Transcript.ts'
-import type * as Transport from './Transport.ts'
+import * as LiveEvent from '../LiveEvent.ts'
+import * as Tool from '../Tool.ts'
+import * as Transcript from '../Transcript.ts'
+import type * as Transport from '../Transport.ts'
 
 export type Config = {
   readonly cancellable: boolean

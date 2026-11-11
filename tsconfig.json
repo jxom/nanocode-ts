@@ -23,17 +23,14 @@
     "src/cloudflare/Sql.ts",
     "src/cloudflare/Transport.ts",
     "src/feedback/*.ts",
-    "src/feedback/server/*.ts",
     "src/internal/*.ts",
     "src/machines/*.ts",
     "src/plugins/*.ts",
     "src/react/*.ts",
     "src/react/*.tsx",
-    "src/sandbox/cloudflare.ts",
     "src/sandbox/Container.ts",
     "src/sandbox/internal/*.ts",
     "src/transports/*.ts",
     "src/vercel/Transport.ts"
-  ],
-  "exclude": ["src/machines/vercel.ts"]
+  ]
 }
