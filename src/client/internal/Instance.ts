@@ -9,6 +9,7 @@ import type * as Payer from '../Payer.ts'
 export type Instance = {
   config: Config.Config
   conversation(): Conversation.State
+  current(name: PropertyKey): { value: unknown } | undefined
   messages(): readonly Message.Message[]
   model: {
     get(): Model.State

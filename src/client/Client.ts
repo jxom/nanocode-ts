@@ -30,6 +30,7 @@ export type Client<plugins extends readonly Plugin.Plugin[] = readonly Plugin.Pl
     options?: events.Options,
   ): AsyncGenerator<Events<plugins>[name], void, undefined>
   file: {
+    get(): file.get.ReturnType
     read(options: file.read.Options): Promise<Blob>
     upload(options: file.upload.Options): Promise<Transport.Attachment>
   }
@@ -349,6 +350,7 @@ export function create<const plugins extends readonly Plugin.Option[] = readonly
     },
     events,
     file: {
+      get: () => file.get(client),
       read: (options: file.read.Options) => file.read(client, options),
       upload: (options: file.upload.Options) => file.upload(client, options),
     },
@@ -376,6 +378,7 @@ export function create<const plugins extends readonly Plugin.Option[] = readonly
   Instance.register(client, {
     config,
     conversation: () => snapshot.conversation,
+    current,
     messages: () => snapshot.messages,
     model: {
       get: () => selected!,

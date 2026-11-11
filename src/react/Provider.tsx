@@ -10,7 +10,9 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
+import type * as Client from '../client/Client.ts'
 import type * as Config from '../client/Config.ts'
+import * as Instance from '../client/internal/Instance.ts'
 import type * as Tool from '../client/Tool.ts'
 import * as Transcript from '../client/Transcript.ts'
 import type * as Transport from '../client/Transport.ts'
@@ -173,6 +175,8 @@ export function usePart(): (name: Part, state?: PartState) => PartProps {
   )
 }
 
+export const ClientContext = createContext<Client.Client | undefined>(undefined)
+
 export const ConfigContext = createContext<Config.Config | undefined>(undefined)
 
 const ExpandedContext = createContext<{
@@ -229,28 +233,43 @@ export function NanocodeProvider(props: NanocodeProvider.Props) {
       active = false
     }
   }, [highlight, wanted])
+  const config = useMemo(() => Instance.get(props.client).config, [props.client])
   return (
-    <ConfigContext.Provider value={props.config}>
-      <SkinContext.Provider value={props.skin ?? emptySkin}>
-        <ExpandedContext.Provider value={expanded}>
-          <HighlightContext.Provider value={highlighting}>
-            <LinkContext.Provider value={props.links}>{props.children}</LinkContext.Provider>
-          </HighlightContext.Provider>
-        </ExpandedContext.Provider>
-      </SkinContext.Provider>
-    </ConfigContext.Provider>
+    <ClientContext.Provider value={props.client}>
+      <ConfigContext.Provider value={config}>
+        <SkinContext.Provider value={props.skin ?? emptySkin}>
+          <ExpandedContext.Provider value={expanded}>
+            <HighlightContext.Provider value={highlighting}>
+              <LinkContext.Provider value={props.links}>{props.children}</LinkContext.Provider>
+            </HighlightContext.Provider>
+          </ExpandedContext.Provider>
+        </SkinContext.Provider>
+      </ConfigContext.Provider>
+    </ClientContext.Provider>
   )
 }
 
 export declare namespace NanocodeProvider {
+  var MissingError: typeof MissingProviderError
+
   type Props = {
-    config: Config.Config
-    highlight?: () => Promise<Highlighter>
-    skin?: Skin
-    links?(href: string): string | undefined
     children: ReactNode
+    client: Client.Client
+    highlight?: () => Promise<Highlighter>
+    links?(href: string): string | undefined
+    skin?: Skin
   }
 }
+
+class MissingProviderError extends Error {
+  override readonly name = 'NanocodeProvider.MissingError'
+
+  constructor() {
+    super('Render this component inside NanocodeProvider.')
+  }
+}
+
+NanocodeProvider.MissingError = MissingProviderError
 
 export function preloadMarkdown(): Promise<unknown> {
   return import('./Streamed.tsx')

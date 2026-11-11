@@ -17,6 +17,17 @@ export {
   Thinking,
 } from './Chat.tsx'
 export { Code, fences } from './Code.tsx'
+export {
+  type EventName,
+  type Register,
+  type ResolvedClient,
+  type ResolvedPlugins,
+  useChat,
+  useClient,
+  useComposer,
+  useEvent,
+  usePicker,
+} from './Hooks.ts'
 export { Hand, HandConnect, handConnection, type HandState, useHand } from './Hand.tsx'
 export { Image, imageSource, useWorkspaceFile } from './Image.tsx'
 export { Markdown, Reply } from './Markdown.tsx'

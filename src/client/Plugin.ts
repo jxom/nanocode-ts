@@ -5,13 +5,13 @@ import type * as Storage from './Storage.ts'
 import type * as Transport from './Transport.ts'
 
 export type Plugin<id extends string = string, actions = unknown, state = unknown> = {
-  actions?: ((context: Context<state>) => actions) | undefined
-  beforeSend?: ((context: Context<state>) => Promise<void> | void) | undefined
-  headers?: (() => Record<string, string>) | undefined
+  actions?(context: Context<state>): actions
+  beforeSend?(context: Context<state>): Promise<void> | void
+  headers?(): Record<string, string>
   id: id
   initial?: state | undefined
-  payers?: ((options: PayersOptions<state>) => readonly Payer.Payer[]) | undefined
-  setup?: ((context: Context<state>) => void) | undefined
+  payers?(options: PayersOptions<state>): readonly Payer.Payer[]
+  setup?(context: Context<state>): void
 }
 
 export type Context<state = unknown> = {
