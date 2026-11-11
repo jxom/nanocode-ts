@@ -1,10 +1,18 @@
 import type * as InternalFiles from '../internal/Files.ts'
 import * as Format from './internal/Format.ts'
 import type * as LiveEvent from './LiveEvent.ts'
+import type * as Storage from './Storage.ts'
 import type * as Subagents from './Subagents.ts'
 import type * as Transcript from './Transcript.ts'
 
 export type Attachment = InternalFiles.Attachment
+
+export type Context = {
+  headers(): Record<string, string>
+  storage: Storage.Storage
+}
+
+export type Factory = (context: Context) => Transport
 
 export type Files = {
   maxBytes?: number

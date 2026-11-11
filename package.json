@@ -98,6 +98,10 @@
       "types": "./dist/sandbox/vercel.d.ts",
       "default": "./dist/sandbox/vercel.js"
     },
+    "./transports": {
+      "types": "./dist/transports/index.d.ts",
+      "default": "./dist/transports/index.js"
+    },
     "./nanocode_wasm.wasm": "./dist/nanocode_wasm.wasm",
     "./interpreter.wasm": "./dist/interpreter.wasm",
     "./pyodide-modules": {
