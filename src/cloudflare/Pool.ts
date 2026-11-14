@@ -7,6 +7,8 @@ export type Env = {
   SESSION_POOL_SIZE: string
 }
 
+export const objectHeader = 'x-nanocode-session-object'
+
 export class SessionPool extends DurableObject<Env> {
   private starting = 0
 
@@ -31,6 +33,20 @@ export class SessionPool extends DurableObject<Env> {
     await this.ctx.storage.setAlarm(
       Date.now() + positive(this.env.SESSION_POOL_KEEPALIVE_MS, 'SESSION_POOL_KEEPALIVE_MS'),
     )
+  }
+
+  async forward(key: string, request: Request): Promise<Response> {
+    const id = await this.resolve(key)
+    const response = await this.env.SESSIONS.get(this.env.SESSIONS.idFromString(id), {
+      locationHint: this.env.SESSION_LOCATION_HINT,
+    }).fetch(request)
+    const headers = new Headers(response.headers)
+    headers.set(objectHeader, id)
+    return new Response(response.body, {
+      headers,
+      status: response.status,
+      statusText: response.statusText,
+    })
   }
 
   async resolve(key: string): Promise<string> {
@@ -66,6 +82,11 @@ export class SessionPool extends DurableObject<Env> {
 
     await this.refill()
     return sql.exec('SELECT 1 FROM ready').toArray().length
+  }
+
+  async warm(): Promise<number> {
+    await this.refill()
+    return this.ctx.storage.sql.exec('SELECT 1 FROM ready').toArray().length
   }
 
   private async refill(): Promise<void> {
@@ -106,6 +127,23 @@ export class SessionPool extends DurableObject<Env> {
   }
 }
 
+export function forward(
+  namespace: DurableObjectNamespace<SessionPool>,
+  options: forward.Options,
+): Promise<Response> {
+  return namespace
+    .get(namespace.idFromName('pool'), { locationHint: options.locationHint })
+    .forward(options.key, options.request)
+}
+
+export declare namespace forward {
+  type Options = {
+    key: string
+    locationHint?: DurableObjectLocationHint | undefined
+    request: Request
+  }
+}
+
 export function resolve(
   namespace: DurableObjectNamespace<SessionPool>,
   options: resolve.Options,
@@ -118,6 +156,19 @@ export function resolve(
 export declare namespace resolve {
   type Options = {
     key: string
+    locationHint?: DurableObjectLocationHint | undefined
+  }
+}
+
+export function warm(
+  namespace: DurableObjectNamespace<SessionPool>,
+  options: warm.Options = {},
+): Promise<number> {
+  return namespace.get(namespace.idFromName('pool'), { locationHint: options.locationHint }).warm()
+}
+
+export declare namespace warm {
+  type Options = {
     locationHint?: DurableObjectLocationHint | undefined
   }
 }

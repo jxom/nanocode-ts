@@ -176,45 +176,114 @@ function withHand(
   return text ? { instructions: text } : {}
 }
 
-async function sessionObject(
+type Binding = {
+  account: string
+  bound: Map<string, string>
+  host?: string | undefined
+  name: string
+}
+
+function bindingCache(env: Env, options: Binding) {
+  if (env.SESSION_POOL_BINDING_CACHE_S === undefined || options.host === undefined) return
+  if (options.host.endsWith('.workers.dev')) return
+  const pool = env.SESSION_POOL!.idFromName('pool').toString()
+  return {
+    seconds: policy(env.SESSION_POOL_BINDING_CACHE_S, 'SESSION_POOL_BINDING_CACHE_S'),
+    url: `https://${options.host}/internal/session-pool/${pool}/${encodeURIComponent(sessionKey(options))}`,
+  }
+}
+
+function sessionKey(options: Binding): string {
+  return JSON.stringify([options.account, options.name])
+}
+
+async function boundSession(env: Env, options: Binding): Promise<string | undefined> {
+  const cached = options.bound.get(sessionKey(options))
+  if (cached) return cached
+
+  const shared = bindingCache(env, options)
+  const stored = shared ? await caches.default.match(shared.url) : undefined
+  if (!stored) return
+  const id = await stored.text()
+  remember(env, options, { id, shared: undefined })
+  return id
+}
+
+function remember(
   env: Env,
-  options: { account: string; bound: Map<string, string>; host?: string | undefined; name: string },
-): Promise<DurableObjectStub> {
-  const key = JSON.stringify([options.account, options.name])
+  options: Binding,
+  binding: { id: string; shared: ReturnType<typeof bindingCache> },
+): void {
+  if (binding.shared)
+    void caches.default.put(
+      binding.shared.url,
+      new Response(binding.id, { headers: { 'cache-control': `max-age=${binding.shared.seconds}` } }),
+    )
+  options.bound.set(sessionKey(options), binding.id)
+  if (
+    options.bound.size > policy(env.SESSION_POOL_CACHED_NAMES ?? '', 'SESSION_POOL_CACHED_NAMES')
+  )
+    options.bound.delete(options.bound.keys().next().value!)
+}
+
+async function sessionObject(env: Env, options: Binding): Promise<DurableObjectStub> {
   const id = await (async () => {
-    if (!env.SESSION_POOL) return env.SESSIONS.idFromName(key)
-    const cached = options.bound.get(key)
+    if (!env.SESSION_POOL) return env.SESSIONS.idFromName(sessionKey(options))
+    const cached = await boundSession(env, options)
     if (cached) return env.SESSIONS.idFromString(cached)
 
-    const shared = (() => {
-      if (env.SESSION_POOL_BINDING_CACHE_S === undefined || options.host === undefined) return
-      if (options.host.endsWith('.workers.dev')) return
-      const pool = env.SESSION_POOL.idFromName('pool').toString()
-      return {
-        seconds: policy(env.SESSION_POOL_BINDING_CACHE_S, 'SESSION_POOL_BINDING_CACHE_S'),
-        url: `https://${options.host}/internal/session-pool/${pool}/${encodeURIComponent(key)}`,
-      }
-    })()
-    const stored = shared ? await caches.default.match(shared.url) : undefined
-    const resolved = stored
-      ? await stored.text()
-      : await Pool.resolve(env.SESSION_POOL, {
-          key,
-          locationHint: env.SESSION_LOCATION_HINT,
-        })
-    if (shared && !stored)
-      void caches.default.put(
-        shared.url,
-        new Response(resolved, { headers: { 'cache-control': `max-age=${shared.seconds}` } }),
-      )
-    options.bound.set(key, resolved)
-    if (
-      options.bound.size > policy(env.SESSION_POOL_CACHED_NAMES ?? '', 'SESSION_POOL_CACHED_NAMES')
-    )
-      options.bound.delete(options.bound.keys().next().value!)
+    const resolved = await Pool.resolve(env.SESSION_POOL, {
+      key: sessionKey(options),
+      locationHint: env.SESSION_LOCATION_HINT,
+    })
+    remember(env, options, { id: resolved, shared: bindingCache(env, options) })
     return env.SESSIONS.idFromString(resolved)
   })()
   return env.SESSIONS.get(id, { locationHint: env.SESSION_LOCATION_HINT })
+}
+
+async function sessionFetch(
+  env: Env,
+  options: Binding & { request: Request },
+): Promise<{ resolved: number; response: Response; route: 'object' | 'pool' }> {
+  const started = performance.now()
+  const pool = env.SESSION_POOL
+  if (!pool || options.request.headers.has('upgrade')) {
+    const session = await sessionObject(env, options)
+    const resolved = performance.now() - started
+    return { resolved, response: await session.fetch(options.request), route: 'object' }
+  }
+
+  const cached = await boundSession(env, options)
+  const resolved = performance.now() - started
+  if (cached)
+    return {
+      resolved,
+      response: await env.SESSIONS.get(env.SESSIONS.idFromString(cached), {
+        locationHint: env.SESSION_LOCATION_HINT,
+      }).fetch(options.request),
+      route: 'object',
+    }
+
+  const forwarded = await Pool.forward(pool, {
+    key: sessionKey(options),
+    locationHint: env.SESSION_LOCATION_HINT,
+    request: options.request,
+  })
+  const id = forwarded.headers.get(Pool.objectHeader)
+  if (!id) throw new Error(`the session pool answered without ${Pool.objectHeader}`)
+  remember(env, options, { id, shared: bindingCache(env, options) })
+  const headers = new Headers(forwarded.headers)
+  headers.delete(Pool.objectHeader)
+  return {
+    resolved,
+    response: new Response(forwarded.body, {
+      headers,
+      status: forwarded.status,
+      statusText: forwarded.statusText,
+    }),
+    route: 'pool',
+  }
 }
 
 function policy(value: string, name: string): number {
@@ -4110,27 +4179,30 @@ ${input.request_id}`
     if (match?.[2] === 'turns' && match[3] === undefined && request.method === 'POST')
       void primeTurn(request.clone(), env)
     const resolving = performance.now()
-    const session = await sessionObject(env, { account, bound, host: target.hostname, name })
-    const dispatched = performance.now()
-    let response: Response
+    let sent: Awaited<ReturnType<typeof sessionFetch>>
     try {
-      response = await session.fetch(
-        new Request(target, {
+      sent = await sessionFetch(env, {
+        account,
+        bound,
+        host: target.hostname,
+        name,
+        request: new Request(target, {
           method: head ? 'GET' : request.method,
           headers,
           body: head ? null : request.body,
           redirect: 'manual',
         }),
-      )
+      })
     } catch (error) {
       if (path === '/internal/delete' && resetAfterDelete(error)) return json({ deleted: true })
       throw error
     }
+    const response = sent.response
     if (response.webSocket) return response
     const responseHeaders = new Headers(response.headers)
     responseHeaders.append(
       'server-timing',
-      `public_pre_session;dur=${resolving - started}, session_resolve;dur=${dispatched - resolving}, session_response;dur=${performance.now() - dispatched}`,
+      `public_pre_session;dur=${resolving - started}, session_resolve;dur=${sent.resolved}, session_response;dur=${performance.now() - resolving - sent.resolved}, session_route;desc=${sent.route}`,
     )
     if (head) await response.body?.cancel()
     return new Response(head ? null : response.body, {
