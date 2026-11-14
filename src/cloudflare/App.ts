@@ -147,8 +147,10 @@ type TurnTiming = {
   started: number
   admitted_at?: number
   admission_ms?: number
+  alarm_commit_ms?: number
   commit_wait_ms?: number
   consumed_ms?: number
+  log_commit_ms?: number
   pump_wait_ms?: number
   respond_ms?: number
   runtime_open_ms?: number
@@ -1221,10 +1223,20 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
         if (cursor && submitted.submitted === 'accepted' && cursor.after >= turn.first_seq)
           cursor.after = turn.first_seq - 1
         const unfinished = unfinishedStatuses.has(turn.report.status)
+        const committing =
+          submitted.submitted === 'accepted' ? this.turnTimings.get(input.request_id) : undefined
+        if (committing)
+          void this.ctx.storage.sync().then(() => {
+            committing.log_commit_ms = performance.now() - admitted
+          })
         if (unfinished && !this.pumping)
           await this.ctx.storage.setAlarm(
             Date.now() + policy(this.env.RECOVERY_DELAY_MS, 'RECOVERY_DELAY_MS'),
           )
+        if (committing)
+          void this.ctx.storage.sync().then(() => {
+            committing.alarm_commit_ms = performance.now() - admitted
+          })
         if (submitted.submitted === 'accepted') {
           const timing = this.turnTimings.get(input.request_id)
           if (timing) {
