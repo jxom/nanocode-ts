@@ -8,6 +8,7 @@ type Lane = {
   readonly env: (home: string, base: string) => NodeJS.ProcessEnv
   readonly exec?: (home: string, base: string, prompt: string) => readonly string[]
   readonly ready: string
+  readonly busy?: string
   readonly reply?: { readonly glyph: string; readonly strict: boolean }
   readonly resume?: (home: string, base: string) => readonly string[]
   readonly setup?: (home: string, cwd: string) => void
@@ -80,6 +81,7 @@ const lanes: { [name: string]: Lane } = {
   'live-codex': {
     env: () => ({ ...process.env, TERM: base.TERM }),
     ready: '\u203a',
+    busy: 'tab to queue message',
     reply: { glyph: '\u2022', strict: true },
     tui: () => [bins.codex, '-m', codexModel],
   },
@@ -297,6 +299,8 @@ async function tuiSample(name: string, lane: Lane, url: string, index: number): 
     const pair = mark.first.slice(0, 2)
     term.write(live ? "Reply with only the word formed by writing '" + pair + "' four times. (" + run + ')' : 'Reply SLA[run=' + run + ',turn=' + turn + ',tokens=' + tokens + ',rate=' + rate + ',ttft=' + ttft + ',tool=' + tool + ']')
     await sleep(200)
+    const idle = now()
+    while (lane.busy && term.plain().slice(-600).replace(/\s/g, '').includes(lane.busy.replace(/\s/g, '')) && ms(now(), idle)! < 15000) await sleep(20)
     const wall = Date.now()
     const enter = now()
     term.write('\r')
