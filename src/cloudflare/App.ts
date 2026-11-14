@@ -4352,20 +4352,28 @@ ${input.request_id}`
     if (match?.[2] === 'turns' && match[3] === undefined && request.method === 'POST')
       void primeTurn(request.clone(), env)
     const resolving = performance.now()
+    const sending = sessionFetch(env, {
+      account,
+      bound,
+      host: target.hostname,
+      name,
+      request: new Request(target, {
+        method: head ? 'GET' : request.method,
+        headers,
+        body: head ? null : request.body,
+        redirect: 'manual',
+      }),
+    })
+    if (
+      match?.[2] === 'turns' &&
+      match[3] === undefined &&
+      request.method === 'POST' &&
+      request.headers.get('accept')?.includes('text/event-stream')
+    )
+      return relayTurn(sending, { resolving, started })
     let sent: Awaited<ReturnType<typeof sessionFetch>>
     try {
-      sent = await sessionFetch(env, {
-        account,
-        bound,
-        host: target.hostname,
-        name,
-        request: new Request(target, {
-          method: head ? 'GET' : request.method,
-          headers,
-          body: head ? null : request.body,
-          redirect: 'manual',
-        }),
-      })
+      sent = await sending
     } catch (error) {
       if (path === '/internal/delete' && resetAfterDelete(error)) return json({ deleted: true })
       throw error
@@ -4383,6 +4391,62 @@ ${input.request_id}`
       status: response.status,
       statusText: response.statusText,
       headers: responseHeaders,
+    })
+  }
+
+  function relayTurn(
+    sending: ReturnType<typeof sessionFetch>,
+    options: { resolving: number; started: number },
+  ): Response {
+    const relay = new TransformStream<Uint8Array, Uint8Array>()
+    const writer = relay.writable.getWriter()
+    const encoder = new TextEncoder()
+    const refuse = async (refusal: { body: string; retry_after?: number; status: number }) => {
+      await writer.write(encoder.encode(`event: error\ndata: ${JSON.stringify(refusal)}\n\n`))
+      await writer.close()
+    }
+    void (async () => {
+      const sent = await sending.catch((error: unknown) =>
+        error instanceof Error ? error : new Error(String(error)),
+      )
+      if (sent instanceof Error)
+        return await refuse({
+          body: JSON.stringify({ error: 'session operation failed', detail: sent.message }),
+          status: 503,
+        })
+      const response = sent.response
+      const timing = `session_resolve;dur=${sent.resolved}, session_response;dur=${performance.now() - options.resolving - sent.resolved}, session_route;desc=${sent.route}`
+      if (!response.ok) {
+        const retry = Number(response.headers.get('retry-after'))
+        return await refuse({
+          body: await response.text(),
+          ...(retry > 0 ? { retry_after: retry } : {}),
+          status: response.status,
+        })
+      }
+      if (!response.headers.get('content-type')?.includes('text/event-stream')) {
+        await writer.write(
+          encoder.encode(
+            `event: response\ndata: ${JSON.stringify({ body: await response.text(), status: response.status })}\n\n`,
+          ),
+        )
+        return await writer.close()
+      }
+      await writer.write(
+        encoder.encode(
+          `: server-timing ${response.headers.get('server-timing') ?? ''}, ${timing}\n\n`,
+        ),
+      )
+      if (!response.body) return await writer.close()
+      writer.releaseLock()
+      await response.body.pipeTo(relay.writable)
+    })().catch(() => relay.writable.abort().catch(() => undefined))
+    return new Response(relay.readable, {
+      headers: {
+        'cache-control': 'no-store',
+        'content-type': 'text/event-stream',
+        'server-timing': `public_pre_session;dur=${options.resolving - options.started}, session_route;desc=relayed`,
+      },
     })
   }
 

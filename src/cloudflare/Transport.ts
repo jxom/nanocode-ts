@@ -72,6 +72,7 @@ export function create(options: create.Options): create.ReturnType {
     sink: Sink,
     session: Session,
     signal?: AbortSignal,
+    retrying = false,
   ): Promise<boolean> => {
     if (!response.ok || !response.body) {
       if (signal?.aborted) return true
@@ -82,6 +83,17 @@ export function create(options: create.Options): create.ReturnType {
     try {
       for await (const message of ServerEvents.parse(response.body)) {
         if (signal?.aborted) break
+        if (message.event === 'error') {
+          const refusal = JSON.parse(message.data) as { body: string; status: number }
+          void response.body.cancel().catch(() => undefined)
+          if (
+            retrying &&
+            (refusal.status === 408 || refusal.status === 429 || refusal.status >= 500)
+          )
+            return false
+          sink.note('error', `${refusal.status} ${refusal.body}`)
+          return true
+        }
         if (message.id) {
           session.cursor = Number(message.id)
           save(session)
@@ -144,7 +156,7 @@ export function create(options: create.Options): create.ReturnType {
         delay = Math.min(delay * 2, 15_000)
         continue
       }
-      if (response && (await follow(response, requestId, sink, session, signal))) return
+      if (response && (await follow(response, requestId, sink, session, signal, true))) return
       delay = response ? reconnectMs : Math.min(delay * 2, 15_000)
       await pause(signal, delay)
     }

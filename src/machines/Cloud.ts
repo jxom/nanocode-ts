@@ -115,9 +115,15 @@ async function follow(
     if (signal?.aborted) return true
     throw await failure(response)
   }
+  let refused: Response | undefined
   try {
     for await (const message of ServerEvents.parse(response.body)) {
       if (signal?.aborted) break
+      if (message.event === 'error') {
+        const refusal = JSON.parse(message.data) as { body: string; status: number }
+        refused = new Response(refusal.body, { status: refusal.status })
+        break
+      }
       if (message.id) {
         cloud.cursor = Number(message.id)
         save(cloud)
@@ -138,6 +144,10 @@ async function follow(
     }
   } catch {
     return Boolean(signal?.aborted)
+  }
+  if (refused) {
+    void response.body.cancel().catch(() => undefined)
+    throw await failure(refused)
   }
   if (signal?.aborted) void response.body.cancel().catch(() => undefined)
   return Boolean(signal?.aborted)
