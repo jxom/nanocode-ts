@@ -713,13 +713,10 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           isolate.prestarted = this.prestarted
           const hold = request.headers.get(Pool.holdHeader)
           if (hold !== null) {
-            const held = policy(hold, Pool.holdHeader)
             if (this.hold !== undefined) clearTimeout(this.hold)
             this.hold = setTimeout(() => {
               this.hold = undefined
-            }, held)
-            if (this.metadata.get('authority') === undefined)
-              await this.ctx.storage.setAlarm(this.prestarted + held)
+            }, policy(hold, Pool.holdHeader))
           }
           this.metadata.set(prestartKey, String(this.prestarted))
           const committed = this.ctx.storage.sync().then(() => {
