@@ -512,6 +512,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
     private readonly blocked = new Set<string>()
     private readonly driving = new Map<string, string>()
     private binding?: Promise<void>
+    private dispatching?: () => void
     private readonly watchers = new Map<WebSocket, Watcher>()
     private queue: 'unknown' | 'pending' | 'empty' = 'unknown'
     private admissions = 0
@@ -1261,16 +1262,30 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
         if (cursor && submitted.submitted === 'accepted' && cursor.after >= turn.first_seq)
           cursor.after = turn.first_seq - 1
         const unfinished = unfinishedStatuses.has(turn.report.status)
-        const committing =
-          submitted.submitted === 'accepted' ? this.turnTimings.get(input.request_id) : undefined
+        const accepted = submitted.submitted === 'accepted'
+        const direct =
+          !!cursor &&
+          unfinished &&
+          accepted &&
+          !this.pumping &&
+          scope === ownerScope &&
+          descriptor.hand === undefined &&
+          this.resident(scope, descriptor)
+        if (direct) await this.dispatchFirst()
+        lap('dispatch')
+        const committing = accepted ? this.turnTimings.get(input.request_id) : undefined
         if (committing)
           void this.ctx.storage.sync().then(() => {
             committing.log_commit_ms = performance.now() - admitted
           })
-        if (unfinished && !this.pumping)
-          await this.ctx.storage.setAlarm(
-            Date.now() + policy(this.env.RECOVERY_DELAY_MS, 'RECOVERY_DELAY_MS'),
-          )
+        if (unfinished && (direct || !this.pumping))
+          await this.ctx.storage
+            .setAlarm(Date.now() + policy(this.env.RECOVERY_DELAY_MS, 'RECOVERY_DELAY_MS'))
+            .catch((error: unknown) => {
+              if (direct)
+                this.ctx.abort(`admission of ${input.request_id} failed: ${String(error)}`)
+              throw error
+            })
         if (committing)
           void this.ctx.storage.sync().then(() => {
             committing.alarm_commit_ms = performance.now() - admitted
@@ -1283,8 +1298,8 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
             timing.admitted_at = performance.now()
           }
         }
-        const deferred = !!cursor && unfinished && submitted.submitted === 'accepted'
-        if (unfinished && !this.pumping && !deferred) {
+        const deferred = !!cursor && unfinished && accepted && !direct
+        if (unfinished && !this.pumping && !deferred && !direct) {
           this.counts.direct_starts++
           this.ctx.waitUntil(this.pump(true))
         }
@@ -2077,13 +2092,8 @@ ${input.request_id}`
       return session
     }
 
-    private runtime(
-      scope: string,
-      sessionId: string,
-      descriptor: SessionDescriptor,
-    ): Promise<AgentRuntime.AgentRuntime> {
-      const current = this.opened(scope)
-      const opening = JSON.stringify([
+    private opening(sessionId: string, descriptor: SessionDescriptor): string {
+      return JSON.stringify([
         sessionId,
         descriptor.provider ?? 'claude',
         descriptor.model ?? null,
@@ -2093,6 +2103,40 @@ ${input.request_id}`
         descriptor.codex_orchestration ?? 'code_mode',
         descriptor.subagents ?? options.subagents ?? null,
       ])
+    }
+
+    private resident(scope: string, descriptor: SessionDescriptor): boolean {
+      const current = this.opened(scope)
+      const runtime = current?.resident
+      const sessionId = this.metadata.get(this.sessionKey(scope))
+      return (
+        !!runtime &&
+        sessionId !== undefined &&
+        runtime.reusable &&
+        runtime.hands === this.handsMode(scope, descriptor) &&
+        runtime.subscription === descriptor.subscription &&
+        current!.opening === this.opening(sessionId, descriptor)
+      )
+    }
+
+    private async dispatchFirst(): Promise<void> {
+      const dispatched = new Promise<void>((resolve) => {
+        this.dispatching = resolve
+      })
+      this.counts.direct_starts++
+      const pumping = this.pump(true)
+      this.ctx.waitUntil(pumping)
+      await Promise.race([dispatched, pumping])
+      this.dispatching = undefined
+    }
+
+    private runtime(
+      scope: string,
+      sessionId: string,
+      descriptor: SessionDescriptor,
+    ): Promise<AgentRuntime.AgentRuntime> {
+      const current = this.opened(scope)
+      const opening = this.opening(sessionId, descriptor)
       if (current)
         return current.runtime.then(async (runtime) => {
           if (
@@ -2534,8 +2578,8 @@ ${input.request_id}`
                 if (this.dispatchBlocked(scope)) throw new Error('request authority stopped')
                 this.dispatched(scope)
                 this.counts.model_dispatches++
-                if (request.provider == null && mcpServers.length)
-                  return (request.subagent ? mcpFetch(request.subagent) : sessionMcpFetch)(
+                if (request.provider == null && mcpServers.length) {
+                  const listing = (request.subagent ? mcpFetch(request.subagent) : sessionMcpFetch)(
                     request.endpoint,
                     {
                       method: request.method,
@@ -2547,6 +2591,9 @@ ${input.request_id}`
                       signal,
                     },
                   )
+                  this.dispatching?.()
+                  return listing
+                }
                 const dispatch: ModelDispatch = {
                   endpoint: request.endpoint,
                   headers: request.headers,
@@ -2558,7 +2605,7 @@ ${input.request_id}`
                   ...(descriptor.payer ? { payer: descriptor.payer } : {}),
                 }
                 this.modelAt = Date.now()
-                const response = await egress(this.env).fetch(
+                const responding = egress(this.env).fetch(
                   new Request('https://egress.internal/model', {
                     method: 'POST',
                     signal,
@@ -2569,6 +2616,8 @@ ${input.request_id}`
                     body: request.body,
                   }),
                 )
+                this.dispatching?.()
+                const response = await responding
                 const diagnostic = response.headers.get('x-nanocode-model-diagnostic')
                 if (diagnostic) {
                   this.diagnostic(scope, diagnostic, timing)
@@ -2587,7 +2636,7 @@ ${input.request_id}`
                 open: async (request, signal, timing) => {
                   if (this.dispatchBlocked(scope)) throw new Error('request authority stopped')
                   this.dispatched(scope)
-                  const response = await egress(this.env).fetch(
+                  const handshake = egress(this.env).fetch(
                     new Request('https://egress.internal/socket', {
                       signal,
                       headers: {
@@ -2605,6 +2654,8 @@ ${input.request_id}`
                       },
                     }),
                   )
+                  this.dispatching?.()
+                  const response = await handshake
                   this.diagnostic(
                     scope,
                     response.headers.get('x-nanocode-model-diagnostic'),
@@ -2621,7 +2672,10 @@ ${input.request_id}`
                     text: () => response.text(),
                   }
                 },
-                admit: () => this.socketEffect(scope),
+                admit: () => {
+                  this.dispatching?.()
+                  return this.socketEffect(scope)
+                },
               },
             },
           )
