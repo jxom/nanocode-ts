@@ -162,6 +162,8 @@ const replies: readonly [RegExp, (match: RegExpExecArray) => string][] = [
   [/\x1b\[16t/g, () => '\x1b[6;20;10t'],
 ]
 const ansi = /\x1b\[[0-9;?<>=!]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1bP[^\x1b]*\x1b\\|\x1b[()][0-9A-Za-z]|\x1b[=>78DEHMNOZc]/g
+const noise = /[\s\x00-\x1f\x7f\u2800-\u28ff*·✢✳✶✻✽]/g
+const partial = /\x1b(?:\[[0-9;?<>=!]*[ -\/]*|\][^\x07\x1b]*\x1b?|P[^\x1b]*\x1b?|[()])?$/
 
 const contains = (text: string) => {
   const word = text.replace(/\s/g, '')
@@ -189,6 +191,7 @@ function terminal(command: readonly string[], env: NodeJS.ProcessEnv, cwd: strin
   const child = ChildProcess.spawn('script', ['-qfec', line, '/dev/null'], { cwd, detached: true, env, stdio: ['pipe', 'pipe', 'pipe'] })
   const watches: { at?: bigint; match: (flat: string) => boolean; resolve: (at: bigint) => void }[] = []
   let flat = ''
+  let pending = ''
   let plain = ''
   let raw = ''
   let trace: [bigint, string][] = []
@@ -200,10 +203,12 @@ function terminal(command: readonly string[], env: NodeJS.ProcessEnv, cwd: strin
       pattern.lastIndex = 0
       for (let m = pattern.exec(chunk); m; m = pattern.exec(chunk)) child.stdin.write(reply(m))
     }
-    const visible = chunk.replace(ansi, '')
+    const stripped = (pending + chunk).replace(ansi, '')
+    pending = partial.exec(stripped)?.[0] ?? ''
+    const visible = stripped.slice(0, stripped.length - pending.length)
     if (process.env.SLA_STREAM) trace.push([at, visible])
     plain = (plain + visible).slice(-65536)
-    flat = (flat + visible.replace(/\s/g, '')).slice(-65536)
+    flat = (flat + visible.replace(noise, '')).slice(-65536)
     for (const watch of watches) if (watch.at === undefined && watch.match(flat)) {
       watch.at = at
       watch.resolve(at)
