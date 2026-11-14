@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -7,6 +8,14 @@ export const root = fileURLToPath(new URL("..", import.meta.url));
 export const outputs = ["nanocode_wasm.wasm", "interpreter.wasm", "psh.wasm", "python.wasm", "models.js", "models.d.ts"];
 export const manifestName = "nanocode-wasm.json";
 export const repository = "nanocodexyz/nanocode-ts";
+
+export function fetchCrates(cwd) {
+  const env = { ...process.env };
+  delete env.CARGO_NET_OFFLINE;
+  const result = spawnSync("cargo", ["fetch", "--locked"], { cwd, env, stdio: "inherit" });
+  if (result.error) throw result.error;
+  if (result.status !== 0) process.exit(result.status ?? 1);
+}
 
 function sources() {
   const files = ["sdk-revision.json", "psh-revision.json", "python-revision.json", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "scripts/build.mjs", "scripts/psh.mjs", "scripts/wasm.mjs", "src/wasm/prelude.js", "interpreter/Cargo.toml", "interpreter/Cargo.lock", "python/Cargo.toml", "python/Cargo.lock", "scripts/python.mjs"];

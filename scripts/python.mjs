@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, renameSync, rmSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { root } from './wasm.mjs'
+import { fetchCrates, root } from './wasm.mjs'
 
 export const pin = JSON.parse(readFileSync(join(root, 'python-revision.json'), 'utf8'))
 
@@ -57,9 +57,10 @@ function link(target) {
 
 export function build() {
   link(source())
+  fetchCrates(join(root, 'python'))
   const result = spawnSync(
     'cargo',
-    ['build', '--locked', '--release', '--target', 'wasm32-unknown-unknown', '--target-dir', '../target/python'],
+    ['build', '--locked', '--offline', '--release', '--target', 'wasm32-unknown-unknown', '--target-dir', '../target/python'],
     { cwd: join(root, 'python'), stdio: 'inherit' },
   )
   if (result.error) throw result.error

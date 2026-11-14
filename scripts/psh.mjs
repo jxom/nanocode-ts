@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { root } from './wasm.mjs'
+import { fetchCrates, root } from './wasm.mjs'
 
 export const pin = JSON.parse(readFileSync(join(root, 'psh-revision.json'), 'utf8'))
 
@@ -56,11 +56,14 @@ function source() {
 
 export function build() {
   const target = join(root, 'target', 'psh')
+  const directory = join(source(), workspace)
+  fetchCrates(directory)
   run(
     [
       'cargo',
       'build',
       '--locked',
+      '--offline',
       '-p',
       'psh-wasm-core',
       '--target',
@@ -70,7 +73,7 @@ export function build() {
       '--target-dir',
       target,
     ],
-    join(source(), workspace),
+    directory,
   )
   return join(target, 'wasm32-unknown-unknown', 'wasm', 'psh_wasm_core.wasm')
 }

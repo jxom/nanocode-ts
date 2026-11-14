@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync, readdirSync, existsSync } from 
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { arch, platform } from "node:os";
-import { fingerprint as wasmFingerprint, manifest, manifestName } from "./wasm.mjs";
+import { fetchCrates, fingerprint as wasmFingerprint, manifest, manifestName } from "./wasm.mjs";
 import { build as buildPsh } from "./psh.mjs";
 import { bake as bakePython, build as buildPython } from "./python.mjs";
 
@@ -84,7 +84,8 @@ const optimized = "target/wasm32-unknown-unknown/wasm/nanocode_wasm.opt.wasm";
 const fileDigest = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
 let built = false;
 if (previousBuild?.inputs !== fingerprint || !existsSync(artifact) || previousBuild.artifact !== fileDigest(artifact)) {
-  const result = spawnSync("cargo", ["build", "--locked", "--lib", "--target", "wasm32-unknown-unknown", "--profile", "wasm"], { stdio: "inherit" });
+  fetchCrates(".");
+  const result = spawnSync("cargo", ["build", "--locked", "--offline", "--lib", "--target", "wasm32-unknown-unknown", "--profile", "wasm"], { stdio: "inherit" });
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
   built = true;
@@ -100,7 +101,8 @@ let previous;
 try { previous = readFileSync("dist/nanocode_wasm.wasm"); } catch (error) { if (error.code !== "ENOENT") throw error; }
 if (!previous?.equals(bytes)) writeFileSync("dist/nanocode_wasm.wasm", bytes);
 
-const interpreter = spawnSync("cargo", ["build", "--locked", "--release", "--target", "wasm32-unknown-unknown", "--target-dir", "../target/interpreter"], { cwd: "interpreter", stdio: "inherit" });
+fetchCrates("interpreter");
+const interpreter = spawnSync("cargo", ["build", "--locked", "--offline", "--release", "--target", "wasm32-unknown-unknown", "--target-dir", "../target/interpreter"], { cwd: "interpreter", stdio: "inherit" });
 if (interpreter.error) throw interpreter.error;
 if (interpreter.status !== 0) process.exit(interpreter.status ?? 1);
 optimize("target/interpreter/wasm32-unknown-unknown/release/nanocode_interpreter.wasm", "target/interpreter/wasm32-unknown-unknown/release/nanocode_interpreter.opt.wasm");
