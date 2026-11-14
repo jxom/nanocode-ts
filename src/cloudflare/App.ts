@@ -363,6 +363,7 @@ const pumpResets = 4
 
 const subagentScanPages = 32
 
+const prestartKey = 'prestarted'
 const waitingKey = 'retry_waiting'
 const schemaKey = 'schema'
 const schemaVersion = '1'
@@ -527,6 +528,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
     private compiled?: Promise<void>
     private readonly born = Date.now()
     private hold?: ReturnType<typeof setTimeout>
+    private prestartCommit?: number
     private prestarted?: number
 
     private readonly tripwires = new Map<string, string>()
@@ -692,6 +694,9 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
         `object_age;dur=${now - this.born};desc=${this.counts.requests}`,
         `object_isolate;dur=${now - isolate.loaded!};desc=${isolate.objects}`,
         ...(this.prestarted === undefined ? [] : [`object_prestart;dur=${now - this.prestarted}`]),
+        ...(this.prestartCommit === undefined
+          ? []
+          : [`object_prestart_commit;dur=${Math.round(this.prestartCommit)}`]),
         ...(isolate.prestarted === undefined
           ? []
           : [`object_isolate_prestart;dur=${now - isolate.prestarted}`]),
@@ -713,6 +718,10 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
               this.hold = undefined
             }, policy(hold, Pool.holdHeader))
           }
+          this.metadata.set(prestartKey, String(this.prestarted))
+          const committed = this.ctx.storage.sync().then(() => {
+            this.prestartCommit = performance.now() - admitted
+          })
           await this.instance(ownerScope)
           this.prime(
             [
@@ -731,6 +740,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           })
           await this.compiled
           this.primePromptCache()
+          await committed
           return new Response(null, { status: 204 })
         }
         if (this.hold !== undefined) clearTimeout(this.hold)
