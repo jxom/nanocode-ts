@@ -11,6 +11,10 @@ export const holdHeader = 'x-nanocode-prestart-hold-ms'
 
 export const objectHeader = 'x-nanocode-session-object'
 
+export const returnedHeader = 'x-nanocode-returned-at'
+
+export const sentHeader = 'x-nanocode-sent-at'
+
 type Claim = {
   id: string
   kind: 'bound' | 'named' | 'pooled'
@@ -45,19 +49,39 @@ export class SessionPool extends DurableObject<Env> {
   }
 
   async forward(key: string, request: Request): Promise<Response> {
+    const arrived = Date.now()
     const started = performance.now()
     const claim = this.claim(key)
     const claimed = performance.now()
+    let committed: number | 'failed' | undefined
+    void this.ctx.storage.sync().then(
+      () => {
+        committed = performance.now() - claimed
+      },
+      () => {
+        committed = 'failed'
+      },
+    )
+    const sending = new Headers(request.headers)
+    sending.set(sentHeader, String(Date.now()))
     const response = await this.env.SESSIONS.get(this.env.SESSIONS.idFromString(claim.id), {
       locationHint: this.env.SESSION_LOCATION_HINT,
-    }).fetch(request)
+    }).fetch(new Request(request, { headers: sending }))
+    const returned = response.headers.get(returnedHeader)
     const headers = new Headers(response.headers)
     headers.set(objectHeader, claim.id)
+    headers.set(returnedHeader, String(Date.now()))
     headers.append(
       'server-timing',
       [
         `pool_claim;dur=${Math.round(claimed - started)};desc=${claim.kind}`,
         `pool_object;dur=${Math.round(performance.now() - claimed)}`,
+        `pool_in;dur=${arrived - Number(request.headers.get(sentHeader))}`,
+        ...(returned === null ? [] : [`object_out;dur=${Date.now() - Number(returned)}`]),
+        typeof committed === 'number'
+          ? `pool_commit;dur=${Math.round(committed)}`
+          : `pool_commit;desc=${committed ?? 'pending'}`,
+        `pool_total;dur=${Math.round(performance.now() - started)}`,
         ...(claim.ready
           ? [
               `pool_ready;dur=${Date.now() - claim.ready.at}`,

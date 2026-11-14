@@ -270,6 +270,7 @@ async function sessionFetch(
       route: 'object',
     }
 
+  options.request.headers.set(Pool.sentHeader, String(Date.now()))
   const forwarded = await Pool.forward(pool, {
     key: sessionKey(options),
     locationHint: env.SESSION_LOCATION_HINT,
@@ -280,6 +281,11 @@ async function sessionFetch(
   remember(env, options, { id, shared: bindingCache(env, options) })
   const headers = new Headers(forwarded.headers)
   headers.delete(Pool.objectHeader)
+  headers.delete(Pool.returnedHeader)
+  headers.append(
+    'server-timing',
+    `pool_out;dur=${Date.now() - Number(forwarded.headers.get(Pool.returnedHeader))}`,
+  )
   return {
     resolved,
     response: new Response(forwarded.body, {
@@ -526,6 +532,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
     private pumping = false
     private modelAt?: number
     private compiled?: Promise<void>
+    private readonly steps = new WeakMap<Request, string[]>()
     private readonly born = Date.now()
     private hold?: ReturnType<typeof setTimeout>
     private prestartCommit?: number
@@ -679,12 +686,19 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
 
     async fetch(request: Request): Promise<Response> {
       this.counts.requests++
+      const arrived = Date.now()
       const started = performance.now()
       const response = await this.serve(request)
       if (response.webSocket || response.status === 101) return response
       const timed = new Response(response.body, response)
       timed.headers.append('server-timing', 'session;dur=' + Math.round(performance.now() - started))
       timed.headers.append('server-timing', this.objectTiming())
+      const sent = request.headers.get(Pool.sentHeader)
+      if (sent !== null)
+        timed.headers.append('server-timing', `object_in;dur=${arrived - Number(sent)}`)
+      const steps = this.steps.get(request)
+      if (steps?.length) timed.headers.append('server-timing', steps.join(', '))
+      timed.headers.set(Pool.returnedHeader, String(Date.now()))
       return timed
     }
 
@@ -963,7 +977,16 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
         }
         if (request.method !== 'POST' || parts.length !== 3)
           return json({ error: 'method not allowed' }, 405)
+        const steps: string[] = []
+        this.steps.set(request, steps)
+        let lapped = performance.now()
+        const lap = (name: string) => {
+          const now = performance.now()
+          steps.push(`object_${name};dur=${Math.round(now - lapped)}`)
+          lapped = now
+        }
         const body = await bodyText(request, valueLimit)
+        lap('body')
         if (body === undefined) return json({ error: tooLarge }, 413)
         let input: any
         try {
@@ -1071,6 +1094,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           this.metadata.get(providerKey) === undefined &&
           this.metadata.get(sessionKey) === undefined
         while (this.binding && unbound()) await this.binding
+        lap('bind')
         let bound: (() => void) | undefined
         if (unbound())
           this.binding = new Promise<void>((resolve) => {
@@ -1094,13 +1118,14 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           const boundProvider =
             this.metadata.get(providerKey) ?? (initialized ? 'claude' : undefined)
           descriptor.provider = input.provider ?? boundProvider ?? 'claude'
-          const rejected = await (
-            await this.instance(scope)
-          ).admit(
+          const admitter = await this.instance(scope)
+          lap('instance')
+          const rejected = await admitter.admit(
             input.request_id,
             boundProvider === undefined ? null : String(boundProvider),
             descriptor.provider!,
           )
+          lap('admit')
           if (rejected === 'reserved_request_id')
             return json({ error: 'request_id prefix is reserved' }, 400)
           if (rejected === 'provider_changed')
@@ -1140,6 +1165,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           descriptor.thinking = input.thinking
           descriptor.web_search = input.web_search
           await subscribing
+          lap('subscribe')
           if (descriptor.provider === 'codex')
             descriptor.subscription = descriptor.codex_subscription ?? true
           const subscribed = descriptor.subscription
@@ -1172,6 +1198,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
                     root: options.workspace?.cwd ?? '/workspace',
                   },
                 )
+          lap('images')
           const admission: Admission = {
             request_id: input.request_id,
             prompt: input.prompt,
@@ -1187,6 +1214,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
             scope,
             streaming ? { buffered: true, ...admission } : admission,
           )
+          lap('submit')
           if (submitted.submitted === 'too_large')
             return json(
               {
@@ -1247,6 +1275,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           void this.ctx.storage.sync().then(() => {
             committing.alarm_commit_ms = performance.now() - admitted
           })
+        lap('alarm')
         if (submitted.submitted === 'accepted') {
           const timing = this.turnTimings.get(input.request_id)
           if (timing) {
@@ -1276,6 +1305,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
             descriptor,
             deferred ? consumed : undefined,
           )
+          lap('events')
           if (deferred) {
             const timing = this.turnTimings.get(input.request_id)
             if (timing) timing.respond_ms = performance.now() - admitted
@@ -4289,6 +4319,7 @@ ${input.request_id}`
     const response = sent.response
     if (response.webSocket) return response
     const responseHeaders = new Headers(response.headers)
+    responseHeaders.delete(Pool.returnedHeader)
     responseHeaders.append(
       'server-timing',
       `public_pre_session;dur=${resolving - started}, session_resolve;dur=${sent.resolved}, session_response;dur=${performance.now() - resolving - sent.resolved}, session_route;desc=${sent.route}`,
