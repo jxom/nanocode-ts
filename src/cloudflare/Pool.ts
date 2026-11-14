@@ -3,9 +3,12 @@ import { DurableObject } from 'cloudflare:workers'
 export type Env = {
   SESSIONS: DurableObjectNamespace
   SESSION_LOCATION_HINT?: DurableObjectLocationHint
+  SESSION_POOL_HEDGE_MS?: string
   SESSION_POOL_KEEPALIVE_MS: string
   SESSION_POOL_SIZE: string
 }
+
+export const hedgeHeader = 'x-nanocode-hedge'
 
 export const holdHeader = 'x-nanocode-prestart-hold-ms'
 
@@ -17,7 +20,12 @@ type Claim = {
   ready?: { at: number; pinged: number | undefined }
 }
 
+type Answer = { id: string; response: Response }
+
+type Ready = { at: number; id: string; pinged: number | undefined }
+
 export class SessionPool extends DurableObject<Env> {
+  private readonly hedging = new Map<string, Promise<unknown>>()
   private readonly pinged = new Map<string, number>()
   private starting = 0
 
@@ -44,20 +52,36 @@ export class SessionPool extends DurableObject<Env> {
     )
   }
 
+  async bound(key: string, id: string): Promise<boolean> {
+    await this.hedging.get(key)?.catch(() => undefined)
+    return (
+      this.ctx.storage.sql
+        .exec<{ id: string }>('SELECT id FROM bindings WHERE key = ?', key)
+        .toArray()[0]?.id === id
+    )
+  }
+
   async forward(key: string, request: Request): Promise<Response> {
     const started = performance.now()
+    await this.hedging.get(key)?.catch(() => undefined)
     const claim = this.claim(key)
     const claimed = performance.now()
-    const response = await this.env.SESSIONS.get(this.env.SESSIONS.idFromString(claim.id), {
-      locationHint: this.env.SESSION_LOCATION_HINT,
-    }).fetch(request)
+    const answer =
+      claim.kind === 'pooled' &&
+      this.env.SESSION_POOL_HEDGE_MS !== undefined &&
+      request.method === 'POST' &&
+      new URL(request.url).pathname === '/internal/turns'
+        ? await this.hedge(key, claim.id, request)
+        : { id: claim.id, response: await this.object(claim.id).fetch(request) }
+    const response = answer.response
     const headers = new Headers(response.headers)
-    headers.set(objectHeader, claim.id)
+    headers.set(objectHeader, answer.id)
     headers.append(
       'server-timing',
       [
         `pool_claim;dur=${Math.round(claimed - started)};desc=${claim.kind}`,
         `pool_object;dur=${Math.round(performance.now() - claimed)}`,
+        ...(answer.id === claim.id ? [] : [`pool_hedge;desc=${answer.id}`]),
         ...(claim.ready
           ? [
               `pool_ready;dur=${Date.now() - claim.ready.at}`,
@@ -76,6 +100,7 @@ export class SessionPool extends DurableObject<Env> {
   }
 
   async resolve(key: string): Promise<string> {
+    await this.hedging.get(key)?.catch(() => undefined)
     return this.claim(key).id
   }
 
@@ -130,14 +155,9 @@ export class SessionPool extends DurableObject<Env> {
       if (!this.sealed()) return { id: named, kind: 'named' }
       if (sql.exec('SELECT 1 FROM legacy WHERE id = ?', named).toArray().length)
         return { id: named, kind: 'named' }
-      const ready = sql
-        .exec<{ at: number; id: string }>('SELECT id, at FROM ready ORDER BY at LIMIT 1')
-        .toArray()[0]
+      const ready = this.take()
       if (!ready) return { id: named, kind: 'named' }
-      sql.exec('DELETE FROM ready WHERE id = ?', ready.id)
-      const pinged = this.pinged.get(ready.id)
-      this.pinged.delete(ready.id)
-      return { id: ready.id, kind: 'pooled', ready: { at: ready.at, pinged } }
+      return { id: ready.id, kind: 'pooled', ready: { at: ready.at, pinged: ready.pinged } }
     })()
     sql.exec('INSERT INTO bindings (key, id) VALUES (?, ?)', key, claim.id)
 
@@ -145,8 +165,81 @@ export class SessionPool extends DurableObject<Env> {
     return claim
   }
 
+  private async hedge(key: string, first: string, request: Request): Promise<Answer> {
+    const body = await request.arrayBuffer()
+    const headers = new Headers(request.headers)
+    headers.set(hedgeHeader, encodeURIComponent(key))
+    const send = (id: string): Promise<Answer> =>
+      this.object(id)
+        .fetch(
+          new Request(request.url, { body, headers, method: request.method, redirect: 'manual' }),
+        )
+        .then((response) => ({ id, response }))
+    const attempts = [send(first)]
+    const decided = (async (): Promise<Answer> => {
+      const early = await Promise.race([
+        attempts[0]!,
+        new Promise<undefined>((resolve) =>
+          setTimeout(resolve, positive(this.env.SESSION_POOL_HEDGE_MS!, 'SESSION_POOL_HEDGE_MS')),
+        ),
+      ])
+      if (early) return early
+      const second = this.take()
+      if (!second) return await attempts[0]!
+      this.ctx.waitUntil(this.refill())
+      attempts.push(send(second.id))
+      const winner = await Promise.any(attempts)
+      if (winner.id !== first)
+        this.ctx.storage.sql.exec('UPDATE bindings SET id = ? WHERE key = ?', winner.id, key)
+      return winner
+    })()
+    this.hedging.set(key, decided)
+    const winner = await decided.finally(() => this.hedging.delete(key))
+    this.ctx.waitUntil(this.verdict(winner.id, 'won'))
+    for (const attempt of attempts)
+      this.ctx.waitUntil(
+        attempt.then(
+          async (answer) => {
+            if (answer.id === winner.id) return
+            await answer.response.body?.cancel()
+            await this.verdict(answer.id, 'lost')
+          },
+          () => undefined,
+        ),
+      )
+    return winner
+  }
+
+  private object(id: string): DurableObjectStub {
+    return this.env.SESSIONS.get(this.env.SESSIONS.idFromString(id), {
+      locationHint: this.env.SESSION_LOCATION_HINT,
+    })
+  }
+
   private sealed(): boolean {
     return this.ctx.storage.sql.exec('SELECT 1 FROM sealed').toArray().length > 0
+  }
+
+  private take(): Ready | undefined {
+    const sql = this.ctx.storage.sql
+    const ready = sql
+      .exec<{ at: number; id: string }>('SELECT id, at FROM ready ORDER BY at LIMIT 1')
+      .toArray()[0]
+    if (!ready) return
+    sql.exec('DELETE FROM ready WHERE id = ?', ready.id)
+    const pinged = this.pinged.get(ready.id)
+    this.pinged.delete(ready.id)
+    return { at: ready.at, id: ready.id, pinged }
+  }
+
+  private async verdict(id: string, verdict: 'lost' | 'won'): Promise<void> {
+    const response = await this.object(id)
+      .fetch('https://session.internal/internal/hedge', {
+        headers: { [hedgeHeader]: verdict },
+        method: 'POST',
+      })
+      .catch(() => undefined)
+    await response?.body?.cancel()
   }
 
   private async start(id: string): Promise<boolean> {
@@ -166,6 +259,23 @@ export class SessionPool extends DurableObject<Env> {
     if (response?.status !== 204) return false
     this.pinged.set(id, Date.now())
     return true
+  }
+}
+
+export function bound(
+  namespace: DurableObjectNamespace<SessionPool>,
+  options: bound.Options,
+): Promise<boolean> {
+  return namespace
+    .get(namespace.idFromName('pool'), { locationHint: options.locationHint })
+    .bound(options.key, options.id)
+}
+
+export declare namespace bound {
+  type Options = {
+    id: string
+    key: string
+    locationHint?: DurableObjectLocationHint | undefined
   }
 }
 

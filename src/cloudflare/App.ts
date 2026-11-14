@@ -363,6 +363,7 @@ const pumpResets = 4
 
 const subagentScanPages = 32
 
+const hedgeKey = 'hedged'
 const prestartKey = 'prestarted'
 const waitingKey = 'retry_waiting'
 const schemaKey = 'schema'
@@ -743,6 +744,17 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           await committed
           return new Response(null, { status: 204 })
         }
+        if (url.pathname === '/internal/hedge' && request.method === 'POST') {
+          if (this.metadata.get(hedgeKey) === undefined)
+            return json({ error: 'no hedged turn' }, 409)
+          if (request.headers.get(Pool.hedgeHeader) === 'lost') return await this.destroy()
+          this.metadata.delete(hedgeKey)
+          if (!this.pumping) {
+            this.counts.direct_starts++
+            this.ctx.waitUntil(this.pump(true))
+          }
+          return new Response(null, { status: 204 })
+        }
         if (this.hold !== undefined) clearTimeout(this.hold)
         this.hold = undefined
         let descriptor: SessionDescriptor
@@ -1035,6 +1047,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
         }
         const streaming = request.headers.get('accept')?.includes('text/event-stream')
         const cursor = streaming ? this.cursor(url, request) : undefined
+        const hedged = request.headers.get(Pool.hedgeHeader)
         if (streaming && !cursor) return json({ error: 'invalid event cursor' }, 400)
         const executorKey = `executor:${scope}`
         const providerKey = `model_provider:${scope}`
@@ -1213,6 +1226,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
                 this.metadata.insert(subagentsKey, String(descriptor.subagents))
               this.metadata.insert(executorKey, executor)
               this.sessionId(scope, descriptor.session_id || this.claimPrewarmed(scope, descriptor))
+              if (hedged !== null) this.metadata.set(hedgeKey, decodeURIComponent(hedged))
             })
             if (streaming) {
               let held = this.buffered.get(admitting)
@@ -1254,8 +1268,9 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
             timing.admitted_at = performance.now()
           }
         }
-        const deferred = !!cursor && unfinished && submitted.submitted === 'accepted'
-        if (unfinished && !this.pumping && !deferred) {
+        const held = hedged !== null && submitted.submitted === 'accepted'
+        const deferred = !!cursor && unfinished && submitted.submitted === 'accepted' && !held
+        if (unfinished && !this.pumping && !deferred && !held) {
           this.counts.direct_starts++
           this.ctx.waitUntil(this.pump(true))
         }
@@ -1671,6 +1686,20 @@ ${input.request_id}`
     async alarm(): Promise<void> {
       if (this.deleted) return
       this.counts.alarms++
+      const hedged = this.metadata.get(hedgeKey)
+      if (hedged !== undefined) {
+        if (!this.env.SESSION_POOL) throw new Error('a hedged turn needs SESSION_POOL')
+        const won = await Pool.bound(this.env.SESSION_POOL, {
+          id: this.ctx.id.toString(),
+          key: hedged,
+          locationHint: this.env.SESSION_LOCATION_HINT,
+        })
+        if (!won) {
+          await this.destroy()
+          return
+        }
+        this.metadata.delete(hedgeKey)
+      }
       if (this.metadata.get('child_notices')) void this.childNotify()
       await this.pump()
     }
@@ -4259,6 +4288,7 @@ ${input.request_id}`
     else if (match?.[3]) path += `/${match[3]}`
     const headers = new Headers(request.headers)
     headers.delete('authorization')
+    headers.delete(Pool.hedgeHeader)
     if (head) headers.delete('upgrade')
     headers.set('x-nanocode-descriptor', headerJson(descriptor))
     const target = new URL(request.url)
