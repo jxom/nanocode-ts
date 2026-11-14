@@ -2276,6 +2276,7 @@ ${input.request_id}`
                   ? {}
                   : { subagents: descriptor.subagents ?? options.subagents }),
               ...(options.remoteSubagents && !child ? { remote_children: true } : {}),
+              ...(options.hedge ? { hedge: options.hedge } : {}),
               ...(options.maxResidentSubagents === undefined
                 ? {}
                 : { max_resident_subagents: options.maxResidentSubagents }),
@@ -3583,6 +3584,7 @@ ${input.request_id}`
             subscription: false,
             endpoint: 'https://api.anthropic.com/v1/messages',
             providers: { codex: { endpoint: 'https://api.openai.com/v1' } },
+            ...(options.hedge ? { hedge: options.hedge } : {}),
             event_coalesce_ms: duration(this.env.EVENT_COALESCE_MS, 'EVENT_COALESCE_MS'),
             live_deltas: options.liveDeltas ?? true,
             stream_tool_input: options.streamToolInput ?? true,
@@ -4404,6 +4406,7 @@ export declare namespace create {
     handInstructions?: string
     hands?: 'always' | 'attached'
     harnesses?: 'both' | 'session'
+    hedge?: Contracts.AgentConfiguration['hedge']
     instructions?: string
     limits?(session: Session, env: E): Limits | undefined | Promise<Limits | undefined>
     liveDeltas?: boolean
