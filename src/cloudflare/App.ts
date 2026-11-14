@@ -1976,7 +1976,9 @@ ${input.request_id}`
           return ''
         }
       }
-      return read('SELECT coalesce(max(seq), 0) AS value FROM nanocode_log')
+      return read(
+        'WITH RECURSIVE scopes(scope) AS (SELECT min(scope) FROM nanocode_log UNION ALL SELECT (SELECT min(scope) FROM nanocode_log WHERE scope > scopes.scope) FROM scopes WHERE scopes.scope IS NOT NULL) SELECT coalesce(max((SELECT max(seq) FROM nanocode_log WHERE scope = scopes.scope)), 0) AS value FROM scopes',
+      )
     }
 
     private retryWaiting(): void {
