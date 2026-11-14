@@ -50,7 +50,6 @@ export type Env = {
   SESSION_POOL?: DurableObjectNamespace<Pool.SessionPool>
   SESSION_POOL_BINDING_CACHE_S?: string
   SESSION_POOL_CACHED_NAMES?: string
-  SESSION_SHARDS?: DurableObjectNamespace<Pool.SessionShard>
 }
 
 export type Thinking = Contracts.Thinking
@@ -248,8 +247,8 @@ async function sessionObject(env: Env, options: Binding): Promise<DurableObjectS
 
 async function sessionFetch(
   env: Env,
-  options: Binding & { colo: string | undefined; request: Request },
-): Promise<{ resolved: number; response: Response; route: 'object' | 'pool' | 'shard' }> {
+  options: Binding & { request: Request },
+): Promise<{ resolved: number; response: Response; route: 'object' | 'pool' }> {
   const started = performance.now()
   const pool = env.SESSION_POOL
   if (!pool || options.request.headers.has('upgrade')) {
@@ -269,19 +268,11 @@ async function sessionFetch(
       route: 'object',
     }
 
-  const shards = env.SESSION_SHARDS
-  const route = shards && options.colo !== undefined ? 'shard' : 'pool'
-  const forwarded = await (shards && options.colo !== undefined
-    ? Pool.forwardShard(shards, {
-        colo: options.colo,
-        key: sessionKey(options),
-        request: options.request,
-      })
-    : Pool.forward(pool, {
-        key: sessionKey(options),
-        locationHint: env.SESSION_LOCATION_HINT,
-        request: options.request,
-      }))
+  const forwarded = await Pool.forward(pool, {
+    key: sessionKey(options),
+    locationHint: env.SESSION_LOCATION_HINT,
+    request: options.request,
+  })
   const id = forwarded.headers.get(Pool.objectHeader)
   if (!id) throw new Error(`the session pool answered without ${Pool.objectHeader}`)
   remember(env, options, { id, shared: bindingCache(env, options) })
@@ -294,7 +285,7 @@ async function sessionFetch(
       status: forwarded.status,
       statusText: forwarded.statusText,
     }),
-    route,
+    route: 'pool',
   }
 }
 
@@ -4258,7 +4249,6 @@ ${input.request_id}`
       sent = await sessionFetch(env, {
         account,
         bound,
-        colo: (request.cf as IncomingRequestCfProperties | undefined)?.colo,
         host: target.hostname,
         name,
         request: new Request(target, {
