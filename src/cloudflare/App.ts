@@ -489,6 +489,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
     options.payers ?? (plans || options.subscription ? ['deployment', 'plan'] : ['deployment'])
   const valueLimit = options.valueLimit ?? Sql.valueLimitBytes
   const tooLarge = `request bodies are limited to ${valueLimit} bytes`
+  const isolate: { loaded?: number; objects: number; prestarted?: number } = { objects: 0 }
   class AgentSession extends DurableObject<E> {
     private readonly store: Checkpoints.Checkpoints
     private readonly blobs: Contracts.BlobHost
@@ -519,6 +520,8 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
     private pumping = false
     private modelAt?: number
     private compiled?: Promise<void>
+    private readonly born = Date.now()
+    private prestarted?: number
 
     private readonly tripwires = new Map<string, string>()
     private directoryBodies = new Map<string, string>()
@@ -554,6 +557,8 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
 
     constructor(ctx: DurableObjectState, env: E) {
       super(ctx, env)
+      isolate.loaded ??= this.born
+      isolate.objects++
       this.store = Checkpoints.create(ctx.storage, { valueLimit })
       this.metadata = Metadata.create(ctx.storage)
       ctx.storage.sql.exec(`
@@ -671,7 +676,20 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
       if (response.webSocket || response.status === 101) return response
       const timed = new Response(response.body, response)
       timed.headers.append('server-timing', 'session;dur=' + Math.round(performance.now() - started))
+      timed.headers.append('server-timing', this.objectTiming())
       return timed
+    }
+
+    private objectTiming(): string {
+      const now = Date.now()
+      return [
+        `object_age;dur=${now - this.born};desc=${this.counts.requests}`,
+        `object_isolate;dur=${now - isolate.loaded!};desc=${isolate.objects}`,
+        ...(this.prestarted === undefined ? [] : [`object_prestart;dur=${now - this.prestarted}`]),
+        ...(isolate.prestarted === undefined
+          ? []
+          : [`object_isolate_prestart;dur=${now - isolate.prestarted}`]),
+      ].join(', ')
     }
 
     private async serve(request: Request): Promise<Response> {
@@ -680,6 +698,8 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
       try {
         const url = new URL(request.url)
         if (url.pathname === '/internal/prestart' && request.method === 'POST') {
+          this.prestarted = Date.now()
+          isolate.prestarted = this.prestarted
           await this.instance(ownerScope)
           this.prime(
             [

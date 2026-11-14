@@ -9,7 +9,14 @@ export type Env = {
 
 export const objectHeader = 'x-nanocode-session-object'
 
+type Claim = {
+  id: string
+  kind: 'bound' | 'named' | 'pooled'
+  ready?: { at: number; pinged: number | undefined }
+}
+
 export class SessionPool extends DurableObject<Env> {
+  private readonly pinged = new Map<string, number>()
   private starting = 0
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -36,12 +43,29 @@ export class SessionPool extends DurableObject<Env> {
   }
 
   async forward(key: string, request: Request): Promise<Response> {
-    const id = await this.resolve(key)
-    const response = await this.env.SESSIONS.get(this.env.SESSIONS.idFromString(id), {
+    const started = performance.now()
+    const claim = this.claim(key)
+    const claimed = performance.now()
+    const response = await this.env.SESSIONS.get(this.env.SESSIONS.idFromString(claim.id), {
       locationHint: this.env.SESSION_LOCATION_HINT,
     }).fetch(request)
     const headers = new Headers(response.headers)
-    headers.set(objectHeader, id)
+    headers.set(objectHeader, claim.id)
+    headers.append(
+      'server-timing',
+      [
+        `pool_claim;dur=${Math.round(claimed - started)};desc=${claim.kind}`,
+        `pool_object;dur=${Math.round(performance.now() - claimed)}`,
+        ...(claim.ready
+          ? [
+              `pool_ready;dur=${Date.now() - claim.ready.at}`,
+              ...(claim.ready.pinged === undefined
+                ? []
+                : [`pool_ping;dur=${Date.now() - claim.ready.pinged}`]),
+            ]
+          : []),
+      ].join(', '),
+    )
     return new Response(response.body, {
       headers,
       status: response.status,
@@ -50,27 +74,7 @@ export class SessionPool extends DurableObject<Env> {
   }
 
   async resolve(key: string): Promise<string> {
-    const sql = this.ctx.storage.sql
-    const bound = sql
-      .exec<{ id: string }>('SELECT id FROM bindings WHERE key = ?', key)
-      .toArray()[0]
-    if (bound) return bound.id
-
-    const named = this.env.SESSIONS.idFromName(key).toString()
-    const id = (() => {
-      if (!this.sealed()) return named
-      if (sql.exec('SELECT 1 FROM legacy WHERE id = ?', named).toArray().length) return named
-      const ready = sql
-        .exec<{ id: string }>('SELECT id FROM ready ORDER BY at LIMIT 1')
-        .toArray()[0]
-      if (!ready) return named
-      sql.exec('DELETE FROM ready WHERE id = ?', ready.id)
-      return ready.id
-    })()
-    sql.exec('INSERT INTO bindings (key, id) VALUES (?, ?)', key, id)
-
-    if (this.sealed()) this.ctx.waitUntil(this.refill())
-    return id
+    return this.claim(key).id
   }
 
   async seal(ids: readonly string[]): Promise<number> {
@@ -112,6 +116,33 @@ export class SessionPool extends DurableObject<Env> {
       )
   }
 
+  private claim(key: string): Claim {
+    const sql = this.ctx.storage.sql
+    const bound = sql
+      .exec<{ id: string }>('SELECT id FROM bindings WHERE key = ?', key)
+      .toArray()[0]
+    if (bound) return { id: bound.id, kind: 'bound' }
+
+    const named = this.env.SESSIONS.idFromName(key).toString()
+    const claim = ((): Claim => {
+      if (!this.sealed()) return { id: named, kind: 'named' }
+      if (sql.exec('SELECT 1 FROM legacy WHERE id = ?', named).toArray().length)
+        return { id: named, kind: 'named' }
+      const ready = sql
+        .exec<{ at: number; id: string }>('SELECT id, at FROM ready ORDER BY at LIMIT 1')
+        .toArray()[0]
+      if (!ready) return { id: named, kind: 'named' }
+      sql.exec('DELETE FROM ready WHERE id = ?', ready.id)
+      const pinged = this.pinged.get(ready.id)
+      this.pinged.delete(ready.id)
+      return { id: ready.id, kind: 'pooled', ready: { at: ready.at, pinged } }
+    })()
+    sql.exec('INSERT INTO bindings (key, id) VALUES (?, ?)', key, claim.id)
+
+    if (this.sealed()) this.ctx.waitUntil(this.refill())
+    return claim
+  }
+
   private sealed(): boolean {
     return this.ctx.storage.sql.exec('SELECT 1 FROM sealed').toArray().length > 0
   }
@@ -123,7 +154,9 @@ export class SessionPool extends DurableObject<Env> {
       .fetch('https://session.internal/internal/prestart', { method: 'POST' })
       .catch(() => undefined)
     await response?.body?.cancel()
-    return response?.status === 204
+    if (response?.status !== 204) return false
+    this.pinged.set(id, Date.now())
+    return true
   }
 }
 
