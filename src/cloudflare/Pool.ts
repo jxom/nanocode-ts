@@ -7,6 +7,8 @@ export type Env = {
   SESSION_POOL_SIZE: string
 }
 
+export const holdHeader = 'x-nanocode-prestart-hold-ms'
+
 export const objectHeader = 'x-nanocode-session-object'
 
 type Claim = {
@@ -151,7 +153,14 @@ export class SessionPool extends DurableObject<Env> {
     const response = await this.env.SESSIONS.get(this.env.SESSIONS.idFromString(id), {
       locationHint: this.env.SESSION_LOCATION_HINT,
     })
-      .fetch('https://session.internal/internal/prestart', { method: 'POST' })
+      .fetch('https://session.internal/internal/prestart', {
+        headers: {
+          [holdHeader]: String(
+            positive(this.env.SESSION_POOL_KEEPALIVE_MS, 'SESSION_POOL_KEEPALIVE_MS'),
+          ),
+        },
+        method: 'POST',
+      })
       .catch(() => undefined)
     await response?.body?.cancel()
     if (response?.status !== 204) return false

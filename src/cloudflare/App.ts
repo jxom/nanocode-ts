@@ -521,6 +521,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
     private modelAt?: number
     private compiled?: Promise<void>
     private readonly born = Date.now()
+    private hold?: ReturnType<typeof setTimeout>
     private prestarted?: number
 
     private readonly tripwires = new Map<string, string>()
@@ -700,6 +701,13 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
         if (url.pathname === '/internal/prestart' && request.method === 'POST') {
           this.prestarted = Date.now()
           isolate.prestarted = this.prestarted
+          const hold = request.headers.get(Pool.holdHeader)
+          if (hold !== null) {
+            if (this.hold !== undefined) clearTimeout(this.hold)
+            this.hold = setTimeout(() => {
+              this.hold = undefined
+            }, policy(hold, Pool.holdHeader))
+          }
           await this.instance(ownerScope)
           this.prime(
             [
@@ -720,6 +728,8 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           this.primePromptCache()
           return new Response(null, { status: 204 })
         }
+        if (this.hold !== undefined) clearTimeout(this.hold)
+        this.hold = undefined
         let descriptor: SessionDescriptor
         try {
           descriptor = JSON.parse(request.headers.get('x-nanocode-descriptor') ?? 'null')
