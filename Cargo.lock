@@ -110,15 +110,10 @@ name = "djs-libm"
 version = "0.0.0"
 
 [[package]]
-name = "djs-lzrc"
-version = "0.0.0"
-
-[[package]]
 name = "djs-prelude"
 version = "0.0.0"
 dependencies = [
  "djs-core",
- "djs-lzrc",
 ]
 
 [[package]]
@@ -922,6 +917,7 @@ name = "nanocode-tool-runtime"
 version = "0.7.0"
 dependencies = [
  "nanocode-code-mode",
+ "nanocode-durability-core",
  "nanocode-executor",
  "nanocode-home",
  "nanocode-http",
