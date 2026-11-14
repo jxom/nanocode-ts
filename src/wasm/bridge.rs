@@ -85,8 +85,25 @@ pub async fn request(request: Value) -> Reply {
     send(encode(&request), None).await
 }
 
+struct Measured(usize);
+
+impl std::io::Write for Measured {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0 += bytes.len();
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 fn encode(request: &impl serde::Serialize) -> Vec<u8> {
-    serde_json::to_vec(request).expect("encode host request")
+    let mut measured = Measured(0);
+    serde_json::to_writer(&mut measured, request).expect("measure host request");
+    let mut bytes = Vec::with_capacity(measured.0);
+    serde_json::to_writer(&mut bytes, request).expect("encode host request");
+    bytes
 }
 
 async fn send(bytes: Vec<u8>, body: Option<&[u8]>) -> Reply {
