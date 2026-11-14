@@ -10,9 +10,12 @@ const paths = [
   'Cargo.toml',
   'Cargo.lock',
   'crates/core/bytes',
+  'crates/core/compression',
+  'crates/core/digest',
   'crates/core/memchr',
   'crates/core/shell',
   'crates/core/sys',
+  'crates/core/windows-sys',
   'crates/patches/psh',
 ]
 const workspace = join('crates', 'patches', 'psh')
