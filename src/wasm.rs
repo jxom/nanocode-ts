@@ -63,6 +63,7 @@ enum CodexOrchestration {
     #[default]
     CodeMode,
     Direct,
+    Jobs,
 }
 
 #[derive(Clone, Copy, Deserialize)]
@@ -926,7 +927,7 @@ fn codex_harness(
     let client = openai.build().map_err(configuration)?;
     let harness = CodexHarness::new(client);
     let harness = match orchestration {
-        CodexOrchestration::CodeMode => harness,
+        CodexOrchestration::CodeMode | CodexOrchestration::Jobs => harness,
         CodexOrchestration::Direct => harness.direct_tools_for(|_| true),
     };
     let harness = harness.configure(move |codex| {
@@ -1203,7 +1204,10 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
         builder = builder.claude(harness.tools(gated(selected(Provider::Claude)?)?));
     }
     if let Some(harness) = codex {
-        builder = builder.openai(harness.tools(gated(selected(Provider::Codex)?)?));
+        let jobs = matches!(config.codex_orchestration, CodexOrchestration::Jobs);
+        builder = builder.openai(
+            harness.tools(gated(selected(Provider::Codex)?)?.with_background_jobs(jobs)),
+        );
     }
     if config.subagents == Some(false) {
         builder = builder.without_subagents();

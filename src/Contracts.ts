@@ -44,7 +44,7 @@ export type Thinking = 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 export type ServiceTier = 'standard' | 'priority' | 'fast' | 'ultrafast'
 
-export type CodexOrchestration = 'code_mode' | 'direct'
+export type CodexOrchestration = 'code_mode' | 'direct' | 'jobs'
 
 export type ReasoningMode = 'standard' | 'pro'
 

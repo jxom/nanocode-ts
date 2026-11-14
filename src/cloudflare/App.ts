@@ -64,7 +64,11 @@ export const thinkingLevels: readonly Contracts.Thinking[] = [
   'max',
 ]
 
-export const codexOrchestrations: readonly Contracts.CodexOrchestration[] = ['code_mode', 'direct']
+export const codexOrchestrations: readonly Contracts.CodexOrchestration[] = [
+  'code_mode',
+  'direct',
+  'jobs',
+]
 
 export type SessionAuthority = {
   account_id: string
