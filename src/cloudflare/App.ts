@@ -148,7 +148,10 @@ type TurnTiming = {
   started: number
   admitted_at?: number
   admission_ms?: number
+  commit_wait_ms?: number
+  consumed_ms?: number
   pump_wait_ms?: number
+  respond_ms?: number
   runtime_open_ms?: number
   runtime_reused?: boolean
   run_started?: number
@@ -1238,7 +1241,8 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
             timing.admitted_at = performance.now()
           }
         }
-        if (unfinished && !this.pumping) {
+        const deferred = !!cursor && unfinished && submitted.submitted === 'accepted'
+        if (unfinished && !this.pumping && !deferred) {
           this.counts.direct_starts++
           this.ctx.waitUntil(this.pump(true))
         }
@@ -1247,7 +1251,31 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
             return new Response(null, {
               headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-store' },
             })
-          return await this.events(scope, cursor, true, input.request_id, descriptor)
+          let consumed!: () => void
+          const taken = new Promise<void>((resolve) => {
+            consumed = resolve
+          })
+          const response = await this.events(
+            scope,
+            cursor,
+            true,
+            input.request_id,
+            descriptor,
+            deferred ? consumed : undefined,
+          )
+          if (deferred) {
+            const timing = this.turnTimings.get(input.request_id)
+            if (timing) timing.respond_ms = performance.now() - admitted
+            this.ctx.waitUntil(
+              taken.then(() => {
+                if (timing) timing.consumed_ms = performance.now() - admitted
+                if (this.pumping) return
+                this.counts.direct_starts++
+                return this.pump(true)
+              }),
+            )
+          }
+          return response
         }
         return json(turn.report, unfinished ? 202 : 200)
       } catch (error) {
@@ -1729,6 +1757,8 @@ ${input.request_id}`
           return
         }
         const runtimeStarted = performance.now()
+        await this.ctx.storage.sync()
+        if (timing) timing.commit_wait_ms = performance.now() - runtimeStarted
         const initializations = this.counts.runtime_initializations
         try {
           runtime = await this.runtime(scope, sessionId, descriptor)
@@ -3819,6 +3849,7 @@ ${input.request_id}`
       streaming = false,
       requestId?: string,
       descriptor?: SessionDescriptor,
+      consumed?: () => void,
     ): Promise<Response> {
       const read = async (cursor: number): Promise<Contracts.LogPage> => {
         if (descriptor && !(await this.allowed(descriptor)))
@@ -3839,7 +3870,11 @@ ${input.request_id}`
                 const body = event.event as { source?: unknown; type?: unknown } | undefined
                 return body?.source === undefined && body?.type === 'result'
               },
-          { ...(requestId === undefined ? {} : { requestId }), live: live === true },
+          {
+            ...(consumed === undefined ? {} : { consumed }),
+            ...(requestId === undefined ? {} : { requestId }),
+            live: live === true,
+          },
         )
       return json(await (await this.instance(scope)).page(scope, after, limit))
     }

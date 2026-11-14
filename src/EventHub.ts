@@ -303,8 +303,15 @@ export function create(retained: () => number, retainedBytes: () => number) {
       interval: number,
       read: (after: number) => Promise<Contracts.LogPage>,
       finished?: (event: Event) => boolean,
-      options: { requestId?: string; live?: boolean } = {},
+      options: { consumed?: () => void; requestId?: string; live?: boolean } = {},
     ): Response {
+      let consumed = options.consumed
+      const consume = () => {
+        const fn = consumed
+        consumed = undefined
+        fn?.()
+      }
+      let pulled = false
       let cursor = after
       const live: Cursor = { sent: new Map(), cursor: after }
       let closed = false
@@ -313,6 +320,8 @@ export function create(retained: () => number, retainedBytes: () => number) {
       const encoder = new TextEncoder()
       const body = new ReadableStream<Uint8Array>({
         pull: async (controller) => {
+          if (pulled) consume()
+          pulled = true
           try {
             if (complete) {
               controller.close()
@@ -388,9 +397,11 @@ export function create(retained: () => number, retainedBytes: () => number) {
             release = undefined
             if (!closed) controller.error(new Error('event stream unavailable'))
             closed = true
+            consume()
           }
         },
         cancel: () => {
+          consume()
           closed = true
           release?.()
           release = undefined
