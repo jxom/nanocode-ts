@@ -606,7 +606,7 @@ enum Activity {
 struct Session {
     activity: Cell<Activity>,
     executors: CodeModeExecutors,
-    hand_tools: Option<Arc<remote::ToolSelections>>,
+    hand_tools: Arc<remote::ToolSelections>,
     hands: RefCell<HashMap<String, Hand>>,
     inbox: TurnInbox<Log>,
     mcp_unavailable: Vec<String>,
@@ -1035,9 +1035,9 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
         None => None,
     };
     let executors = CodeModeExecutors::new();
-    let hand_tools = config
-        .hand_tools
-        .map(|policy| Arc::new(remote::ToolSelections(policy)));
+    let hand_tools = Arc::new(remote::ToolSelections::new(
+        config.hand_tools.unwrap_or_default(),
+    ));
     let mut shared: Vec<Arc<dyn Tool>> = Vec::new();
     if placement {
         shared.push(Arc::new(executors.tool()));
@@ -1219,10 +1219,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
             )
         } else {
             let host = remote::host(None, &config.scope).await?;
-            Arc::new(match &hand_tools {
-                Some(policy) => host.with_tool_selection(policy.clone()),
-                None => host,
-            })
+            Arc::new(host.with_tool_selection(hand_tools.clone()))
         };
         executors.insert(Arc::clone(&name), host);
         if local && config.hands {
@@ -1363,10 +1360,8 @@ async fn init(config: Value) -> Result<Value, String> {
 impl Session {
     async fn attach(&self, hand: String, connection: String) -> Result<Value, String> {
         let host = remote::host(Some(connection.clone()), &self.scope).await?;
-        let host: Arc<dyn CodeModeHost> = Arc::new(match &self.hand_tools {
-            Some(policy) => host.with_tool_selection(policy.clone()),
-            None => host,
-        });
+        let host: Arc<dyn CodeModeHost> =
+            Arc::new(host.with_tool_selection(self.hand_tools.clone()));
         self.executors.insert(hand.as_str(), Arc::clone(&host));
         self.hands.borrow_mut().insert(connection, (hand, host));
         Ok(Value::Null)

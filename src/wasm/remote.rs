@@ -55,7 +55,22 @@ pub struct ToolSelection {
     exclude: Vec<String>,
 }
 
-pub struct ToolSelections(pub HashMap<String, ToolSelection>);
+pub struct ToolSelections(HashMap<String, ToolSelection>);
+
+impl ToolSelections {
+    pub fn new(mut selections: HashMap<String, ToolSelection>) -> Self {
+        selections
+            .entry("codex".to_owned())
+            .or_insert_with(|| ToolSelection {
+                include: None,
+                exclude: nanocode::claude::HAND_TOOLS
+                    .iter()
+                    .map(|name| (*name).to_owned())
+                    .collect(),
+            });
+        Self(selections)
+    }
+}
 
 impl HandToolSelection for ToolSelections {
     fn allows(&self, _session_id: &str, backend: &str, name: &str) -> bool {
