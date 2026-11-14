@@ -13,6 +13,7 @@ type Exports = {
 type Instance = {
   exports: Exports
   files: SyncFileSystem | undefined
+  initial: number
   panic: string | undefined
   running: boolean
   spawn: Spawn | undefined
@@ -36,8 +37,21 @@ export type Missing = { module: string; package: boolean; text: string }
 export type Ran =
   | { kind: 'exited'; status: number; stderr: Uint8Array; stdout: Uint8Array }
   | { kind: 'needs'; missing: readonly Missing[] }
-  | { kind: 'refused'; limit: number; stderr: Uint8Array; stdout: Uint8Array }
+  | {
+      kind: 'refused'
+      limit: number
+      stderr: Uint8Array
+      stdout: Uint8Array
+      steps: bigint
+      held: bigint
+      asked: bigint
+    }
   | { kind: 'cancelled'; stderr: Uint8Array; stdout: Uint8Array }
+
+export type Budget = {
+  cpuMs: number
+  stepsPerMs: number | undefined
+}
 
 export type Request = {
   argv: readonly string[]
@@ -80,6 +94,7 @@ function instantiate(module: WebAssembly.Module): Instance {
   const state: Instance = {
     exports: undefined as unknown as Exports,
     files: undefined,
+    initial: 0,
     panic: undefined,
     running: false,
     spawn: undefined,
@@ -208,6 +223,7 @@ function instantiate(module: WebAssembly.Module): Instance {
     },
   }
   state.exports = new WebAssembly.Instance(module, imports).exports as unknown as Exports
+  state.initial = state.exports.memory.buffer.byteLength
   return state
 }
 
@@ -272,7 +288,14 @@ function decodeRan(bytes: Uint8Array): Ran {
   const value = u32()
   const stdout = field()
   const stderr = field()
-  at += 8
+  const u64 = () => {
+    const value = data.getBigUint64(at, true)
+    at += 8
+    return value
+  }
+  const steps = u64()
+  const held = u64()
+  const asked = u64()
   const missing: Missing[] = []
   for (let count = u32(); count > 0; count--) {
     const module = text.decode(field())
@@ -281,7 +304,7 @@ function decodeRan(bytes: Uint8Array): Ran {
   }
   if (tag === 0) return { kind: 'exited', status: value | 0, stderr, stdout }
   if (tag === 1) return { kind: 'needs', missing }
-  if (tag === 2) return { kind: 'refused', limit: value, stderr, stdout }
+  if (tag === 2) return { kind: 'refused', limit: value, stderr, stdout, steps, held, asked }
   return { kind: 'cancelled', stderr, stdout }
 }
 
@@ -306,6 +329,8 @@ export function run(
     instance.running = true
     const len = instance.exports.python_run()
     instance.running = false
+    if (instance.exports.memory.buffer.byteLength - instance.initial > options.request.memory / 2)
+      instances.delete(module)
     return decodeRan(
       new Uint8Array(instance.exports.memory.buffer, instance.exports.python_output(), len).slice(),
     )
@@ -323,7 +348,15 @@ export function run(
   }
 }
 
-export function report(ctx: CommandContext, ran: Exclude<Ran, { kind: 'needs' }>): number {
+function mib(bytes: bigint | number): string {
+  return (Number(bytes) / 1048576).toFixed(1)
+}
+
+export function report(
+  ctx: CommandContext,
+  ran: Exclude<Ran, { kind: 'needs' }>,
+  budget: Budget,
+): number {
   ctx.stdout.write(decode(ran.stdout))
   ctx.stderr.write(decode(ran.stderr))
   if (ran.kind === 'exited') return ran.status
@@ -332,7 +365,29 @@ export function report(ctx: CommandContext, ran: Exclude<Ran, { kind: 'needs' }>
   if (limit === 'time')
     throw new CommandError('timed out after ' + ctx.limits.timeoutMs + ' ms', 124)
   if (limit === 'output') throw new CommandError('it printed more than this shell keeps', 126)
-  if (limit === 'memory') throw new CommandError('it held more memory than this shell allows', 126)
+  if (limit === 'memory')
+    throw new CommandError(
+      (ran.asked > 0n
+        ? 'it asked for ' + mib(ran.asked) + ' MiB at once while holding ' + mib(ran.held) + ' MiB'
+        : 'it held ' + mib(ran.held) + ' MiB') +
+        ', past the ' +
+        mib(ctx.limits.maxMemoryBytes) +
+        " MiB this shell gives one Python run (the host's maxMemoryBytes limit); read and process the data in chunks (a file line by line, a batch of rows at a time) and write results out as you go instead of holding it all",
+      126,
+    )
   if (limit === 'sleep') throw new CommandError('it cannot wait in this shell', 126)
-  throw new CommandError('it ran more steps than this shell allows', 126)
+  throw new CommandError(
+    'it ran ' +
+      ran.steps +
+      ' steps, the most one Python run may compute here' +
+      (budget.stepsPerMs === undefined
+        ? ''
+        : ' (' +
+          budget.cpuMs +
+          ' ms of CPU at ' +
+          budget.stepsPerMs +
+          " steps per ms; the host raises it with Python's cpuMs option, on Cloudflare with the PYTHON_CPU_MS variable or workspace.pythonCpuMs)") +
+      '; split the work into shorter runs that save their progress to a file and continue from it',
+    124,
+  )
 }

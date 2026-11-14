@@ -41,7 +41,7 @@ const external = [...lock.matchAll(/name = "([^"]+)"\nversion = "[^"]+"\nsource 
 const limits = await (async () => {
   const fs = MemoryFileSystem.create()
   const bash = await Bash.create({ fs, python: { module, stepsPerMs: 42000 }, limits: { maxMemoryBytes: 48 << 20, timeoutMs: 2000 } })
-  const checks: [string, number][] = [['python3 -c "print(1)"', 0], ['python3 -c "s=\'a \'*30000000; print(len(s.split()))"', 126], ['python3 -c "while True: pass"', 126], ['python3 -c "import json; json.loads(\'x\')"', 1]]
+  const checks: [string, number][] = [['python3 -c "print(1)"', 0], ['python3 -c "s=\'a \'*30000000; print(len(s.split()))"', 126], ['python3 -c "while True: pass"', 124], ['python3 -c "import json; json.loads(\'x\')"', 1]]
   let passed = 0
   for (const [script, status] of checks) if ((await bash.exec(script)).exitCode === status) passed++
   return passed + '/' + checks.length

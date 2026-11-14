@@ -43,6 +43,7 @@ export type Env = {
   MODEL_PRIME_IDLE_MS?: string
   PROMPT_CACHE_PRIME_MS?: string
   RUNTIME_MEMORY_BUDGET_BYTES: string
+  PYTHON_CPU_MS?: string
   RUNNER_ENABLED?: string
   REMOTE_MAX_FRAME_BYTES: string
   REMOTE_TIMEOUT_MS: string
@@ -2250,7 +2251,11 @@ ${input.request_id}`
                         ...(pythonModule
                           ? {
                               module: pythonModule,
-                              cpuMs: options.workspace?.pythonCpuMs ?? pythonCpuMs,
+                              cpuMs:
+                                options.workspace?.pythonCpuMs ??
+                                (this.env.PYTHON_CPU_MS === undefined
+                                  ? pythonCpuMs
+                                  : policy(this.env.PYTHON_CPU_MS, 'PYTHON_CPU_MS')),
                               stepsPerMs: pythonStepsPerMs,
                             }
                           : {}),

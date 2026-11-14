@@ -1374,6 +1374,7 @@ async function executeRust(
   },
 ): Promise<number | undefined> {
   const limit = Math.min(options.maxBytes, Math.floor(ctx.limits.maxMemoryBytes / 2))
+  const cpuMs = Math.min(ctx.limits.timeoutMs, options.cpuMs ?? ctx.limits.timeoutMs)
   const deadline = Date.now() + ctx.limits.timeoutMs
   const cache = ctx.fs.sync ? undefined : layered(ctx.fs)
   const files = ctx.fs.sync ?? cache?.files
@@ -1446,10 +1447,7 @@ async function executeRust(
         steps:
           options.stepsPerMs === undefined
             ? Number.MAX_SAFE_INTEGER
-            : Math.ceil(
-                Math.min(ctx.limits.timeoutMs, options.cpuMs ?? ctx.limits.timeoutMs) *
-                  options.stepsPerMs,
-              ),
+            : Math.ceil(cpuMs * options.stepsPerMs),
         timeMs: deadline - Date.now(),
       },
       spawn,
@@ -1462,7 +1460,8 @@ async function executeRust(
     ran = attempt()
   }
   if (cache) await apply(ctx.fs, cache.changes())
-  if (ran.kind !== 'needs') return RustPython.report(ctx, ran)
+  if (ran.kind !== 'needs')
+    return RustPython.report(ctx, ran, { cpuMs, stepsPerMs: options.stepsPerMs })
   if (options.fallback && ran.missing.every((missing) => missing.package)) return undefined
   for (const missing of ran.missing) ctx.stderr.write(missing.text + '\n')
   return 127

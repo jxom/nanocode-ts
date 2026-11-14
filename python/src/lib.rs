@@ -8,7 +8,8 @@ use std::{
 
 use nanocode_platform::{Host, LocalFuture};
 use nanocode_python::{
-    Child, Ended, Exited, Files, Kind, Limit, Limits, Python, Remove, Run, Stat, Stdio, Why, Write,
+    Child, Ended, Exited, Files, Held, Kind, Limit, Limits, Python, Remove, Run, Stat, Stdio, Why,
+    Write,
 };
 
 #[global_allocator]
@@ -285,7 +286,7 @@ fn request(input: &[u8]) -> (Run, Shell) {
     (run, shell)
 }
 
-fn respond(ended: &Ended, stdout: &[u8], stderr: &[u8], steps: u64) -> Vec<u8> {
+fn respond(ended: &Ended, stdout: &[u8], stderr: &[u8], steps: u64, held: Held) -> Vec<u8> {
     let mut out = Vec::with_capacity(stdout.len() + stderr.len() + 64);
     let (tag, value) = match ended {
         Ended::Exited(code) => (0, code.cast_unsigned()),
@@ -307,6 +308,8 @@ fn respond(ended: &Ended, stdout: &[u8], stderr: &[u8], steps: u64) -> Vec<u8> {
     put(&mut out, stdout);
     put(&mut out, stderr);
     out.extend_from_slice(&steps.to_le_bytes());
+    out.extend_from_slice(&held.bytes.to_le_bytes());
+    out.extend_from_slice(&held.asked.to_le_bytes());
     let missing = match ended {
         Ended::Needs(missing) => missing.as_slice(),
         _ => &[],
@@ -367,12 +370,12 @@ pub extern "C" fn python_run() -> usize {
                 Ok(python) => kept.insert(python),
                 Err(error) => {
                     let said = format!("python3: cannot start: {error}\n");
-                    return respond(&Ended::Exited(1), &[], said.as_bytes(), 0);
+                    return respond(&Ended::Exited(1), &[], said.as_bytes(), 0, Held::default());
                 }
             },
         };
         let ran = python.run(run, Rc::new(shell));
-        respond(&ran.ended, &ran.stdout, &ran.stderr, ran.steps)
+        respond(&ran.ended, &ran.stdout, &ran.stderr, ran.steps, ran.held)
     });
     let len = out.len();
     OUTPUT.set(out);
