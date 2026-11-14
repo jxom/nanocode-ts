@@ -224,7 +224,7 @@ struct Configuration {
     hand_tools: Option<HashMap<String, remote::ToolSelection>>,
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Environment {
     #[serde(default)]
@@ -970,6 +970,16 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
     let placement = config.remote || config.hands;
     let local = config.code_mode;
     let instructions = |application: Option<&str>| application.unwrap_or_default().to_owned();
+    let resolve = |environment: Option<Environment>| {
+        environment
+            .map(|environment| environment.resolve(config.workspace.as_deref()))
+            .transpose()
+            .map_err(configuration)
+    };
+    let codex_environment = resolve(match &config.environment {
+        Some(environment) => Some(environment.clone()),
+        None => placement.then(Environment::default),
+    })?;
     let mut environment = config.environment.take();
     if placement {
         let environment = environment.get_or_insert_with(Environment::default);
@@ -978,10 +988,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
             None => PLACEMENT_INSTRUCTIONS.to_owned(),
         });
     }
-    let environment = environment
-        .map(|environment| environment.resolve(config.workspace.as_deref()))
-        .transpose()
-        .map_err(configuration)?;
+    let environment = resolve(environment)?;
     let (claude, codex) = config.endpoints().map_err(configuration)?;
     let hedging = hedging(&config.hedge)?;
     let claude_search_tokens = claude.as_ref().map(|endpoint| endpoint.max_tokens);
@@ -1027,7 +1034,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
                 default,
                 config.stream_tool_input,
                 config.auto_compact_window_tokens,
-                environment.as_ref().map(Environment::codex),
+                codex_environment.as_ref().map(Environment::codex),
                 config.codex_orchestration,
                 &instructions,
             )?)
