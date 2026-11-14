@@ -93,6 +93,7 @@ export type AgentConfiguration = {
   subagents?: boolean
   remote_children?: boolean
   child_lineage?: unknown
+  hedge?: { cap_percent?: number; floor_ms?: number; window?: number }
   providers?: Partial<Record<ModelProvider, ProviderEndpoint>>
   remote?: boolean
   code_mode?: boolean

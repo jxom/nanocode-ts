@@ -500,6 +500,7 @@ name = "nanocode-backend-codex-client"
 version = "0.7.0"
 dependencies = [
  "memchr",
+ "nanocode-agent-core",
  "nanocode-agent-types",
  "nanocode-audio",
  "nanocode-compression",

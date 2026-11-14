@@ -15,6 +15,7 @@ use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
     future::Future,
+    num::NonZeroUsize,
     pin::Pin,
     rc::Rc,
     sync::Arc,
@@ -35,6 +36,7 @@ use nanocode::{
     durability::{
         BranchCursor, BranchExport, BranchPage, InitialSettings, SessionRecord, SessionStore,
     },
+    hedge::{HedgePolicy, Hedging},
     session_host::{
         Driven, ImportedTurn, InboxError, LogEntry, LoggedEvent, MovedQueued, Replaced, Submission,
         Submitted, TurnInbox, TurnRecord, TurnState,
@@ -121,6 +123,17 @@ struct Endpoint {
 
 #[derive(Default, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct Hedge {
+    #[serde(default)]
+    cap_percent: Option<u8>,
+    #[serde(default)]
+    floor_ms: Option<u64>,
+    #[serde(default)]
+    window: Option<NonZeroUsize>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Providers {
     #[serde(default)]
     claude: Option<Endpoint>,
@@ -175,6 +188,8 @@ struct Configuration {
     remote_children: bool,
     #[serde(default)]
     child_lineage: Option<nanocode::Lineage>,
+    #[serde(default)]
+    hedge: Hedge,
     #[serde(default)]
     providers: Providers,
     #[serde(default)]
@@ -618,6 +633,7 @@ thread_local! {
     static RETAIN_FINISHED: Cell<Option<usize>> = const { Cell::new(None) };
     static VALUE_LIMIT: Cell<Option<usize>> = const { Cell::new(None) };
     static CHILD: Cell<bool> = const { Cell::new(false) };
+    static HEDGING: RefCell<Option<(HedgePolicy, Arc<Hedging>)>> = const { RefCell::new(None) };
 }
 
 #[derive(Deserialize)]
@@ -720,6 +736,30 @@ fn configuration(error: impl std::fmt::Display) -> Opening {
     Opening::Configuration(error.to_string())
 }
 
+fn hedging(hedge: &Hedge) -> Result<Arc<Hedging>, Opening> {
+    let default = HedgePolicy::DEFAULT;
+    let cap_percent = hedge.cap_percent.unwrap_or(default.cap_percent);
+    if cap_percent > 100 {
+        return Err(configuration(format!(
+            "hedge.cap_percent {cap_percent} is over 100"
+        )));
+    }
+    let policy = HedgePolicy {
+        cap_percent,
+        floor: hedge.floor_ms.map_or(default.floor, Duration::from_millis),
+        window: hedge.window.unwrap_or(default.window),
+        ..default
+    };
+    Ok(HEDGING.with_borrow_mut(|kept| match kept {
+        Some((kept, hedging)) if *kept == policy => Arc::clone(hedging),
+        _ => {
+            let hedging = Arc::new(Hedging::new(policy));
+            *kept = Some((policy, Arc::clone(&hedging)));
+            hedging
+        }
+    }))
+}
+
 async fn log(scope: &str) -> Result<Arc<Log>, String> {
     if let Some(log) = LOGS.with_borrow(|logs| logs.get(scope).cloned()) {
         return Ok(log);
@@ -790,6 +830,7 @@ const CLAUDE_COMPACT_RESERVE_TOKENS: u64 = 33_000;
 
 fn claude_harness(
     endpoint: Endpoint,
+    hedging: Arc<Hedging>,
     stream_tool_input: bool,
     auto_compact_window_tokens: u64,
     environment: Option<ClaudeEnvironment>,
@@ -806,6 +847,7 @@ fn claude_harness(
     let max_tokens = endpoint.max_tokens;
     let harness = ClaudeHarness::new(client.clone()).configure(move |claude| {
         let mut claude = claude
+            .hedging(Arc::clone(&hedging))
             .tool_input_deltas(stream_tool_input)
             .auto_compact_window_tokens(auto_compact_window_tokens);
         if let Some(environment) = &environment {
@@ -825,6 +867,7 @@ fn claude_harness(
 
 fn codex_harness(
     endpoint: Endpoint,
+    hedging: Arc<Hedging>,
     model: Model,
     stream_tool_input: bool,
     auto_compact_window_tokens: Option<u64>,
@@ -870,6 +913,7 @@ fn codex_harness(
         _ => openai.api_base_url(endpoint.endpoint),
     };
     let openai = openai
+        .hedging(hedging)
         .model(model)
         .tool_input_deltas(stream_tool_input)
         .host_transport(transport::WorkerTransport::CODEX);
@@ -939,10 +983,12 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
         .transpose()
         .map_err(configuration)?;
     let (claude, codex) = config.endpoints().map_err(configuration)?;
+    let hedging = hedging(&config.hedge)?;
     let claude_search_tokens = claude.as_ref().map(|endpoint| endpoint.max_tokens);
     let claude = claude.map(|endpoint| {
         claude_harness(
             endpoint,
+            Arc::clone(&hedging),
             config.stream_tool_input,
             config
                 .auto_compact_window_tokens
@@ -977,6 +1023,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
             };
             Some(codex_harness(
                 endpoint,
+                hedging,
                 default,
                 config.stream_tool_input,
                 config.auto_compact_window_tokens,
