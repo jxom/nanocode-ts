@@ -4022,6 +4022,15 @@ ${input.request_id}`
       const action = parts[4]
       if (id !== undefined && (!Number.isSafeInteger(id) || id <= 0))
         return json({ error: 'subagent ids are positive integers' }, 400)
+      if (request.method === 'GET' && action === undefined && id === undefined) {
+        const page = this.directoryPage(url)
+        if (typeof page === 'string') return json({ error: page }, 400)
+        if (page) {
+          const runtime = await this.subagentRuntime(scope, descriptor)
+          if (!runtime) return json({ agents: [], next_after_agent_id: null })
+          return json(await runtime.subagents.agentsPage(page))
+        }
+      }
       if (request.method === 'GET' && action === undefined) {
         const entries = await this.directory(scope, descriptor)
         if (id === undefined) return json({ agents: entries })
@@ -4162,6 +4171,20 @@ ${input.request_id}`
       if (!this.pumping && this.queueKnownEmpty() && !this.metadata.first('background:'))
         this.releaseIdle(true, runtime)
       return runtime
+    }
+
+    private directoryPage(
+      url: URL,
+    ): { after?: number | undefined; limit: number } | string | undefined {
+      const limit = url.searchParams.get('limit')
+      const after = url.searchParams.get('after')
+      const size = limit === null ? options.subagentPageLimit : Number(limit)
+      if (size === undefined) return after === null ? undefined : 'after needs a limit'
+      if (!Number.isSafeInteger(size) || size <= 0) return 'limit is a positive integer'
+      if (after === null) return { limit: size }
+      const from = Number(after)
+      if (!Number.isSafeInteger(from) || from <= 0) return 'after is a positive subagent id'
+      return { after: from, limit: size }
     }
 
     private async directory(
@@ -4557,6 +4580,7 @@ export declare namespace create {
     cellInterruptChecks?: number
     cellMemoryBytes?: number
     cellYieldMs?: number
+    subagentPageLimit?: number
     subagents?: boolean
     remoteSubagents?: boolean
     subscription?(

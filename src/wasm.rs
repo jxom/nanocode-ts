@@ -514,6 +514,11 @@ enum Command {
         into: Option<String>,
     },
     Agents {},
+    AgentsPage {
+        #[serde(default)]
+        after_agent_id: Option<u64>,
+        limit: std::num::NonZeroUsize,
+    },
     SendUserMessage {
         agent_id: u64,
         message: String,
@@ -1920,6 +1925,22 @@ fn execute(command: Command) -> Executed {
                 .agents(session.inbox.session_id())
                 .await
                 .map_err(text)
+        }),
+        Command::AgentsPage {
+            after_agent_id,
+            limit,
+        } => executed(async move {
+            let session = ready()?;
+            let (agents, next) = session
+                .subagents()?
+                .agents_page(
+                    session.inbox.session_id(),
+                    after_agent_id.map(AgentId::new),
+                    limit,
+                )
+                .await
+                .map_err(text)?;
+            Ok(json!({"agents": agents, "next_after_agent_id": next}))
         }),
         Command::SendUserMessage {
             agent_id,

@@ -190,6 +190,11 @@ export type AgentDirectoryEntry = AgentSummary & {
   resuming?: boolean
 }
 
+export type AgentDirectoryPage = {
+  agents: AgentDirectoryEntry[]
+  next_after_agent_id: number | null
+}
+
 export type MessagePriority = 'deferred' | 'urgent'
 
 export type MessageReceipt = {

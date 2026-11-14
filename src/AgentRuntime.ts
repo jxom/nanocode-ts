@@ -1523,6 +1523,16 @@ async function create(
         return (await internal.command('agents', {})) as Contracts.AgentDirectoryEntry[]
       },
 
+      async agentsPage(options: {
+        after?: number | undefined
+        limit: number
+      }): Promise<Contracts.AgentDirectoryPage> {
+        return (await internal.command('agents_page', {
+          after_agent_id: options.after,
+          limit: options.limit,
+        })) as Contracts.AgentDirectoryPage
+      },
+
       async close(agent_id: number): Promise<Contracts.AgentSummary[]> {
         return (await internal.command('close', { agent_id })) as Contracts.AgentSummary[]
       },
