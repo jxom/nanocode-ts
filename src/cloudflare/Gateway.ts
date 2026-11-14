@@ -2,8 +2,8 @@ import type * as Contracts from '../Contracts.ts'
 import type * as App from './App.ts'
 
 const requestHeaders: Record<Contracts.ModelProvider, RegExp> = {
-  claude: /^(accept|content-type|anthropic-version|anthropic-beta)$/,
-  codex: /^(accept|content-type|x-session-affinity)$/,
+  claude: /^(accept|content-type|anthropic-version|anthropic-beta|x-nanocode-hedge)$/,
+  codex: /^(accept|content-type|x-session-affinity|x-nanocode-hedge)$/,
 }
 
 const responseHeader =
