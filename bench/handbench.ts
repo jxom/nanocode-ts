@@ -66,6 +66,10 @@ export function claude(code) {
 }
 
 export const PROVIDER = arg('provider', 'claude')
+const RTT_MS = Number(arg('rtt-ms', '0'))
+const TOOLS_ONLY = arg('tools-only', '') !== ''
+const relayed = (deliver) =>
+  RTT_MS > 0 ? (text) => void setTimeout(() => deliver(text), RTT_MS / 2) : deliver
 const plain = (rows) =>
   new Response(enc.encode(rows.map((d) => 'data: ' + JSON.stringify(d) + '\n\n').join('')), {
     headers: { 'content-type': 'text/event-stream' },
@@ -191,7 +195,7 @@ export async function hand(kind, binary) {
         (request.headers['sec-websocket-protocol'] ?? '').split(',').map((s) => s.trim())[1]
       if (bearer !== token) return socket.close(1008, 'invalid runner credential')
       socket.send(JSON.stringify({ type: 'ack', ids: [] }))
-      const send = socket.send.bind(socket)
+      const send = relayed(socket.send.bind(socket))
       const shim = {
         get readyState() {
           return socket.readyState
@@ -209,6 +213,7 @@ export async function hand(kind, binary) {
         addEventListener() {},
       }
       let executor
+      const receive = relayed((text) => executor.receive(text))
       socket.on('message', (data, binary) => {
         const text = binary ? data : data.toString()
         if (!executor) {
@@ -218,7 +223,7 @@ export async function hand(kind, binary) {
         }
         stats.frames_in++
         stats.bytes_in += text.length
-        executor.receive(text)
+        receive(text)
       })
       socket.on('close', () => executor?.disconnected())
     })
@@ -256,7 +261,17 @@ export async function hand(kind, binary) {
       : kind === 'native'
         ? spawn(
             binary,
-            ['hand', 'ws://127.0.0.1:' + port, '--token', token, '--name', 'bench', '-C', work],
+            [
+              'hand',
+              'ws://127.0.0.1:' + port,
+              '--token',
+              token,
+              '--name',
+              'bench',
+              '-C',
+              work,
+              ...(TOOLS_ONLY ? ['--tools-only'] : []),
+            ],
             { stdio: ['ignore', 'ignore', 'inherit'] },
           )
         : spawn(process.execPath, [new URL('./hand-ts.ts', import.meta.url).pathname], {

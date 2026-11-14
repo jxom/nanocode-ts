@@ -25,6 +25,10 @@ export const cells = {
   exec: "await tools.exec_command({ cmd: 'true' }); text('ok')",
   'exec-seq-50':
     "for (let i = 0; i < 50; i++) await tools.exec_command({ cmd: 'true' }); text('ok')",
+  'exec-hand':
+    "await tools.exec_command({ cmd: 'true', hand: 'bench' }); text('ok')",
+  'exec-hand-seq-20':
+    "for (let i = 0; i < 20; i++) await tools.exec_command({ cmd: 'true', hand: 'bench' }); text('ok')",
   'exec-par-50':
     "await Promise.all(Array.from({ length: 50 }, () => tools.exec_command({ cmd: 'true' }))); text('ok')",
   'bash-par-50':
