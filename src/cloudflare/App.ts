@@ -75,6 +75,7 @@ export const finishLevers = [
   'brief_final',
   'brief_finish',
   'fold_finish',
+  'lean_cells',
   'low_effort_rounds',
 ] as const
 
@@ -103,6 +104,7 @@ export type SessionDescriptor = SessionAuthority & {
   brief_final?: boolean
   brief_finish?: boolean
   fold_finish?: boolean
+  lean_cells?: boolean
   low_effort_rounds?: boolean
   subagents?: boolean
   session_name: string

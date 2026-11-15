@@ -102,6 +102,7 @@ export type AgentConfiguration = {
   brief_final?: boolean
   brief_finish?: boolean
   fold_finish?: boolean
+  lean_cells?: boolean
   low_effort_rounds?: boolean
   service_tier?: ServiceTier
   subagents?: boolean

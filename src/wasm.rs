@@ -70,6 +70,7 @@ struct FinishLevers {
     brief_final: bool,
     brief_finish: bool,
     fold_finish: bool,
+    lean_cells: bool,
     low_effort_rounds: bool,
 }
 
@@ -215,6 +216,8 @@ struct Configuration {
     brief_finish: bool,
     #[serde(default)]
     fold_finish: bool,
+    #[serde(default)]
+    lean_cells: bool,
     #[serde(default)]
     low_effort_rounds: bool,
     #[serde(default)]
@@ -934,6 +937,7 @@ fn claude_harness(
             .brief_final(levers.brief_final)
             .brief_finish(levers.brief_finish)
             .fold_finish(levers.fold_finish)
+            .lean_cells(levers.lean_cells)
             .low_effort_rounds(levers.low_effort_rounds);
         if let Some(environment) = &environment {
             claude = claude.environment(environment.clone());
@@ -1097,6 +1101,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
                 brief_final: config.brief_final,
                 brief_finish: config.brief_finish,
                 fold_finish: config.fold_finish,
+                lean_cells: config.lean_cells,
                 low_effort_rounds: config.low_effort_rounds,
             },
             &instructions,
