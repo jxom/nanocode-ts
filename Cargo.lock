@@ -859,6 +859,9 @@ dependencies = [
 [[package]]
 name = "nanocode-sys"
 version = "0.7.0"
+dependencies = [
+ "djs-libm",
+]
 
 [[package]]
 name = "nanocode-tls"
