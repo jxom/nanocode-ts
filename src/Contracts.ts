@@ -106,6 +106,8 @@ export type AgentConfiguration = {
   code_mode?: boolean
   executor?: string
   hands?: boolean
+  attached_hands?: readonly { connection: string; hand: string }[]
+  prompt_hand?: string
   event_coalesce_ms?: number
   live_deltas?: boolean
   stream_tool_input?: boolean

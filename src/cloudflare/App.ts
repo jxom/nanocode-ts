@@ -2429,6 +2429,11 @@ ${input.request_id}`
                 this.handsMode(scope, descriptor) ? options.handInstructions : undefined,
               ),
               hands: this.handsMode(scope, descriptor),
+              attached_hands: [...(this.hands.get(scope) ?? [])].map(([hand, entry]) => ({
+                connection: entry.connection,
+                hand,
+              })),
+              ...(descriptor.hand === undefined ? {} : { prompt_hand: descriptor.hand }),
               event_coalesce_ms: duration(this.env.EVENT_COALESCE_MS, 'EVENT_COALESCE_MS'),
               live_deltas: options.liveDeltas ?? true,
               ...(descriptor.web_search === undefined ? {} : { web_search: descriptor.web_search }),

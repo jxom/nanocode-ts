@@ -212,6 +212,10 @@ struct Configuration {
     #[serde(default)]
     hands: bool,
     #[serde(default)]
+    attached_hands: Vec<AttachedHand>,
+    #[serde(default)]
+    prompt_hand: Option<String>,
+    #[serde(default)]
     code_mode: bool,
     #[serde(default)]
     event_coalesce_ms: u64,
@@ -237,6 +241,13 @@ struct Configuration {
     mcp_servers: Vec<mcp::Server>,
     #[serde(default)]
     hand_tools: Option<HashMap<String, remote::ToolSelection>>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AttachedHand {
+    connection: String,
+    hand: String,
 }
 
 #[derive(Clone, Copy, Deserialize)]
@@ -1043,6 +1054,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
             config.claude_orchestration,
             &instructions,
         );
+        let harness = harness.headless(config.headless);
         match config.deadline {
             Some(deadline) => (
                 harness.deadline(nanocode::claude::Deadline::new(
@@ -1294,6 +1306,18 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
     if config.hands {
         executors.await_replacement(true);
     }
+    let mut hands = HashMap::new();
+    for attached in config.attached_hands {
+        let Ok(host) = remote::host(Some(attached.connection.clone()), &config.scope).await else {
+            continue;
+        };
+        let host: Arc<dyn CodeModeHost> = Arc::new(host.with_tool_selection(hand_tools.clone()));
+        executors.insert(attached.hand.as_str(), Arc::clone(&host));
+        hands.insert(attached.connection, (attached.hand, host));
+    }
+    if !hands.is_empty() {
+        executors.select_prompt_hand(&config.session_id, config.prompt_hand.as_deref());
+    }
     let session_instructions = instructions(config.instructions.as_deref());
     if !session_instructions.is_empty() {
         builder = builder.instructions(session_instructions);
@@ -1357,7 +1381,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
                 activity: Cell::new(Activity::Idle),
                 executors,
                 hand_tools,
-                hands: RefCell::default(),
+                hands: RefCell::new(hands),
                 inbox,
                 mcp_unavailable: mcp.unavailable,
                 model,
@@ -1403,6 +1427,7 @@ async fn init(config: Value) -> Result<Value, String> {
                 "session_id": session.inbox.session_id(),
                 "model": session.inbox.model(),
                 "mcp_unavailable": session.mcp_unavailable,
+                "attached_hands": session.hands.borrow().keys().collect::<Vec<_>>(),
             });
             let session = Rc::new(session);
             PHASE.set(Phase::Ready(Rc::clone(&session)));

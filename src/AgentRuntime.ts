@@ -1197,9 +1197,14 @@ async function create(
             event_coalesce_ms: config.event_coalesce_ms ?? 0,
             tools: config.tools ?? [],
           },
-        })) as { mcp_unavailable?: string[]; rejected?: { error: string; kind: string } }
+        })) as {
+          attached_hands?: string[]
+          mcp_unavailable?: string[]
+          rejected?: { error: string; kind: string }
+        }
         if (opened.rejected)
           throw new Contracts.HostFailureError(opened.rejected.error, opened.rejected.kind, true)
+        for (const connection of opened.attached_hands ?? []) state.attached.add(connection)
         state.mcpUnavailable = opened.mcp_unavailable ?? []
         state.timings.record('sdk.open', performance.now() - initStarted)
       } catch (error) {
