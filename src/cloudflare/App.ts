@@ -107,6 +107,17 @@ export type ModelDispatch = {
   payer?: Contracts.Payer
 }
 
+type ModelHead = {
+  abort: AbortController
+  body: Uint8Array
+  id: string
+  key: string
+  response: Promise<Response>
+}
+
+const modelHeadKey = (dispatch: ModelDispatch): string =>
+  headerJson([dispatch.endpoint, dispatch.headers, dispatch.origin, dispatch.provider])
+
 export type SocketDispatch = Pick<
   ModelDispatch,
   | 'provider'
@@ -556,12 +567,18 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
       () => policy(this.env.EVENT_TAIL_BYTES, 'EVENT_TAIL_BYTES'),
     )
     private readonly modelDiagnostics: { scope: string; value: unknown }[] = []
+    private readonly modelHeads = new Map<string, ModelHead[]>()
     private readonly timings = new Map<string, Timing.Timings>()
     private readonly turnTimings = new Map<string, TurnTiming>()
     private crash?: number
     private readonly counts = {
       runtime_initializations: 0,
       model_dispatches: 0,
+      model_head_aborts: 0,
+      model_head_claims: 0,
+      model_head_prefetches: 0,
+      model_head_skips: 0,
+      model_head_writes: 0,
       events_written: 0,
       preparation_writes: 0,
       preparation_writes_skipped: 0,
@@ -594,6 +611,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
         CREATE INDEX IF NOT EXISTS hand_request_calls ON hand_requests (session_id, call_id);
         CREATE TABLE IF NOT EXISTS hand_updates (hand TEXT NOT NULL, runtime TEXT NOT NULL, id INTEGER NOT NULL, seq INTEGER NOT NULL, frame TEXT NOT NULL, PRIMARY KEY (hand, runtime, id, seq)) WITHOUT ROWID;
         CREATE TABLE IF NOT EXISTS subagent_directories (scope TEXT PRIMARY KEY, body TEXT NOT NULL) WITHOUT ROWID;
+        CREATE TABLE IF NOT EXISTS model_heads (scope TEXT NOT NULL, id TEXT NOT NULL, dispatch TEXT NOT NULL, body BLOB NOT NULL, PRIMARY KEY (scope, id)) WITHOUT ROWID;
       `)
       const migrated = this.metadata.get(schemaKey) === schemaVersion
       if (!migrated) {
@@ -622,6 +640,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
       this.restoreHands()
       this.restoreWatchers()
       this.retryWaiting()
+      this.prefetchModelHeads()
       if (migrated) return
 
       if (this.store.row("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'jobs'"))
@@ -2632,17 +2651,21 @@ ${input.request_id}`
                   ...(descriptor.payer ? { payer: descriptor.payer } : {}),
                 }
                 this.modelAt = Date.now()
-                const responding = egress(this.env).fetch(
-                  new Request('https://egress.internal/model', {
-                    method: 'POST',
-                    signal,
-                    headers: {
-                      'content-type': 'application/octet-stream',
-                      'x-nanocode-model': headerJson(dispatch),
-                    },
-                    body: request.body,
-                  }),
-                )
+                const responding =
+                  (request.subagent ?? null) === null &&
+                  !request.headers.some(([name]) => name.toLowerCase() === 'x-nanocode-hedge')
+                    ? this.headed(scope, dispatch, request.body as Uint8Array, signal)
+                    : egress(this.env).fetch(
+                        new Request('https://egress.internal/model', {
+                          method: 'POST',
+                          signal,
+                          headers: {
+                            'content-type': 'application/octet-stream',
+                            'x-nanocode-model': headerJson(dispatch),
+                          },
+                          body: request.body,
+                        }),
+                      )
                 this.dispatching?.()
                 const response = await responding
                 const diagnostic = response.headers.get('x-nanocode-model-diagnostic')
@@ -2658,7 +2681,10 @@ ${input.request_id}`
                 }
                 return response
               },
-              finishing: (id) => this.finishing(id, created),
+              finishing: (id) => {
+                this.dropModelHeads(scope)
+                return this.finishing(id, created)
+              },
               socket: {
                 open: async (request, signal, timing) => {
                   if (this.dispatchBlocked(scope)) throw new Error('request authority stopped')
@@ -3915,6 +3941,145 @@ ${input.request_id}`
         })
         if (this.modelDiagnostics.length > Contracts.recentModelLimit) this.modelDiagnostics.shift()
       } catch {}
+    }
+
+    private prefetchModelHeads(): void {
+      for (const row of this.ctx.storage.sql.exec<{
+        scope: string
+        id: string
+        dispatch: string
+        body: ArrayBuffer
+      }>('SELECT scope, id, dispatch, body FROM model_heads')) {
+        const abort = new AbortController()
+        const body = new Uint8Array(row.body)
+        const response = egress(this.env).fetch(
+          new Request('https://egress.internal/model', {
+            method: 'POST',
+            signal: abort.signal,
+            headers: {
+              'content-type': 'application/octet-stream',
+              'x-nanocode-model': row.dispatch,
+            },
+            body,
+          }),
+        )
+        this.ctx.waitUntil(
+          response.then(
+            () => undefined,
+            () => undefined,
+          ),
+        )
+        let heads = this.modelHeads.get(row.scope)
+        if (!heads) this.modelHeads.set(row.scope, (heads = []))
+        heads.push({
+          abort,
+          body,
+          id: row.id,
+          key: modelHeadKey(JSON.parse(row.dispatch) as ModelDispatch),
+          response,
+        })
+        this.counts.model_head_prefetches++
+      }
+    }
+
+    private dropModelHeads(scope: string): void {
+      for (const head of this.modelHeads.get(scope) ?? []) {
+        head.abort.abort()
+        this.ctx.storage.sql.exec(
+          'DELETE FROM model_heads WHERE scope = ? AND id = ?',
+          scope,
+          head.id,
+        )
+        this.counts.model_head_aborts++
+      }
+      this.modelHeads.delete(scope)
+    }
+
+    private async headed(
+      scope: string,
+      dispatch: ModelDispatch,
+      body: Uint8Array,
+      signal: AbortSignal,
+    ): Promise<Response> {
+      const header = headerJson(dispatch)
+      const key = modelHeadKey(dispatch)
+      const heads = this.modelHeads.get(scope) ?? []
+      const index = heads.findIndex(
+        (head) =>
+          head.key === key &&
+          head.body.byteLength === body.byteLength &&
+          head.body.every((byte, at) => byte === body[at]),
+      )
+      const claimed = index < 0 ? undefined : heads.splice(index, 1)[0]
+      if (!claimed) this.dropModelHeads(scope)
+      const id = claimed?.id ?? crypto.randomUUID()
+      const written = claimed !== undefined || header.length + body.byteLength <= valueLimit
+      if (claimed) this.counts.model_head_claims++
+      else if (written) {
+        this.ctx.storage.sql.exec(
+          'INSERT INTO model_heads VALUES (?, ?, ?, ?)',
+          scope,
+          id,
+          header,
+          body,
+        )
+        this.counts.model_head_writes++
+      } else this.counts.model_head_skips++
+      let held = written
+      const release = () => {
+        if (!held) return
+        held = false
+        this.ctx.storage.sql.exec('DELETE FROM model_heads WHERE scope = ? AND id = ?', scope, id)
+      }
+      const abort = claimed?.abort ?? new AbortController()
+      if (signal.aborted) abort.abort()
+      else signal.addEventListener('abort', () => abort.abort(), { once: true })
+      abort.signal.addEventListener('abort', release, { once: true })
+      let response: Response
+      try {
+        response = claimed
+          ? await claimed.response
+          : await egress(this.env).fetch(
+              new Request('https://egress.internal/model', {
+                method: 'POST',
+                signal: abort.signal,
+                headers: {
+                  'content-type': 'application/octet-stream',
+                  'x-nanocode-model': header,
+                },
+                body,
+              }),
+            )
+      } catch (error) {
+        release()
+        throw error
+      }
+      if (!response.body) {
+        release()
+        return response
+      }
+      const reader = response.body.getReader()
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          async pull(controller) {
+            try {
+              const chunk = await reader.read()
+              if (chunk.done) {
+                release()
+                controller.close()
+              } else controller.enqueue(chunk.value)
+            } catch (error) {
+              release()
+              controller.error(error)
+            }
+          },
+          cancel(reason) {
+            release()
+            return reader.cancel(reason)
+          },
+        }),
+        { status: response.status, statusText: response.statusText, headers: response.headers },
+      )
     }
 
     private dispatchBlocked(scope: string): boolean {
