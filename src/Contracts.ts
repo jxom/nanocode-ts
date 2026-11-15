@@ -46,6 +46,8 @@ export type ServiceTier = 'standard' | 'priority' | 'fast' | 'ultrafast'
 
 export type CodexOrchestration = 'code_mode' | 'direct' | 'jobs'
 
+export type Deadline = { at_ms: number; limit_ms: number }
+
 export type ReasoningMode = 'standard' | 'pro'
 
 export type RuntimeSettings = { thinking?: Thinking; service_tier?: ServiceTier }
@@ -89,6 +91,7 @@ export type AgentConfiguration = {
   cell_memory_bytes?: number
   cell_yield_ms?: number
   codex_orchestration?: CodexOrchestration
+  deadline?: Deadline
   service_tier?: ServiceTier
   subagents?: boolean
   remote_children?: boolean

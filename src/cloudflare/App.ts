@@ -83,6 +83,7 @@ export type SessionDescriptor = SessionAuthority & {
   thinking?: Contracts.Thinking
   web_search?: boolean
   codex_orchestration?: Contracts.CodexOrchestration
+  deadline?: Contracts.Deadline
   subagents?: boolean
   session_name: string
   subscription: boolean
@@ -1058,6 +1059,20 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           )
         if (input.subagents !== undefined && typeof input.subagents !== 'boolean')
           return json({ error: 'subagents must be a boolean' }, 400)
+        if (
+          input.deadline !== undefined &&
+          !(
+            Number.isSafeInteger(input.deadline?.at_ms) &&
+            Number.isSafeInteger(input.deadline?.limit_ms) &&
+            input.deadline.at_ms > 0 &&
+            input.deadline.limit_ms > 0 &&
+            Object.keys(input.deadline).length === 2
+          )
+        )
+          return json(
+            { error: 'deadline must be { at_ms, limit_ms } with positive whole milliseconds' },
+            400,
+          )
         if (input.subagents === true && options.subagents === false)
           return json({ error: 'subagents are disabled for this app' }, 400)
         if (input.payer !== undefined && !offered.includes(input.payer))
@@ -1188,6 +1203,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           )
             return json({ error: 'session subagents is immutable; create a new session' }, 409)
           descriptor.subagents = input.subagents ?? sessionSubagents
+          descriptor.deadline = input.deadline
           descriptor.thinking = input.thinking
           descriptor.web_search = input.web_search
           await subscribing
@@ -2128,6 +2144,7 @@ ${input.request_id}`
         descriptor.payer ?? null,
         descriptor.codex_orchestration ?? 'code_mode',
         descriptor.subagents ?? options.subagents ?? null,
+        descriptor.deadline ?? null,
       ])
     }
 
@@ -2371,6 +2388,7 @@ ${input.request_id}`
               ...(descriptor.codex_orchestration === undefined
                 ? {}
                 : { codex_orchestration: descriptor.codex_orchestration }),
+              ...(descriptor.deadline === undefined ? {} : { deadline: descriptor.deadline }),
               ...withHand(
                 options.instructions,
                 this.handsMode(scope, descriptor) ? options.handInstructions : undefined,

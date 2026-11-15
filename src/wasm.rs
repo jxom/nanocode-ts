@@ -180,6 +180,8 @@ struct Configuration {
     #[serde(default)]
     cell_yield_ms: Option<u64>,
     #[serde(default)]
+    deadline: Option<Deadline>,
+    #[serde(default)]
     codex_orchestration: CodexOrchestration,
     #[serde(default)]
     service_tier: Option<ServiceTier>,
@@ -225,6 +227,13 @@ struct Configuration {
     mcp_servers: Vec<mcp::Server>,
     #[serde(default)]
     hand_tools: Option<HashMap<String, remote::ToolSelection>>,
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Deadline {
+    at_ms: u64,
+    limit_ms: u64,
 }
 
 #[derive(Clone, Default, Deserialize)]
@@ -1002,7 +1011,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
     let hedging = hedging(&config.hedge)?;
     let claude_search_tokens = claude.as_ref().map(|endpoint| endpoint.max_tokens);
     let claude = claude.map(|endpoint| {
-        claude_harness(
+        let (harness, client) = claude_harness(
             endpoint,
             Arc::clone(&hedging),
             config.stream_tool_input,
@@ -1011,7 +1020,17 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
                 .unwrap_or(CLAUDE_AUTO_COMPACT_WINDOW_TOKENS),
             environment.as_ref().map(Environment::claude),
             &instructions,
-        )
+        );
+        match config.deadline {
+            Some(deadline) => (
+                harness.deadline(nanocode::claude::Deadline::new(
+                    deadline.at_ms,
+                    Duration::from_millis(deadline.limit_ms),
+                )),
+                client,
+            ),
+            None => (harness, client),
+        }
     });
     let codex_search = codex
         .as_ref()
