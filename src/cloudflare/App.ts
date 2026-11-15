@@ -69,6 +69,8 @@ export const claudeOrchestrations: readonly Contracts.ClaudeOrchestration[] = [
   'direct',
 ]
 
+export const refusalFallbacks: readonly Contracts.RefusalFallback[] = ['return_once', 'session']
+
 export const codexOrchestrations: readonly Contracts.CodexOrchestration[] = [
   'code_mode',
   'direct',
@@ -90,6 +92,7 @@ export type SessionDescriptor = SessionAuthority & {
   claude_orchestration?: Contracts.ClaudeOrchestration
   codex_orchestration?: Contracts.CodexOrchestration
   deadline?: Contracts.Deadline
+  refusal_fallback?: Contracts.RefusalFallback
   subagents?: boolean
   session_name: string
   subscription: boolean
@@ -399,7 +402,8 @@ const schemaKey = 'schema'
 const schemaVersion = '1'
 
 function requestedYield(operation: unknown): number {
-  const body = operation as { source?: unknown; input?: unknown } | undefined
+  const body = operation as { input?: unknown; run_time_ms?: unknown; source?: unknown } | undefined
+  if (typeof body?.run_time_ms === 'number') return body.run_time_ms
   const requested = (() => {
     try {
       if (typeof body?.source === 'string') {
@@ -1087,6 +1091,14 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
             { error: 'deadline must be { at_ms, limit_ms } with positive whole milliseconds' },
             400,
           )
+        if (
+          input.refusal_fallback !== undefined &&
+          !refusalFallbacks.includes(input.refusal_fallback)
+        )
+          return json(
+            { error: `refusal_fallback must be one of ${refusalFallbacks.join(', ')}` },
+            400,
+          )
         if (input.subagents === true && options.subagents === false)
           return json({ error: 'subagents are disabled for this app' }, 400)
         if (input.payer !== undefined && !offered.includes(input.payer))
@@ -1231,6 +1243,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
             return json({ error: 'session subagents is immutable; create a new session' }, 409)
           descriptor.subagents = input.subagents ?? sessionSubagents
           descriptor.deadline = input.deadline
+          descriptor.refusal_fallback = input.refusal_fallback
           descriptor.thinking = input.thinking
           descriptor.web_search = input.web_search
           await subscribing
@@ -2177,6 +2190,7 @@ ${input.request_id}`
         descriptor.subagents ?? options.subagents ?? null,
         descriptor.deadline ?? null,
         descriptor.claude_orchestration ?? 'code_mode',
+        ...(descriptor.refusal_fallback === undefined ? [] : [descriptor.refusal_fallback]),
       ])
     }
 
@@ -2424,6 +2438,9 @@ ${input.request_id}`
                 ? {}
                 : { codex_orchestration: descriptor.codex_orchestration }),
               ...(descriptor.deadline === undefined ? {} : { deadline: descriptor.deadline }),
+              ...(descriptor.refusal_fallback === undefined
+                ? {}
+                : { refusal_fallback: descriptor.refusal_fallback }),
               ...withHand(
                 options.instructions,
                 this.handsMode(scope, descriptor) ? options.handInstructions : undefined,

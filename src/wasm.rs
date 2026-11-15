@@ -59,6 +59,14 @@ enum Provider {
 
 #[derive(Clone, Copy, Default, Deserialize)]
 #[serde(rename_all = "snake_case")]
+enum RefusalFallback {
+    ReturnOnce,
+    #[default]
+    Session,
+}
+
+#[derive(Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
 enum ClaudeOrchestration {
     #[default]
     CodeMode,
@@ -191,6 +199,8 @@ struct Configuration {
     claude_orchestration: ClaudeOrchestration,
     #[serde(default)]
     deadline: Option<Deadline>,
+    #[serde(default)]
+    refusal_fallback: RefusalFallback,
     #[serde(default)]
     codex_orchestration: CodexOrchestration,
     #[serde(default)]
@@ -866,6 +876,10 @@ const CLAUDE_AUTO_COMPACT_WINDOW_TOKENS: u64 = 200_000;
 
 const CLAUDE_COMPACT_RESERVE_TOKENS: u64 = 33_000;
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "each argument is one session setting of the Claude harness"
+)]
 fn claude_harness(
     endpoint: Endpoint,
     hedging: Arc<Hedging>,
@@ -873,6 +887,7 @@ fn claude_harness(
     auto_compact_window_tokens: u64,
     environment: Option<ClaudeEnvironment>,
     orchestration: ClaudeOrchestration,
+    refusal_fallback: RefusalFallback,
     instructions: &dyn Fn(Option<&str>) -> String,
 ) -> (ClaudeHarness, ClaudeClient) {
     let http = nanocode::claude::transport::HttpClient::new(
@@ -894,7 +909,11 @@ fn claude_harness(
         let mut claude = claude
             .hedging(Arc::clone(&hedging))
             .tool_input_deltas(stream_tool_input)
-            .auto_compact_window_tokens(auto_compact_window_tokens);
+            .auto_compact_window_tokens(auto_compact_window_tokens)
+            .refusal_fallback_scope(match refusal_fallback {
+                RefusalFallback::ReturnOnce => nanocode::claude::RefusalFallbackScope::ReturnOnce,
+                RefusalFallback::Session => nanocode::claude::RefusalFallbackScope::Session,
+            });
         if let Some(environment) = &environment {
             claude = claude.environment(environment.clone());
         }
@@ -1052,6 +1071,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
                 .unwrap_or(CLAUDE_AUTO_COMPACT_WINDOW_TOKENS),
             environment.as_ref().map(Environment::claude),
             config.claude_orchestration,
+            config.refusal_fallback,
             &instructions,
         );
         let harness = harness.headless(config.headless);

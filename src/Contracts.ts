@@ -51,6 +51,8 @@ export type CodexOrchestration = 'code_mode' | 'direct' | 'jobs'
 
 export type Deadline = { at_ms: number; limit_ms: number }
 
+export type RefusalFallback = 'return_once' | 'session'
+
 export type ReasoningMode = 'standard' | 'pro'
 
 export type RuntimeSettings = { thinking?: Thinking; service_tier?: ServiceTier }
@@ -96,6 +98,7 @@ export type AgentConfiguration = {
   claude_orchestration?: ClaudeOrchestration
   codex_orchestration?: CodexOrchestration
   deadline?: Deadline
+  refusal_fallback?: RefusalFallback
   service_tier?: ServiceTier
   subagents?: boolean
   remote_children?: boolean
