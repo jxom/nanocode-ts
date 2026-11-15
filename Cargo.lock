@@ -441,6 +441,7 @@ dependencies = [
  "nanocode-sys",
  "nanocode-tls",
  "nanocode-trace",
+ "nanocode-types-core",
  "nanocode-url",
  "serde",
  "serde_json",
@@ -458,6 +459,7 @@ dependencies = [
  "nanocode-sync",
  "nanocode-sys",
  "nanocode-tools",
+ "nanocode-types-core",
  "serde",
  "serde_json",
 ]
