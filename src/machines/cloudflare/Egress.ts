@@ -8,7 +8,7 @@ export const proxies: Record<string, string> = {
   'api.anthropic.com': Tempo.gateway,
 }
 
-const forwardedHeaders = /^(accept|content-type|anthropic-version|anthropic-beta)$/
+const forwardedHeaders = /^(accept|content-type|anthropic-version|anthropic-beta|x-nanocode-hedge)$/
 
 function modelError(provider: string | undefined, status: number, message: string): Response {
   if (provider === 'codex')

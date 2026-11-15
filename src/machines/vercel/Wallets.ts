@@ -15,7 +15,7 @@ import {
 
 const proxies = new Set([Tempo.gateway])
 
-const forwardedHeaders = /^(accept|content-type|anthropic-version|anthropic-beta)$/
+const forwardedHeaders = /^(accept|content-type|anthropic-version|anthropic-beta|x-nanocode-hedge)$/
 
 const walletDoc = defineDoc<{ entries: Record<string, string | number> }>({
   kind: 'nanocode.wallet',
