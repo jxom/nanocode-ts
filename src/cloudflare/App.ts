@@ -64,6 +64,11 @@ export const thinkingLevels: readonly Contracts.Thinking[] = [
   'max',
 ]
 
+export const claudeOrchestrations: readonly Contracts.ClaudeOrchestration[] = [
+  'code_mode',
+  'direct',
+]
+
 export const codexOrchestrations: readonly Contracts.CodexOrchestration[] = [
   'code_mode',
   'direct',
@@ -82,6 +87,7 @@ export type SessionDescriptor = SessionAuthority & {
   model?: string
   thinking?: Contracts.Thinking
   web_search?: boolean
+  claude_orchestration?: Contracts.ClaudeOrchestration
   codex_orchestration?: Contracts.CodexOrchestration
   deadline?: Contracts.Deadline
   subagents?: boolean
@@ -1050,6 +1056,14 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
         if (input.web_search !== undefined && typeof input.web_search !== 'boolean')
           return json({ error: 'web_search must be a boolean' }, 400)
         if (
+          input.claude_orchestration !== undefined &&
+          !claudeOrchestrations.includes(input.claude_orchestration)
+        )
+          return json(
+            { error: `claude_orchestration must be one of ${claudeOrchestrations.join(', ')}` },
+            400,
+          )
+        if (
           input.codex_orchestration !== undefined &&
           !codexOrchestrations.includes(input.codex_orchestration)
         )
@@ -1104,6 +1118,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
         const providerKey = `model_provider:${scope}`
         const modelKey = `model:${scope}`
         const payerKey = `payer:${scope}`
+        const claudeOrchestrationKey = `claude_orchestration:${scope}`
         const orchestrationKey = `codex_orchestration:${scope}`
         const subagentsKey = `subagents:${scope}`
         this.prime(
@@ -1191,6 +1206,18 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
               409,
             )
           descriptor.codex_orchestration = input.codex_orchestration ?? boundOrchestration
+          const boundClaudeOrchestration = (this.metadata.get(claudeOrchestrationKey) ??
+            (initialized ? 'code_mode' : undefined)) as Contracts.ClaudeOrchestration | undefined
+          if (
+            boundClaudeOrchestration !== undefined &&
+            input.claude_orchestration !== undefined &&
+            input.claude_orchestration !== boundClaudeOrchestration
+          )
+            return json(
+              { error: 'session claude_orchestration is immutable; create a new session' },
+              409,
+            )
+          descriptor.claude_orchestration = input.claude_orchestration ?? boundClaudeOrchestration
           const storedSubagents = this.metadata.get(subagentsKey)
           const sessionSubagents =
             storedSubagents === undefined ? undefined : storedSubagents === 'true'
@@ -1277,6 +1304,10 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
               this.metadata.insert(providerKey, descriptor.provider!)
               if (descriptor.model !== undefined) this.metadata.insert(modelKey, descriptor.model)
               if (descriptor.payer !== undefined) this.metadata.insert(payerKey, descriptor.payer)
+              this.metadata.insert(
+                claudeOrchestrationKey,
+                descriptor.claude_orchestration ?? 'code_mode',
+              )
               this.metadata.insert(orchestrationKey, descriptor.codex_orchestration ?? 'code_mode')
               if (descriptor.subagents !== undefined)
                 this.metadata.insert(subagentsKey, String(descriptor.subagents))
@@ -2145,6 +2176,7 @@ ${input.request_id}`
         descriptor.codex_orchestration ?? 'code_mode',
         descriptor.subagents ?? options.subagents ?? null,
         descriptor.deadline ?? null,
+        descriptor.claude_orchestration ?? 'code_mode',
       ])
     }
 
@@ -2385,6 +2417,9 @@ ${input.request_id}`
                   policy(this.env.RUNTIME_MEMORY_BUDGET_BYTES, 'RUNTIME_MEMORY_BUDGET_BYTES') / 2,
                 ),
               ...(options.cellYieldMs === undefined ? {} : { cell_yield_ms: options.cellYieldMs }),
+              ...(descriptor.claude_orchestration === undefined
+                ? {}
+                : { claude_orchestration: descriptor.claude_orchestration }),
               ...(descriptor.codex_orchestration === undefined
                 ? {}
                 : { codex_orchestration: descriptor.codex_orchestration }),
@@ -3581,6 +3616,9 @@ ${input.request_id}`
       const payer = (this.metadata.get('payer:' + scope) ?? base.payer) as
         | Contracts.Payer
         | undefined
+      const claudeOrchestration = this.metadata.get('claude_orchestration:' + scope) as
+        | Contracts.ClaudeOrchestration
+        | undefined
       const orchestration = this.metadata.get('codex_orchestration:' + scope) as
         | Contracts.CodexOrchestration
         | undefined
@@ -3592,6 +3630,9 @@ ${input.request_id}`
         provider,
         ...(model === undefined ? {} : { model }),
         ...(payer === undefined ? {} : { payer }),
+        ...(claudeOrchestration === undefined
+          ? {}
+          : { claude_orchestration: claudeOrchestration }),
         ...(orchestration === undefined ? {} : { codex_orchestration: orchestration }),
         ...(subagents === undefined ? {} : { subagents: subagents === 'true' }),
         subscription: served(

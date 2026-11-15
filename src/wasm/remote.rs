@@ -58,7 +58,24 @@ pub struct ToolSelection {
 pub struct ToolSelections(HashMap<String, ToolSelection>);
 
 impl ToolSelections {
-    pub fn new(mut selections: HashMap<String, ToolSelection>, jobs: bool) -> Self {
+    pub fn new(
+        mut selections: HashMap<String, ToolSelection>,
+        jobs: bool,
+        claude_direct: bool,
+    ) -> Self {
+        if claude_direct {
+            selections
+                .entry("claude".to_owned())
+                .or_insert_with(|| ToolSelection {
+                    include: Some(
+                        nanocode::claude::HAND_TOOLS
+                            .iter()
+                            .map(|name| (*name).to_owned())
+                            .collect(),
+                    ),
+                    exclude: Vec::new(),
+                });
+        }
         selections
             .entry("codex".to_owned())
             .or_insert_with(|| ToolSelection {

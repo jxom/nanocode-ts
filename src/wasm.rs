@@ -59,6 +59,14 @@ enum Provider {
 
 #[derive(Clone, Copy, Default, Deserialize)]
 #[serde(rename_all = "snake_case")]
+enum ClaudeOrchestration {
+    #[default]
+    CodeMode,
+    Direct,
+}
+
+#[derive(Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
 enum CodexOrchestration {
     #[default]
     CodeMode,
@@ -179,6 +187,8 @@ struct Configuration {
     cell_memory_bytes: Option<usize>,
     #[serde(default)]
     cell_yield_ms: Option<u64>,
+    #[serde(default)]
+    claude_orchestration: ClaudeOrchestration,
     #[serde(default)]
     deadline: Option<Deadline>,
     #[serde(default)]
@@ -851,6 +861,7 @@ fn claude_harness(
     stream_tool_input: bool,
     auto_compact_window_tokens: u64,
     environment: Option<ClaudeEnvironment>,
+    orchestration: ClaudeOrchestration,
     instructions: &dyn Fn(Option<&str>) -> String,
 ) -> (ClaudeHarness, ClaudeClient) {
     let http = nanocode::claude::transport::HttpClient::new(
@@ -862,7 +873,13 @@ fn claude_harness(
         client = client.subscription_compatibility();
     }
     let max_tokens = endpoint.max_tokens;
-    let harness = ClaudeHarness::new(client.clone()).configure(move |claude| {
+    let harness = match orchestration {
+        ClaudeOrchestration::CodeMode => ClaudeHarness::new(client.clone()),
+        ClaudeOrchestration::Direct => {
+            ClaudeHarness::new(client.clone()).direct_tools_for(|_| true)
+        }
+    };
+    let harness = harness.configure(move |claude| {
         let mut claude = claude
             .hedging(Arc::clone(&hedging))
             .tool_input_deltas(stream_tool_input)
@@ -999,12 +1016,16 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
         None => placement.then(Environment::default),
     })?;
     let mut environment = config.environment.take();
+    let claude_direct = matches!(config.claude_orchestration, ClaudeOrchestration::Direct);
     if placement {
         let environment = environment.get_or_insert_with(Environment::default);
-        environment.project_instructions = Some(match environment.project_instructions.take() {
-            Some(text) => format!("{text}\n\n{PLACEMENT_INSTRUCTIONS}"),
-            None => PLACEMENT_INSTRUCTIONS.to_owned(),
-        });
+        if !claude_direct {
+            environment.project_instructions =
+                Some(match environment.project_instructions.take() {
+                    Some(text) => format!("{text}\n\n{PLACEMENT_INSTRUCTIONS}"),
+                    None => PLACEMENT_INSTRUCTIONS.to_owned(),
+                });
+        }
     }
     let environment = resolve(environment)?;
     let (claude, codex) = config.endpoints().map_err(configuration)?;
@@ -1019,6 +1040,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
                 .auto_compact_window_tokens
                 .unwrap_or(CLAUDE_AUTO_COMPACT_WINDOW_TOKENS),
             environment.as_ref().map(Environment::claude),
+            config.claude_orchestration,
             &instructions,
         );
         match config.deadline {
@@ -1074,11 +1096,10 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
     let hand_tools = Arc::new(remote::ToolSelections::new(
         config.hand_tools.unwrap_or_default(),
         matches!(config.codex_orchestration, CodexOrchestration::Jobs),
+        claude_direct,
     ));
+    let hands = placement.then(|| Arc::new(executors.tool()) as Arc<dyn Tool>);
     let mut shared: Vec<Arc<dyn Tool>> = Vec::new();
-    if placement {
-        shared.push(Arc::new(executors.tool()));
-    }
     let mcp = mcp::tools(config.mcp_servers)
         .await
         .map_err(configuration)?;
@@ -1183,8 +1204,10 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
         .map_err(configuration)?;
         let tools = base
             .add_shared_tools(
-                shared
+                hands
                     .iter()
+                    .filter(|_| !(claude_direct && matches!(family, Provider::Claude)))
+                    .chain(shared.iter())
                     .cloned()
                     .chain(search(family))
                     .chain(image(family)),
