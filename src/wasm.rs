@@ -1110,7 +1110,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
             let Some(default) = default else {
                 return Err(configuration(format!("{model} is not a Codex model")));
             };
-            Some(codex_harness(
+            let harness = codex_harness(
                 endpoint,
                 hedging,
                 default,
@@ -1120,7 +1120,14 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
                 codex_environment.as_ref().map(Environment::codex),
                 config.codex_orchestration,
                 &instructions,
-            )?)
+            )?;
+            Some(match config.deadline {
+                Some(deadline) => harness.deadline(nanocode::claude::Deadline::new(
+                    deadline.at_ms,
+                    Duration::from_millis(deadline.limit_ms),
+                )),
+                None => harness,
+            })
         }
         None => None,
     };
