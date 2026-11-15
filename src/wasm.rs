@@ -72,6 +72,7 @@ struct FinishLevers {
     fold_finish: bool,
     lean_cells: bool,
     low_effort_rounds: bool,
+    persist_finish: bool,
 }
 
 #[derive(Clone, Copy, Default, Deserialize)]
@@ -224,6 +225,8 @@ struct Configuration {
     lean_cells: bool,
     #[serde(default)]
     low_effort_rounds: bool,
+    #[serde(default)]
+    persist_finish: bool,
     #[serde(default)]
     codex_orchestration: CodexOrchestration,
     #[serde(default)]
@@ -976,7 +979,8 @@ fn claude_harness(
             .brief_finish(levers.brief_finish)
             .fold_finish(levers.fold_finish)
             .lean_cells(levers.lean_cells)
-            .low_effort_rounds(levers.low_effort_rounds);
+            .low_effort_rounds(levers.low_effort_rounds)
+            .persist_finish(levers.persist_finish);
         if let Some(escalation) = &escalation {
             claude = claude.escalate(escalation.clone());
         }
@@ -1007,6 +1011,7 @@ fn codex_harness(
     auto_compact_window_tokens: Option<u64>,
     environment: Option<ExecutionEnvironment>,
     orchestration: CodexOrchestration,
+    persist_finish: bool,
     instructions: &dyn Fn(Option<&str>) -> String,
 ) -> Result<CodexHarness, Opening> {
     let openai = match (endpoint.subscription, endpoint.gateway) {
@@ -1064,6 +1069,7 @@ fn codex_harness(
         CodexOrchestration::Direct => harness.direct_tools_for(|_| true),
     };
     let harness = harness.configure(move |codex| {
+        let codex = codex.persist_finish(persist_finish);
         Ok(match &environment {
             Some(environment) => codex.execution_environment(environment.clone()),
             None => codex,
@@ -1148,6 +1154,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
                 fold_finish: config.fold_finish,
                 lean_cells: config.lean_cells,
                 low_effort_rounds: config.low_effort_rounds,
+                persist_finish: config.persist_finish,
             },
             escalation,
             config.tool_result_tokens,
@@ -1198,6 +1205,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
                 config.auto_compact_window_tokens,
                 codex_environment.as_ref().map(Environment::codex),
                 config.codex_orchestration,
+                config.persist_finish,
                 &instructions,
             )?;
             Some(match config.deadline {

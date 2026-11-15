@@ -77,6 +77,7 @@ export const finishLevers = [
   'fold_finish',
   'lean_cells',
   'low_effort_rounds',
+  'persist_finish',
 ] as const
 
 export const codexOrchestrations: readonly Contracts.CodexOrchestration[] = [
@@ -107,6 +108,7 @@ export type SessionDescriptor = SessionAuthority & {
   fold_finish?: boolean
   lean_cells?: boolean
   low_effort_rounds?: boolean
+  persist_finish?: boolean
   subagents?: boolean
   tool_result_tokens?: number
   session_name: string
