@@ -16,6 +16,8 @@ const paths = [
   'crates/core/shell',
   'crates/core/sys',
   'crates/core/windows-sys',
+  'crates/patches/djs/Cargo.toml',
+  'crates/patches/djs/crates/djs-libm',
   'crates/patches/psh',
 ]
 const workspace = join('crates', 'patches', 'psh')
