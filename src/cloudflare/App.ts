@@ -366,6 +366,7 @@ type Lifecycle = {
 type Connection = { executor: HandExecutor; hand: string; runtime: string | null }
 const ownerScope = 'owner'
 const unfinishedStatuses = new Set(['queued', 'running'])
+const parentSubmit = 'parent__submit_result'
 const interruptedNote = 'Agent execution interrupted; recovery scheduled'
 
 const cellInterruptChecks = 500
@@ -2326,7 +2327,9 @@ ${input.request_id}`
               remote: enabled,
               executor: descriptor.executor_id,
               ...(child
-                ? { subagents: false, child_lineage: child.spec.lineage }
+                ? options.remoteCoordinators
+                  ? { child_lineage: child.spec.lineage }
+                  : { subagents: false, child_lineage: child.spec.lineage }
                 : (descriptor.subagents ?? options.subagents) === undefined
                   ? {}
                   : { subagents: descriptor.subagents ?? options.subagents }),
@@ -2360,7 +2363,14 @@ ${input.request_id}`
               stream_tool_input: options.streamToolInput ?? true,
               ...(options.headless ? { headless: true } : {}),
               tools: child
-                ? [...(options.tools?.definitions ?? []), ...child.spec.tools]
+                ? [
+                    ...(options.tools?.definitions ?? []),
+                    ...(options.remoteCoordinators
+                      ? child.spec.tools
+                          .filter((tool) => tool.name === 'submit_result')
+                          .map((tool) => ({ ...tool, name: parentSubmit }))
+                      : child.spec.tools),
+                  ]
                 : options.tools?.definitions,
               ...(mcpServers.length ? { mcp_servers: mcpServers } : {}),
               ...(shell ? { workspace: shell.cwd } : {}),
@@ -2451,9 +2461,15 @@ ${input.request_id}`
               ...(child
                 ? {
                     childTool: async (name: string, input: unknown, context: unknown) => {
+                      if (
+                        name === parentSubmit &&
+                        (context as { session_id?: string } | null)?.session_id !==
+                          child.spec.session_id
+                      )
+                        throw new Error('only the coordinator session reports to its parent')
                       const response = await this.parentPost('child_tool', {
                         session_id: child.spec.session_id,
-                        name,
+                        name: name === parentSubmit ? 'submit_result' : name,
                         input,
                         context,
                       })
@@ -4587,6 +4603,7 @@ export declare namespace create {
     subagentPageLimit?: number
     subagents?: boolean
     remoteSubagents?: boolean
+    remoteCoordinators?: boolean
     subscription?(
       account: string,
       env: E,
