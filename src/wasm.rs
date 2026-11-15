@@ -60,8 +60,8 @@ enum Provider {
 #[derive(Clone, Copy, Default, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum RefusalFallback {
-    ReturnOnce,
     #[default]
+    ReturnOnce,
     Session,
 }
 
