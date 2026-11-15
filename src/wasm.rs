@@ -65,6 +65,13 @@ enum RefusalFallback {
     Session,
 }
 
+#[derive(Clone, Copy)]
+struct FinishLevers {
+    brief_finish: bool,
+    fold_finish: bool,
+    low_effort_rounds: bool,
+}
+
 #[derive(Clone, Copy, Default, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum ClaudeOrchestration {
@@ -201,6 +208,12 @@ struct Configuration {
     deadline: Option<Deadline>,
     #[serde(default)]
     refusal_fallback: RefusalFallback,
+    #[serde(default)]
+    brief_finish: bool,
+    #[serde(default)]
+    fold_finish: bool,
+    #[serde(default)]
+    low_effort_rounds: bool,
     #[serde(default)]
     codex_orchestration: CodexOrchestration,
     #[serde(default)]
@@ -888,6 +901,7 @@ fn claude_harness(
     environment: Option<ClaudeEnvironment>,
     orchestration: ClaudeOrchestration,
     refusal_fallback: RefusalFallback,
+    levers: FinishLevers,
     instructions: &dyn Fn(Option<&str>) -> String,
 ) -> (ClaudeHarness, ClaudeClient) {
     let http = nanocode::claude::transport::HttpClient::new(
@@ -913,7 +927,10 @@ fn claude_harness(
             .refusal_fallback_scope(match refusal_fallback {
                 RefusalFallback::ReturnOnce => nanocode::claude::RefusalFallbackScope::ReturnOnce,
                 RefusalFallback::Session => nanocode::claude::RefusalFallbackScope::Session,
-            });
+            })
+            .brief_finish(levers.brief_finish)
+            .fold_finish(levers.fold_finish)
+            .low_effort_rounds(levers.low_effort_rounds);
         if let Some(environment) = &environment {
             claude = claude.environment(environment.clone());
         }
@@ -1072,6 +1089,11 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
             environment.as_ref().map(Environment::claude),
             config.claude_orchestration,
             config.refusal_fallback,
+            FinishLevers {
+                brief_finish: config.brief_finish,
+                fold_finish: config.fold_finish,
+                low_effort_rounds: config.low_effort_rounds,
+            },
             &instructions,
         );
         let harness = harness.headless(config.headless);

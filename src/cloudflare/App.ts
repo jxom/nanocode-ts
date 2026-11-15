@@ -71,6 +71,8 @@ export const claudeOrchestrations: readonly Contracts.ClaudeOrchestration[] = [
 
 export const refusalFallbacks: readonly Contracts.RefusalFallback[] = ['return_once', 'session']
 
+export const finishLevers = ['brief_finish', 'fold_finish', 'low_effort_rounds'] as const
+
 export const codexOrchestrations: readonly Contracts.CodexOrchestration[] = [
   'code_mode',
   'direct',
@@ -93,6 +95,9 @@ export type SessionDescriptor = SessionAuthority & {
   codex_orchestration?: Contracts.CodexOrchestration
   deadline?: Contracts.Deadline
   refusal_fallback?: Contracts.RefusalFallback
+  brief_finish?: boolean
+  fold_finish?: boolean
+  low_effort_rounds?: boolean
   subagents?: boolean
   session_name: string
   subscription: boolean
@@ -1099,6 +1104,9 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
             { error: `refusal_fallback must be one of ${refusalFallbacks.join(', ')}` },
             400,
           )
+        for (const lever of finishLevers)
+          if (input[lever] !== undefined && typeof input[lever] !== 'boolean')
+            return json({ error: `${lever} must be a boolean` }, 400)
         if (input.subagents === true && options.subagents === false)
           return json({ error: 'subagents are disabled for this app' }, 400)
         if (input.payer !== undefined && !offered.includes(input.payer))
@@ -1244,6 +1252,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           descriptor.subagents = input.subagents ?? sessionSubagents
           descriptor.deadline = input.deadline
           descriptor.refusal_fallback = input.refusal_fallback
+          for (const lever of finishLevers) descriptor[lever] = input[lever]
           descriptor.thinking = input.thinking
           descriptor.web_search = input.web_search
           await subscribing
@@ -2191,6 +2200,7 @@ ${input.request_id}`
         descriptor.deadline ?? null,
         descriptor.claude_orchestration ?? 'code_mode',
         ...(descriptor.refusal_fallback === undefined ? [] : [descriptor.refusal_fallback]),
+        ...finishLevers.filter((lever) => descriptor[lever] === true),
       ])
     }
 
@@ -2441,6 +2451,11 @@ ${input.request_id}`
               ...(descriptor.refusal_fallback === undefined
                 ? {}
                 : { refusal_fallback: descriptor.refusal_fallback }),
+              ...Object.fromEntries(
+                finishLevers
+                  .filter((lever) => descriptor[lever] === true)
+                  .map((lever) => [lever, true]),
+              ),
               ...withHand(
                 options.instructions,
                 this.handsMode(scope, descriptor) ? options.handInstructions : undefined,
