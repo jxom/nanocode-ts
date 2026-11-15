@@ -24,12 +24,13 @@ const walletDoc = defineDoc<{ entries: Record<string, string | number> }>({
 })
 
 export function create(options: create.Options) {
-  const { servers } = Payment.resolve({ inference: 'apiKey', ...options.payment })
+  const { deposit, servers } = Payment.resolve({ inference: 'apiKey', ...options.payment })
   const holders = new Map<string, Account>()
   const holder = (sessionId: string) => {
     let found = holders.get(sessionId)
     if (!found) {
       found = createAccount({
+        deposit,
         store: store({ sessionId, sessions: options.sessions }),
         secret: options.secret,
         servers,

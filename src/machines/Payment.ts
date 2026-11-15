@@ -1,16 +1,37 @@
+import type { Session } from 'mppx/tempo'
 import * as Mcp from './Mcp.ts'
 
 export type Inference = 'apiKey' | 'tempo'
 
 export type Tools = 'tempo' | 'off'
 
+export type Deposit = {
+  maximum: string
+  opening: string
+  topUp: string
+}
+
+export type Channel = {
+  channelId: `0x${string}`
+  cumulativeAmount: string
+  deposit: string
+  descriptor: Session.Precompile.Types.ChannelDescriptor
+  opened: boolean
+}
+
+export type Closing =
+  | { channelId: string; refund: string; state: 'closed' }
+  | { channelId: string; reason: string; state: 'failed' }
+
 export type Config = {
+  deposit?: Deposit | undefined
   inference?: Inference
   servers?: readonly Mcp.Server[] | false
   tools?: Tools
 }
 
 export type Policy = {
+  deposit: Deposit | undefined
   inference: Inference
   servers: readonly Mcp.Server[]
   tools: Tools
@@ -28,7 +49,7 @@ export function resolve(config: Config = {}): Policy {
   const tools = config.tools ?? 'tempo'
   const servers =
     tools === 'tempo' && config.servers !== false ? (config.servers ?? Mcp.servers) : []
-  return { inference, servers, tools }
+  return { deposit: config.deposit, inference, servers, tools }
 }
 
 export function unlocks(servers: readonly Mcp.Server[], scripts = true) {

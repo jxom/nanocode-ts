@@ -3,10 +3,6 @@ import * as Mcp from './Mcp.ts'
 import * as Payment from './Payment.ts'
 import * as Wallet from './Wallet.ts'
 
-const topUp = '0.05'
-const opening = '50000'
-const maxDeposit = '0.5'
-
 export const window = 30_000
 
 const send = globalThis.fetch.bind(globalThis)
@@ -26,6 +22,7 @@ export type Ledger = {
 
 export function create(connected: Wallet.AccessKey, options: create.Options = {}) {
   const servers = options.servers ?? Mcp.servers
+  const deposit = options.deposit
   const prefix = `nanocode.machines.${connected.keyAddress.toLowerCase()}.`
   let ledger: Ledger = { calls: 0, services: [], total: 0n }
   const listeners = new Set<() => void>()
@@ -72,6 +69,7 @@ export function create(connected: Wallet.AccessKey, options: create.Options = {}
       return false
     }
     if (parsed.intent !== 'session' || !parsed.channelId || parsed.spent === undefined) return false
+    localStorage.setItem(`${prefix}url.${parsed.channelId}`, origin)
     const key = `${prefix}spent.${parsed.channelId}`
     const before = BigInt(localStorage.getItem(key) ?? '0')
     const spent = BigInt(parsed.spent)
@@ -97,11 +95,13 @@ export function create(connected: Wallet.AccessKey, options: create.Options = {}
   }
 
   const build = async () => {
-    const [{ createJsonChannelStore, Mppx, tempo: payments }, account, client] = await Promise.all([
-      import('mppx/client'),
-      Wallet.signer(connected),
-      Wallet.reader(),
-    ])
+    const [{ createJsonChannelStore, Mppx, tempo: payments }, { parseUnits }, account, client] =
+      await Promise.all([
+        import('mppx/client'),
+        import('viem'),
+        Wallet.signer(connected),
+        Wallet.reader(),
+      ])
     const mppx = Mppx.create({
       fetch: async (input, init) => {
         const origin = String(input instanceof Request ? input.url : input)
@@ -141,8 +141,7 @@ export function create(connected: Wallet.AccessKey, options: create.Options = {}
             set: (key, value) => localStorage.setItem(prefix + key, value),
           }),
           getClient: () => client,
-          maxDeposit,
-          topUpAmount: topUp,
+          ...(deposit ? { maxDeposit: deposit.maximum, topUpAmount: deposit.topUp } : {}),
         }),
         payments.charge({
           account,
@@ -178,17 +177,76 @@ export function create(connected: Wallet.AccessKey, options: create.Options = {}
       const request = payment.challenge.request as { amount?: string }
       charge(origin, BigInt(request.amount ?? '0'), true)
     })
-    return mppx
+    const context = deposit
+      ? { depositRaw: parseUnits(deposit.opening, Wallet.mach.decimals).toString() }
+      : {}
+    return { context, mppx }
+  }
+
+  function stored() {
+    const found: Payment.Channel[] = []
+    for (let index = 0; index < localStorage.length; index++) {
+      const key = localStorage.key(index)
+      if (!key?.startsWith(`${prefix}chan:`)) continue
+      const value = localStorage.getItem(key)
+      if (value) found.push(JSON.parse(value) as Payment.Channel)
+    }
+    return found
+  }
+
+  async function close(): Promise<Payment.Closing[]> {
+    const { mppx } = await (ready ??= build())
+    const idle = stored().filter(
+      (channel) => channel.opened && BigInt(channel.deposit) > BigInt(channel.cumulativeAmount),
+    )
+    return Promise.all(
+      idle.map(async (channel): Promise<Payment.Closing> => {
+        const url = localStorage.getItem(`${prefix}url.${channel.channelId}`)
+        if (!url)
+          return { channelId: channel.channelId, reason: 'no paid URL is known', state: 'failed' }
+        if (Mcp.server(url, servers))
+          return { channelId: channel.channelId, reason: 'MCP channel', state: 'failed' }
+        try {
+          const response = await mppx.fetch(url, {
+            context: {
+              action: 'close',
+              channelId: channel.channelId,
+              cumulativeAmountRaw: channel.cumulativeAmount,
+              descriptor: channel.descriptor,
+            },
+            method: 'POST',
+          })
+          void response.body?.cancel().catch(() => undefined)
+          if (!response.ok)
+            return {
+              channelId: channel.channelId,
+              reason: `close returned ${response.status}`,
+              state: 'failed',
+            }
+          return {
+            channelId: channel.channelId,
+            refund: (BigInt(channel.deposit) - BigInt(channel.cumulativeAmount)).toString(),
+            state: 'closed',
+          }
+        } catch (error) {
+          return {
+            channelId: channel.channelId,
+            reason: error instanceof Error ? error.message : String(error),
+            state: 'failed',
+          }
+        }
+      }),
+    )
   }
 
   let ready: ReturnType<typeof build> | undefined
 
   return {
-    fetch: (async (input: RequestInfo | URL, init?: RequestInit) =>
-      (await (ready ??= build())).fetch(input, {
-        ...init,
-        context: { depositRaw: opening },
-      })) as typeof fetch,
+    close,
+    fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const { context, mppx } = await (ready ??= build())
+      return mppx.fetch(input, { ...init, context })
+    }) as typeof fetch,
     ledger: () => ledger,
     subscribe(listener: () => void) {
       listeners.add(listener)
@@ -201,6 +259,7 @@ export function create(connected: Wallet.AccessKey, options: create.Options = {}
 
 export declare namespace create {
   type Options = {
+    deposit?: Payment.Deposit | undefined
     servers?: readonly Mcp.Server[] | undefined
   }
 }

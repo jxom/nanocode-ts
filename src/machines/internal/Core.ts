@@ -20,9 +20,6 @@ import {
   type Status,
 } from '../Account.ts'
 
-const opening = '200000'
-const topUp = '0.2'
-const maxDeposit = '2'
 const tokenDecimals = 6
 const fileLimit = 1_000_000
 const approveSelector = '0x095ea7b3'
@@ -33,6 +30,7 @@ const feeTokens: Address[] = [
 ]
 
 type Payer = {
+  context: { depositRaw?: string }
   fetch: (input: string, init: RequestInit & { context?: unknown }) => Promise<Response>
 }
 
@@ -53,9 +51,13 @@ type Session = {
   recipient?: string
 }
 
-function exhausted(channel: Channel, options: { cap: bigint; request: Session }): boolean {
+function exhausted(
+  channel: Channel,
+  options: { cap: bigint | undefined; request: Session },
+): boolean {
   const { cap, request } = options
   if (
+    cap === undefined ||
     channel.cumulativeAmount === undefined ||
     !channel.descriptor?.payee ||
     !channel.descriptor.token ||
@@ -125,6 +127,7 @@ async function land(
 export function create(options: Create.Options) {
   const { store } = options
   const servers = options.servers ?? Mcp.servers
+  const deposit = options.deposit
   const endpoint = options.rpc ?? rpc
   const network = Egress.guard(options.fetch ?? ((input, init) => globalThis.fetch(input, init)))
   const sealing = sealer(options.secret)
@@ -174,6 +177,64 @@ export function create(options: Create.Options) {
           calls,
         }
       : { spent, calls }
+  }
+
+  async function close(): Promise<Payment.Closing[]> {
+    const current = await record()
+    if (!current) return []
+    const prefix = `channel:${current.keyAddress.toLowerCase()}:`
+    const stored = [
+      ...(await store.list<string>(`${prefix}chan:`)),
+      ...(await store.list<string>(`${prefix}idle:`)),
+    ]
+    const idle = stored
+      .map(([key, value]) => ({ channel: JSON.parse(value) as Payment.Channel, key }))
+      .filter(
+        (entry) =>
+          entry.channel.opened &&
+          BigInt(entry.channel.deposit) > BigInt(entry.channel.cumulativeAmount),
+      )
+    if (idle.length === 0) return []
+    const paying = await pay()
+    return Promise.all(
+      idle.map(async ({ channel, key }): Promise<Payment.Closing> => {
+        const url = await store.get<string>(`url:${channel.channelId.toLowerCase()}`)
+        if (!url)
+          return { channelId: channel.channelId, reason: 'no paid URL is known', state: 'failed' }
+        if (Mcp.server(url, servers))
+          return { channelId: channel.channelId, reason: 'MCP channel', state: 'failed' }
+        try {
+          const response = await paying.fetch(url, {
+            context: {
+              action: 'close',
+              channelId: channel.channelId,
+              cumulativeAmountRaw: channel.cumulativeAmount,
+              descriptor: channel.descriptor,
+            },
+            method: 'POST',
+          })
+          void response.body?.cancel().catch(() => undefined)
+          if (!response.ok)
+            return {
+              channelId: channel.channelId,
+              reason: `close returned ${response.status}`,
+              state: 'failed',
+            }
+          if (key.startsWith(`${prefix}idle:`)) await store.delete(key)
+          return {
+            channelId: channel.channelId,
+            refund: (BigInt(channel.deposit) - BigInt(channel.cumulativeAmount)).toString(),
+            state: 'closed',
+          }
+        } catch (error) {
+          return {
+            channelId: channel.channelId,
+            reason: error instanceof Error ? error.message : String(error),
+            state: 'failed',
+          }
+        }
+      }),
+    )
   }
 
   async function logout(): Promise<boolean> {
@@ -266,6 +327,7 @@ export function create(options: Create.Options) {
       return false
     }
     if (parsed.intent !== 'session' || !parsed.channelId || parsed.spent === undefined) return false
+    await store.put(`url:${parsed.channelId.toLowerCase()}`, url)
     const spent = BigInt(parsed.spent)
     let before = 0n
     await store.update<string>(`seen:${parsed.channelId}`, (value) => {
@@ -333,7 +395,7 @@ export function create(options: Create.Options) {
       return method
     }
     const prefix = `channel:${current.keyAddress.toLowerCase()}:`
-    const cap = parseUnits(maxDeposit, tokenDecimals)
+    const cap = deposit ? parseUnits(deposit.maximum, tokenDecimals) : undefined
     const mppx = Mppx.create({
       onChallenge: async (challenge) => {
         if (challenge.intent !== 'session') return undefined
@@ -345,8 +407,10 @@ export function create(options: Create.Options) {
               return undefined
             }
           })()
-          if (channel && exhausted(channel, { cap, request: challenge.request as Session }))
+          if (channel && exhausted(channel, { cap, request: challenge.request as Session })) {
+            await store.put(key.replace(`${prefix}chan:`, `${prefix}idle:`), value)
             await store.delete(key)
+          }
         }
         return undefined
       },
@@ -393,8 +457,7 @@ export function create(options: Create.Options) {
               set: (key, value) => store.put(prefix + key, value),
             }),
             getClient: () => client,
-            maxDeposit,
-            topUpAmount: topUp,
+            ...(deposit ? { maxDeposit: deposit.maximum, topUpAmount: deposit.topUp } : {}),
           }),
         ),
         lands(
@@ -433,7 +496,10 @@ export function create(options: Create.Options) {
       const request = payment.challenge.request as { amount?: string }
       void charge(url, BigInt(request.amount ?? '0'))
     })
-    const created: Payer = { fetch: (input, init) => mppx.fetch(input, init as never) }
+    const created: Payer = {
+      context: deposit ? { depositRaw: parseUnits(deposit.opening, tokenDecimals).toString() } : {},
+      fetch: (input, init) => mppx.fetch(input, init as never),
+    }
     payer = { sealed, payer: created }
     return created
   }
@@ -461,7 +527,7 @@ export function create(options: Create.Options) {
         headers: init.headers,
         body: init.body,
         signal: init.signal,
-        context: { depositRaw: opening },
+        context: current.context,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -477,6 +543,7 @@ export function create(options: Create.Options) {
   return {
     allFiles,
     authenticate,
+    close,
     deleteFile,
     files,
     logout,

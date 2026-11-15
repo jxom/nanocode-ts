@@ -30,12 +30,14 @@ function kvStore(kv: SyncKvStorage): Store {
 }
 
 export class Wallet extends DurableObject<Env.Env> {
+  protected deposit: Payment.Deposit | undefined = undefined
   protected servers: readonly Mcp.Server[] = Mcp.servers
   protected scripts = true
   private holder?: Account
 
   private core(): Account {
     this.holder ??= createAccount({
+      deposit: this.deposit,
       store: kvStore(this.ctx.storage.kv),
       secret: this.env.KEY_SECRET,
       servers: this.servers,
@@ -53,6 +55,9 @@ export class Wallet extends DurableObject<Env.Env> {
   }
   status() {
     return this.core().status()
+  }
+  close() {
+    return this.core().close()
   }
   logout() {
     return this.core().logout()
@@ -95,6 +100,7 @@ export class Wallet extends DurableObject<Env.Env> {
 export function subclass(options: subclass.Options): typeof Wallet {
   const scripts = options.scripts ?? true
   return class extends Wallet {
+    protected override deposit = options.deposit
     protected override servers = options.servers
     protected override scripts = scripts
   }
@@ -102,13 +108,14 @@ export function subclass(options: subclass.Options): typeof Wallet {
 
 export declare namespace subclass {
   type Options = {
+    deposit?: Payment.Deposit | undefined
     scripts?: boolean | undefined
     servers: readonly Mcp.Server[]
   }
 }
 
 export function create<E extends Env.Env>(options: create.Options<E>) {
-  const { servers } = Payment.resolve({ inference: 'apiKey', ...options.payment })
+  const { deposit, servers } = Payment.resolve({ inference: 'apiKey', ...options.payment })
   const scripts = options.scripts ?? false
   const handlers = Keys.handlers<E>(options.account)
   const nanocode: Pick<App.create.Options<E>, 'codeMode' | 'mcp'> = {
@@ -143,7 +150,14 @@ export function create<E extends Env.Env>(options: create.Options<E>) {
     })
   }
 
-  return { Wallet: subclass({ scripts, servers }), egress, fetch, nanocode, servers, scripts }
+  return {
+    Wallet: subclass({ deposit, scripts, servers }),
+    egress,
+    fetch,
+    nanocode,
+    servers,
+    scripts,
+  }
 }
 
 export declare namespace create {

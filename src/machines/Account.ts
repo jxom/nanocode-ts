@@ -3,6 +3,7 @@ import type { Address, Hex } from 'viem'
 import * as Egress from '../internal/Egress.ts'
 import type * as Core from './internal/Core.ts'
 import * as Mcp from './Mcp.ts'
+import type * as Payment from './Payment.ts'
 
 export const mach: Address = '0x20c000000000000000000000f37de3740adec032'
 export const rpc = 'https://rpc.tempo.xyz'
@@ -47,6 +48,7 @@ export type Holder = {
   register(record: KeyRecord, issue?: boolean): Promise<string | undefined>
   authenticate(hash: string): Promise<number | null>
   status(): Promise<Status>
+  close?(): Promise<Payment.Closing[]>
   logout(): Promise<boolean>
 }
 
@@ -115,6 +117,7 @@ export function create(options: create.Options): Account {
   return {
     allFiles: async () => (await core()).allFiles(),
     authenticate: async (hash) => (await core()).authenticate(hash),
+    close: async () => (await core()).close(),
     deleteFile: async (session, path) => (await core()).deleteFile(session, path),
     files: async (session) => (await core()).files(session),
     logout: async () => (await core()).logout(),
@@ -133,6 +136,7 @@ export function create(options: create.Options): Account {
 
 export declare namespace create {
   type Options = {
+    deposit?: Payment.Deposit | undefined
     fetch?: typeof fetch
     rpc?: string
     scripts?: boolean
@@ -291,7 +295,9 @@ export function keys<E>(options: KeysOptions<E>) {
   async function logout(request: Request, env: E): Promise<Response> {
     const owner = await caller(request, env)
     if (!owner) return json({ error: 'send Authorization: Bearer <token> from POST /v1/keys' }, 401)
-    return json({ account: owner, removed: await options.holder(owner, env).logout() })
+    const holder = options.holder(owner, env)
+    const closed = (await holder.close?.()) ?? []
+    return json({ account: owner, closed, removed: await holder.logout() })
   }
 
   return { caller, logout, me, principal, register }

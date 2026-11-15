@@ -250,7 +250,7 @@ type Note = (kind: Transcript.Entry['kind'], text: string) => void
 
 async function approve(note: Note): Promise<Wallet.AccessKey> {
   let pending = Wallet.restore()
-  if (!pending) {
+  if (!pending || !(await Wallet.reusable(pending))) {
     note(
       'tool',
       Wallet.framed()

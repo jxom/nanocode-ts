@@ -37,7 +37,7 @@ export declare namespace api {
 
 export function create<E extends Env.Env = Env.Env>(options: create.Options<E> = {}) {
   const { fallback, payment, account, ...rest } = options
-  const { inference, servers, tools: paid } = Payment.resolve(payment)
+  const { deposit, inference, servers, tools: paid } = Payment.resolve(payment)
   if (inference === 'apiKey' && !rest.egress)
     throw new Error("payment.inference apiKey needs the host's egress")
 
@@ -79,7 +79,7 @@ export function create<E extends Env.Env = Env.Env>(options: create.Options<E> =
 
   return {
     AgentSession: nanocode.AgentSession,
-    Wallet: Wallets.subclass({ servers }),
+    Wallet: Wallets.subclass({ deposit, servers }),
     fetch,
     nanocode,
   }

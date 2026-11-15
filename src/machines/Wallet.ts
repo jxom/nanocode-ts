@@ -173,7 +173,26 @@ export function restore(): AccessKey | undefined {
   return undefined
 }
 
+export async function reusable(connected: AccessKey) {
+  const [, , , { isAddressEqual }, , , { Actions }] = await load()
+  const client = await reader()
+  const metadata = await Actions.accessKey.getMetadata(client, {
+    accessKey: connected.keyAddress,
+    account: connected.address,
+  })
+  if (!isAddressEqual(metadata.address, connected.keyAddress)) return true
+  if (metadata.isRevoked) return false
+  const { remaining } = await Actions.accessKey.getRemainingLimit(client, {
+    accessKey: connected.keyAddress,
+    account: connected.address,
+    token: mach.address,
+  })
+  return remaining > 0n
+}
+
 export async function connect(): Promise<AccessKey> {
+  const saved = restore()
+  if (saved && (await reusable(saved))) return saved
   const [, , , { toHex }, { generatePrivateKey }, , { Account }, { tempo }] = await load()
   const key = generatePrivateKey()
   const access = Account.fromSecp256k1(key)
