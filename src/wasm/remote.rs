@@ -58,7 +58,7 @@ pub struct ToolSelection {
 pub struct ToolSelections(HashMap<String, ToolSelection>);
 
 impl ToolSelections {
-    pub fn new(mut selections: HashMap<String, ToolSelection>) -> Self {
+    pub fn new(mut selections: HashMap<String, ToolSelection>, jobs: bool) -> Self {
         selections
             .entry("codex".to_owned())
             .or_insert_with(|| ToolSelection {
@@ -68,6 +68,16 @@ impl ToolSelections {
                     .map(|name| (*name).to_owned())
                     .collect(),
             });
+        for backend in ["claude", "codex"] {
+            if backend == "codex" && jobs {
+                continue;
+            }
+            selections
+                .entry(backend.to_owned())
+                .or_default()
+                .exclude
+                .extend(nanocode::process::JOB_TOOLS.iter().map(|name| (*name).to_owned()));
+        }
         Self(selections)
     }
 }

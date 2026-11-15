@@ -1050,6 +1050,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
     let executors = CodeModeExecutors::new();
     let hand_tools = Arc::new(remote::ToolSelections::new(
         config.hand_tools.unwrap_or_default(),
+        matches!(config.codex_orchestration, CodexOrchestration::Jobs),
     ));
     let mut shared: Vec<Arc<dyn Tool>> = Vec::new();
     if placement {
