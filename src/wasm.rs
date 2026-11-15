@@ -71,8 +71,14 @@ struct FinishLevers {
     brief_finish: bool,
     fold_finish: bool,
     lean_cells: bool,
+    late_finish_check: Option<Duration>,
     low_effort_rounds: bool,
     persist_finish: bool,
+    result_effort: Option<nanocode::claude::Effort>,
+    skip_finish_check: bool,
+    stop_at_target: bool,
+    yield_floor: Option<Duration>,
+    yield_share: Option<std::num::NonZeroU8>,
 }
 
 #[derive(Clone, Copy, Default, Deserialize)]
@@ -227,6 +233,18 @@ struct Configuration {
     low_effort_rounds: bool,
     #[serde(default)]
     persist_finish: bool,
+    #[serde(default)]
+    late_finish_check_ms: Option<std::num::NonZeroU64>,
+    #[serde(default)]
+    result_effort: Option<nanocode::claude::Effort>,
+    #[serde(default)]
+    skip_finish_check: bool,
+    #[serde(default)]
+    stop_at_target: bool,
+    #[serde(default)]
+    yield_floor_ms: Option<std::num::NonZeroU64>,
+    #[serde(default)]
+    yield_share: Option<std::num::NonZeroU8>,
     #[serde(default)]
     codex_orchestration: CodexOrchestration,
     #[serde(default)]
@@ -980,7 +998,21 @@ fn claude_harness(
             .fold_finish(levers.fold_finish)
             .lean_cells(levers.lean_cells)
             .low_effort_rounds(levers.low_effort_rounds)
-            .persist_finish(levers.persist_finish);
+            .persist_finish(levers.persist_finish)
+            .skip_finish_check(levers.skip_finish_check)
+            .stop_at_target(levers.stop_at_target);
+        if let Some(min_left) = levers.late_finish_check {
+            claude = claude.late_finish_check(min_left);
+        }
+        if let Some(effort) = levers.result_effort {
+            claude = claude.result_effort(effort);
+        }
+        if let Some(floor) = levers.yield_floor {
+            claude = claude.yield_floor(floor);
+        }
+        if let Some(percent) = levers.yield_share {
+            claude = claude.yield_share(percent);
+        }
         if let Some(escalation) = &escalation {
             claude = claude.escalate(escalation.clone());
         }
@@ -1153,8 +1185,16 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
                 brief_finish: config.brief_finish,
                 fold_finish: config.fold_finish,
                 lean_cells: config.lean_cells,
+                late_finish_check: config
+                    .late_finish_check_ms
+                    .map(|ms| Duration::from_millis(ms.get())),
                 low_effort_rounds: config.low_effort_rounds,
                 persist_finish: config.persist_finish,
+                result_effort: config.result_effort,
+                skip_finish_check: config.skip_finish_check,
+                stop_at_target: config.stop_at_target,
+                yield_floor: config.yield_floor_ms.map(|ms| Duration::from_millis(ms.get())),
+                yield_share: config.yield_share,
             },
             escalation,
             config.tool_result_tokens,

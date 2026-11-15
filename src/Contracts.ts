@@ -51,6 +51,8 @@ export type CodexOrchestration = 'code_mode' | 'direct' | 'jobs'
 
 export type Deadline = { at_ms: number; limit_ms: number }
 
+export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
 export type Escalate = {
   context_tokens?: number | undefined
   model: string
@@ -109,12 +111,18 @@ export type AgentConfiguration = {
   brief_finish?: boolean
   escalate?: Escalate
   fold_finish?: boolean
+  late_finish_check_ms?: number
   lean_cells?: boolean
   low_effort_rounds?: boolean
   persist_finish?: boolean
+  result_effort?: Effort
   service_tier?: ServiceTier
+  skip_finish_check?: boolean
+  stop_at_target?: boolean
   subagents?: boolean
   tool_result_tokens?: number
+  yield_floor_ms?: number
+  yield_share?: number
   remote_children?: boolean
   child_lineage?: unknown
   hedge?: { cap_percent?: number; floor_ms?: number; window?: number }
