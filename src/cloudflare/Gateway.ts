@@ -162,6 +162,7 @@ async function model(
   gateway: string,
   serviceTier: string,
   firstByteMs: number,
+  anthropicApiKey: string | undefined,
   request: Request,
 ): Promise<Response> {
   let dispatch: App.ModelDispatch
@@ -195,7 +196,16 @@ async function model(
     return modelError(provider, 400, 'invalid_request_error', 'model request names no model')
   if (provider === 'codex' && /\/images\/(?:generations|edits)$/.test(dispatch.endpoint))
     return image(ai, gateway, query, request.signal)
+  const direct = provider === 'claude' && anthropicApiKey !== undefined
+  const transport = direct ? 'direct' : provider === 'claude' ? 'unified' : 'gateway'
   const start = async (signal: AbortSignal): Promise<Response> => {
+    if (direct)
+      return await fetch(dispatch.endpoint, {
+        method: 'POST',
+        headers: { ...headers, 'x-api-key': anthropicApiKey },
+        body,
+        signal,
+      })
     if (provider === 'claude') {
       const catalog = catalogModel(String(query.model))
       return (await ai.run(
@@ -235,7 +245,7 @@ async function model(
       'x-nanocode-model-diagnostic',
       JSON.stringify({
         provider,
-        transport: provider === 'claude' ? 'unified' : 'gateway',
+        transport,
         status: 504,
         first_byte_timeout_ms: firstByteMs,
         waited_ms: Date.now() - started,
@@ -253,7 +263,7 @@ async function model(
     'x-nanocode-model-diagnostic',
     JSON.stringify({
       provider,
-      transport: provider === 'claude' ? 'unified' : 'gateway',
+      transport,
       status: upstream.status,
       body_bytes: body.byteLength,
       ...shape(query),
@@ -269,6 +279,7 @@ async function warm(
   ai: Ai,
   gateway: string,
   serviceTier: string,
+  anthropicApiKey: string | undefined,
   request: Request,
 ): Promise<Response> {
   let dispatch: { provider?: unknown; model?: unknown }
@@ -278,6 +289,8 @@ async function warm(
     return json({ error: 'invalid model dispatch' }, 400)
   }
   if (typeof dispatch.model !== 'string') return json({ error: 'warm-up names no model' }, 400)
+  if (dispatch.provider !== 'codex' && anthropicApiKey !== undefined)
+    return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } })
   let upstream: Response
   if (dispatch.provider === 'codex') {
     const opened = ai.gateway(gateway)
@@ -317,7 +330,12 @@ async function warm(
   })
 }
 
-async function prime(ai: Ai, gateway: string, request: Request): Promise<Response> {
+async function prime(
+  ai: Ai,
+  gateway: string,
+  anthropicApiKey: string | undefined,
+  request: Request,
+): Promise<Response> {
   let dispatch: { provider?: unknown; model?: unknown }
   try {
     dispatch = JSON.parse(request.headers.get('x-nanocode-model') ?? '')
@@ -325,6 +343,8 @@ async function prime(ai: Ai, gateway: string, request: Request): Promise<Respons
     return json({ error: 'invalid model dispatch' }, 400)
   }
   if (typeof dispatch.model !== 'string') return json({ error: 'prime names no model' }, 400)
+  if (dispatch.provider !== 'codex' && anthropicApiKey !== undefined)
+    return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } })
   let upstream: Response
   if (dispatch.provider === 'codex') {
     const opened = ai.gateway(gateway)
@@ -355,6 +375,7 @@ async function prime(ai: Ai, gateway: string, request: Request): Promise<Respons
 }
 
 export function create(ai: Ai, options: create.Options): App.PrivateBinding {
+  const anthropicApiKey = options.anthropicApiKey || undefined
   const firstByteMs = options.firstByteMs ?? 45_000
   const gateway = options.id
   const serviceTier = options.serviceTier ?? ''
@@ -363,10 +384,11 @@ export function create(ai: Ai, options: create.Options): App.PrivateBinding {
     async fetch(request: Request): Promise<Response> {
       const { pathname } = new URL(request.url)
       if (pathname === '/model' && request.method === 'POST')
-        return model(ai, gateway, serviceTier, firstByteMs, request)
+        return model(ai, gateway, serviceTier, firstByteMs, anthropicApiKey, request)
       if (pathname === '/warm' && request.method === 'POST')
-        return warm(ai, gateway, serviceTier, request)
-      if (pathname === '/prime' && request.method === 'POST') return prime(ai, gateway, request)
+        return warm(ai, gateway, serviceTier, anthropicApiKey, request)
+      if (pathname === '/prime' && request.method === 'POST')
+        return prime(ai, gateway, anthropicApiKey, request)
       if (pathname === '/socket')
         return json(
           {
@@ -390,6 +412,7 @@ export function create(ai: Ai, options: create.Options): App.PrivateBinding {
 
 export declare namespace create {
   type Options = {
+    anthropicApiKey?: string | undefined
     firstByteMs?: number | undefined
     id: string
     serviceTier?: string | undefined
