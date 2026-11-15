@@ -67,6 +67,7 @@ enum RefusalFallback {
 
 #[derive(Clone, Copy)]
 struct FinishLevers {
+    brief_final: bool,
     brief_finish: bool,
     fold_finish: bool,
     low_effort_rounds: bool,
@@ -208,6 +209,8 @@ struct Configuration {
     deadline: Option<Deadline>,
     #[serde(default)]
     refusal_fallback: RefusalFallback,
+    #[serde(default)]
+    brief_final: bool,
     #[serde(default)]
     brief_finish: bool,
     #[serde(default)]
@@ -928,6 +931,7 @@ fn claude_harness(
                 RefusalFallback::ReturnOnce => nanocode::claude::RefusalFallbackScope::ReturnOnce,
                 RefusalFallback::Session => nanocode::claude::RefusalFallbackScope::Session,
             })
+            .brief_final(levers.brief_final)
             .brief_finish(levers.brief_finish)
             .fold_finish(levers.fold_finish)
             .low_effort_rounds(levers.low_effort_rounds);
@@ -1090,6 +1094,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
             config.claude_orchestration,
             config.refusal_fallback,
             FinishLevers {
+                brief_final: config.brief_final,
                 brief_finish: config.brief_finish,
                 fold_finish: config.fold_finish,
                 low_effort_rounds: config.low_effort_rounds,

@@ -99,6 +99,7 @@ export type AgentConfiguration = {
   codex_orchestration?: CodexOrchestration
   deadline?: Deadline
   refusal_fallback?: RefusalFallback
+  brief_final?: boolean
   brief_finish?: boolean
   fold_finish?: boolean
   low_effort_rounds?: boolean

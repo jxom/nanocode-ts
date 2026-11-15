@@ -71,7 +71,12 @@ export const claudeOrchestrations: readonly Contracts.ClaudeOrchestration[] = [
 
 export const refusalFallbacks: readonly Contracts.RefusalFallback[] = ['return_once', 'session']
 
-export const finishLevers = ['brief_finish', 'fold_finish', 'low_effort_rounds'] as const
+export const finishLevers = [
+  'brief_final',
+  'brief_finish',
+  'fold_finish',
+  'low_effort_rounds',
+] as const
 
 export const codexOrchestrations: readonly Contracts.CodexOrchestration[] = [
   'code_mode',
@@ -95,6 +100,7 @@ export type SessionDescriptor = SessionAuthority & {
   codex_orchestration?: Contracts.CodexOrchestration
   deadline?: Contracts.Deadline
   refusal_fallback?: Contracts.RefusalFallback
+  brief_final?: boolean
   brief_finish?: boolean
   fold_finish?: boolean
   low_effort_rounds?: boolean
@@ -253,12 +259,12 @@ function remember(
   if (binding.shared)
     void caches.default.put(
       binding.shared.url,
-      new Response(binding.id, { headers: { 'cache-control': `max-age=${binding.shared.seconds}` } }),
+      new Response(binding.id, {
+        headers: { 'cache-control': `max-age=${binding.shared.seconds}` },
+      }),
     )
   options.bound.set(sessionKey(options), binding.id)
-  if (
-    options.bound.size > policy(env.SESSION_POOL_CACHED_NAMES ?? '', 'SESSION_POOL_CACHED_NAMES')
-  )
+  if (options.bound.size > policy(env.SESSION_POOL_CACHED_NAMES ?? '', 'SESSION_POOL_CACHED_NAMES'))
     options.bound.delete(options.bound.keys().next().value!)
 }
 
@@ -733,7 +739,10 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
       const response = await this.serve(request)
       if (response.webSocket || response.status === 101) return response
       const timed = new Response(response.body, response)
-      timed.headers.append('server-timing', 'session;dur=' + Math.round(performance.now() - started))
+      timed.headers.append(
+        'server-timing',
+        'session;dur=' + Math.round(performance.now() - started),
+      )
       timed.headers.append('server-timing', this.objectTiming())
       const sent = request.headers.get(Pool.sentHeader)
       if (sent !== null)
@@ -770,9 +779,12 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           const hold = request.headers.get(Pool.holdHeader)
           if (hold !== null) {
             if (this.hold !== undefined) clearTimeout(this.hold)
-            this.hold = setTimeout(() => {
-              this.hold = undefined
-            }, policy(hold, Pool.holdHeader))
+            this.hold = setTimeout(
+              () => {
+                this.hold = undefined
+              },
+              policy(hold, Pool.holdHeader),
+            )
           }
           this.metadata.set(prestartKey, String(this.prestarted))
           const committed = this.ctx.storage.sync().then(() => {
@@ -3667,9 +3679,7 @@ ${input.request_id}`
         provider,
         ...(model === undefined ? {} : { model }),
         ...(payer === undefined ? {} : { payer }),
-        ...(claudeOrchestration === undefined
-          ? {}
-          : { claude_orchestration: claudeOrchestration }),
+        ...(claudeOrchestration === undefined ? {} : { claude_orchestration: claudeOrchestration }),
         ...(orchestration === undefined ? {} : { codex_orchestration: orchestration }),
         ...(subagents === undefined ? {} : { subagents: subagents === 'true' }),
         subscription: served(
