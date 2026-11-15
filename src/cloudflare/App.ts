@@ -2358,6 +2358,7 @@ ${input.request_id}`
               live_deltas: options.liveDeltas ?? true,
               ...(descriptor.web_search === undefined ? {} : { web_search: descriptor.web_search }),
               stream_tool_input: options.streamToolInput ?? true,
+              ...(options.headless ? { headless: true } : {}),
               tools: child
                 ? [...(options.tools?.definitions ?? []), ...child.spec.tools]
                 : options.tools?.definitions,
@@ -4559,6 +4560,7 @@ export declare namespace create {
     hands?: 'always' | 'attached'
     harnesses?: 'both' | 'session'
     hedge?: Contracts.AgentConfiguration['hedge']
+    headless?: boolean
     instructions?: string
     limits?(session: Session, env: E): Limits | undefined | Promise<Limits | undefined>
     liveDeltas?: boolean
