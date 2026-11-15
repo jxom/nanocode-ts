@@ -111,6 +111,7 @@ export type AgentConfiguration = {
   brief_finish?: boolean
   escalate?: Escalate
   fold_finish?: boolean
+  finish_check_min_requests?: number
   late_finish_check_ms?: number
   lean_cells?: boolean
   low_effort_rounds?: boolean

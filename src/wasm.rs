@@ -69,6 +69,7 @@ enum RefusalFallback {
 struct FinishLevers {
     brief_final: bool,
     brief_finish: bool,
+    finish_check_min_requests: Option<std::num::NonZeroU32>,
     fold_finish: bool,
     lean_cells: bool,
     late_finish_check: Option<Duration>,
@@ -233,6 +234,8 @@ struct Configuration {
     low_effort_rounds: bool,
     #[serde(default)]
     persist_finish: bool,
+    #[serde(default)]
+    finish_check_min_requests: Option<std::num::NonZeroU32>,
     #[serde(default)]
     late_finish_check_ms: Option<std::num::NonZeroU64>,
     #[serde(default)]
@@ -1004,6 +1007,9 @@ fn claude_harness(
         if let Some(min_left) = levers.late_finish_check {
             claude = claude.late_finish_check(min_left);
         }
+        if let Some(min) = levers.finish_check_min_requests {
+            claude = claude.finish_check_min_requests(min);
+        }
         if let Some(effort) = levers.result_effort {
             claude = claude.result_effort(effort);
         }
@@ -1183,6 +1189,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
             FinishLevers {
                 brief_final: config.brief_final,
                 brief_finish: config.brief_finish,
+                finish_check_min_requests: config.finish_check_min_requests,
                 fold_finish: config.fold_finish,
                 lean_cells: config.lean_cells,
                 late_finish_check: config

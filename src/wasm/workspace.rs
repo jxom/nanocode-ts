@@ -183,6 +183,7 @@ impl ShellExecutor for HostShell {
                         session_id: None,
                         original_token_count: Some(original),
                         output,
+                        time_left_seconds: None,
                     }
                 }
                 Err(error) => ExecCommandResult::failed(elapsed(), error),

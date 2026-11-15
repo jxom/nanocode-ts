@@ -110,6 +110,7 @@ export type SessionDescriptor = SessionAuthority & {
   brief_finish?: boolean
   escalate?: Contracts.Escalate
   fold_finish?: boolean
+  finish_check_min_requests?: number
   late_finish_check_ms?: number
   lean_cells?: boolean
   low_effort_rounds?: boolean
@@ -1144,7 +1145,11 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           return json({ error: 'tool_result_tokens must be a positive whole number' }, 400)
         if (input.result_effort !== undefined && !resultEfforts.includes(input.result_effort))
           return json({ error: `result_effort must be one of ${resultEfforts.join(', ')}` }, 400)
-        for (const limit of ['late_finish_check_ms', 'yield_floor_ms'] as const)
+        for (const limit of [
+          'finish_check_min_requests',
+          'late_finish_check_ms',
+          'yield_floor_ms',
+        ] as const)
           if (
             input[limit] !== undefined &&
             !(Number.isSafeInteger(input[limit]) && input[limit] > 0)
@@ -1328,6 +1333,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           descriptor.deadline = input.deadline
           descriptor.escalate = input.escalate
           descriptor.tool_result_tokens = input.tool_result_tokens
+          descriptor.finish_check_min_requests = input.finish_check_min_requests
           descriptor.late_finish_check_ms = input.late_finish_check_ms
           descriptor.result_effort = input.result_effort
           descriptor.yield_floor_ms = input.yield_floor_ms
@@ -2286,6 +2292,9 @@ ${input.request_id}`
         ...(descriptor.tool_result_tokens === undefined
           ? []
           : [{ tool_result_tokens: descriptor.tool_result_tokens }]),
+        ...(descriptor.finish_check_min_requests === undefined
+          ? []
+          : [{ finish_check_min_requests: descriptor.finish_check_min_requests }]),
         ...(descriptor.late_finish_check_ms === undefined
           ? []
           : [{ late_finish_check_ms: descriptor.late_finish_check_ms }]),
@@ -2547,6 +2556,9 @@ ${input.request_id}`
               ...(descriptor.tool_result_tokens === undefined
                 ? {}
                 : { tool_result_tokens: descriptor.tool_result_tokens }),
+              ...(descriptor.finish_check_min_requests === undefined
+                ? {}
+                : { finish_check_min_requests: descriptor.finish_check_min_requests }),
               ...(descriptor.late_finish_check_ms === undefined
                 ? {}
                 : { late_finish_check_ms: descriptor.late_finish_check_ms }),
