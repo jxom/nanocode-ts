@@ -102,6 +102,7 @@ export type AgentConfiguration = {
   event_coalesce_ms?: number
   live_deltas?: boolean
   stream_tool_input?: boolean
+  headless?: boolean
   auto_compact_window_tokens?: number
   environment?: AgentEnvironment
   tools?: HostTool[]

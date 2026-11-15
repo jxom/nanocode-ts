@@ -208,6 +208,8 @@ struct Configuration {
     #[serde(default)]
     stream_tool_input: bool,
     #[serde(default)]
+    headless: bool,
+    #[serde(default)]
     auto_compact_window_tokens: Option<u64>,
     #[serde(default)]
     environment: Option<Environment>,
@@ -876,6 +878,7 @@ fn codex_harness(
     hedging: Arc<Hedging>,
     model: Model,
     stream_tool_input: bool,
+    headless: bool,
     auto_compact_window_tokens: Option<u64>,
     environment: Option<ExecutionEnvironment>,
     orchestration: CodexOrchestration,
@@ -930,7 +933,7 @@ fn codex_harness(
         None => openai,
     };
     let client = openai.build().map_err(configuration)?;
-    let harness = CodexHarness::new(client);
+    let harness = CodexHarness::new(client).headless(headless);
     let harness = match orchestration {
         CodexOrchestration::CodeMode | CodexOrchestration::Jobs => harness,
         CodexOrchestration::Direct => harness.direct_tools_for(|_| true),
@@ -1039,6 +1042,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
                 hedging,
                 default,
                 config.stream_tool_input,
+                config.headless,
                 config.auto_compact_window_tokens,
                 codex_environment.as_ref().map(Environment::codex),
                 config.codex_orchestration,
