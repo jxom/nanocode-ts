@@ -3504,11 +3504,13 @@ ${input.request_id}`
     private async planned(scope: string, descriptor: SessionDescriptor): Promise<void> {
       const provider = this.metadata.get(`model_provider:${scope}`)
       if (provider === undefined) return
-      await this.subscribe(
-        descriptor,
-        provider as Contracts.ModelProvider,
-        this.metadata.get(`payer:${scope}`),
-      )
+      const payer = this.metadata.get(`payer:${scope}`)
+      if (plans && payer === 'plan') {
+        if (provider === 'codex') descriptor.codex_subscription = true
+        else descriptor.subscription = true
+        return
+      }
+      await this.subscribe(descriptor, provider as Contracts.ModelProvider, payer)
     }
 
     private bound(scope: string, base: SessionDescriptor): SessionDescriptor {
