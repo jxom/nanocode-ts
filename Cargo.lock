@@ -499,6 +499,7 @@ dependencies = [
  "nanocode-agent-core",
  "nanocode-agent-types",
  "nanocode-audio",
+ "nanocode-bytes",
  "nanocode-compression",
  "nanocode-digest",
  "nanocode-executor",
