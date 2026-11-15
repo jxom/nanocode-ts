@@ -103,10 +103,12 @@ export type SessionDescriptor = SessionAuthority & {
   refusal_fallback?: Contracts.RefusalFallback
   brief_final?: boolean
   brief_finish?: boolean
+  escalate?: Contracts.Escalate
   fold_finish?: boolean
   lean_cells?: boolean
   low_effort_rounds?: boolean
   subagents?: boolean
+  tool_result_tokens?: number
   session_name: string
   subscription: boolean
   codex_subscription?: boolean
@@ -1121,6 +1123,34 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
         for (const lever of finishLevers)
           if (input[lever] !== undefined && typeof input[lever] !== 'boolean')
             return json({ error: `${lever} must be a boolean` }, 400)
+        if (
+          input.tool_result_tokens !== undefined &&
+          !(Number.isSafeInteger(input.tool_result_tokens) && input.tool_result_tokens > 0)
+        )
+          return json({ error: 'tool_result_tokens must be a positive whole number' }, 400)
+        if (
+          input.escalate !== undefined &&
+          !(
+            typeof input.escalate?.model === 'string' &&
+            input.escalate.model.length > 0 &&
+            (input.escalate.context_tokens !== undefined ||
+              input.escalate.tool_errors !== undefined) &&
+            [input.escalate.context_tokens, input.escalate.tool_errors].every(
+              (value: unknown) =>
+                value === undefined || (Number.isSafeInteger(value) && (value as number) > 0),
+            ) &&
+            Object.keys(input.escalate).every((key) =>
+              ['context_tokens', 'model', 'tool_errors'].includes(key),
+            )
+          )
+        )
+          return json(
+            {
+              error:
+                'escalate must be { model, context_tokens?, tool_errors? } with a model and at least one positive whole trigger',
+            },
+            400,
+          )
         if (input.subagents === true && options.subagents === false)
           return json({ error: 'subagents are disabled for this app' }, 400)
         if (input.payer !== undefined && !offered.includes(input.payer))
@@ -1265,6 +1295,8 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
             return json({ error: 'session subagents is immutable; create a new session' }, 409)
           descriptor.subagents = input.subagents ?? sessionSubagents
           descriptor.deadline = input.deadline
+          descriptor.escalate = input.escalate
+          descriptor.tool_result_tokens = input.tool_result_tokens
           descriptor.refusal_fallback = input.refusal_fallback
           for (const lever of finishLevers) descriptor[lever] = input[lever]
           descriptor.thinking = input.thinking
@@ -2215,6 +2247,10 @@ ${input.request_id}`
         descriptor.claude_orchestration ?? 'code_mode',
         ...(descriptor.refusal_fallback === undefined ? [] : [descriptor.refusal_fallback]),
         ...finishLevers.filter((lever) => descriptor[lever] === true),
+        ...(descriptor.escalate === undefined ? [] : [descriptor.escalate]),
+        ...(descriptor.tool_result_tokens === undefined
+          ? []
+          : [{ tool_result_tokens: descriptor.tool_result_tokens }]),
       ])
     }
 
@@ -2462,6 +2498,10 @@ ${input.request_id}`
                 ? {}
                 : { codex_orchestration: descriptor.codex_orchestration }),
               ...(descriptor.deadline === undefined ? {} : { deadline: descriptor.deadline }),
+              ...(descriptor.escalate === undefined ? {} : { escalate: descriptor.escalate }),
+              ...(descriptor.tool_result_tokens === undefined
+                ? {}
+                : { tool_result_tokens: descriptor.tool_result_tokens }),
               ...(descriptor.refusal_fallback === undefined
                 ? {}
                 : { refusal_fallback: descriptor.refusal_fallback }),

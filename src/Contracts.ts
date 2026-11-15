@@ -51,6 +51,12 @@ export type CodexOrchestration = 'code_mode' | 'direct' | 'jobs'
 
 export type Deadline = { at_ms: number; limit_ms: number }
 
+export type Escalate = {
+  context_tokens?: number | undefined
+  model: string
+  tool_errors?: number | undefined
+}
+
 export type RefusalFallback = 'return_once' | 'session'
 
 export type ReasoningMode = 'standard' | 'pro'
@@ -101,11 +107,13 @@ export type AgentConfiguration = {
   refusal_fallback?: RefusalFallback
   brief_final?: boolean
   brief_finish?: boolean
+  escalate?: Escalate
   fold_finish?: boolean
   lean_cells?: boolean
   low_effort_rounds?: boolean
   service_tier?: ServiceTier
   subagents?: boolean
+  tool_result_tokens?: number
   remote_children?: boolean
   child_lineage?: unknown
   hedge?: { cap_percent?: number; floor_ms?: number; window?: number }

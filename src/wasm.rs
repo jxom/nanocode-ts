@@ -209,6 +209,10 @@ struct Configuration {
     #[serde(default)]
     deadline: Option<Deadline>,
     #[serde(default)]
+    escalate: Option<Escalate>,
+    #[serde(default)]
+    tool_result_tokens: Option<std::num::NonZeroU64>,
+    #[serde(default)]
     refusal_fallback: RefusalFallback,
     #[serde(default)]
     brief_final: bool,
@@ -277,6 +281,38 @@ struct Configuration {
 struct AttachedHand {
     connection: String,
     hand: String,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Escalate {
+    #[serde(default)]
+    context_tokens: Option<std::num::NonZeroU64>,
+    model: String,
+    #[serde(default)]
+    tool_errors: Option<std::num::NonZeroU32>,
+}
+
+impl Escalate {
+    fn escalation(self) -> Result<nanocode::claude::Escalation, Opening> {
+        let trigger = match (self.context_tokens, self.tool_errors) {
+            (Some(context_tokens), Some(tool_errors)) => nanocode::claude::EscalationTrigger::Either {
+                context_tokens,
+                tool_errors,
+            },
+            (Some(context_tokens), None) => {
+                nanocode::claude::EscalationTrigger::ContextTokens(context_tokens)
+            }
+            (None, Some(tool_errors)) => nanocode::claude::EscalationTrigger::ToolErrors(tool_errors),
+            (None, None) => {
+                return Err(configuration("escalate needs context_tokens or tool_errors"));
+            }
+        };
+        Ok(nanocode::claude::Escalation {
+            model: self.model,
+            trigger,
+        })
+    }
 }
 
 #[derive(Clone, Copy, Deserialize)]
@@ -908,6 +944,8 @@ fn claude_harness(
     orchestration: ClaudeOrchestration,
     refusal_fallback: RefusalFallback,
     levers: FinishLevers,
+    escalation: Option<nanocode::claude::Escalation>,
+    tool_result_tokens: Option<std::num::NonZeroU64>,
     instructions: &dyn Fn(Option<&str>) -> String,
 ) -> (ClaudeHarness, ClaudeClient) {
     let http = nanocode::claude::transport::HttpClient::new(
@@ -939,6 +977,12 @@ fn claude_harness(
             .fold_finish(levers.fold_finish)
             .lean_cells(levers.lean_cells)
             .low_effort_rounds(levers.low_effort_rounds);
+        if let Some(escalation) = &escalation {
+            claude = claude.escalate(escalation.clone());
+        }
+        if let Some(limit) = tool_result_tokens {
+            claude = claude.tool_result_tokens(limit);
+        }
         if let Some(environment) = &environment {
             claude = claude.environment(environment.clone());
         }
@@ -1086,6 +1130,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
     let (claude, codex) = config.endpoints().map_err(configuration)?;
     let hedging = hedging(&config.hedge)?;
     let claude_search_tokens = claude.as_ref().map(|endpoint| endpoint.max_tokens);
+    let escalation = config.escalate.take().map(Escalate::escalation).transpose()?;
     let claude = claude.map(|endpoint| {
         let (harness, client) = claude_harness(
             endpoint,
@@ -1104,6 +1149,8 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
                 lean_cells: config.lean_cells,
                 low_effort_rounds: config.low_effort_rounds,
             },
+            escalation,
+            config.tool_result_tokens,
             &instructions,
         );
         let harness = harness.headless(config.headless);
