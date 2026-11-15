@@ -28,6 +28,7 @@ export type HandEnvironment = {
   platform?: string
   os_version?: string
   shell?: string
+  git_repository?: boolean
 }
 
 export type HandPermission = 'granted' | 'prompt' | 'denied'
