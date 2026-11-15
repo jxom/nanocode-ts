@@ -176,7 +176,8 @@ const pythonRemoteBytes = 256 * 1024 * 1024
 const pythonStepsPerMs = 42_000
 const pythonCpuMs = 5_000
 
-const workersAiModels = new Set(['glm-5.3'])
+const workersAiModel = (model: string | undefined): boolean =>
+  model === 'glm-5.3' || (model?.startsWith('@cf/') ?? false)
 
 export type Principal = {
   account: string
@@ -541,6 +542,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
     payer !== 'deployment' &&
     payer !== 'wallet' &&
     subscribed &&
+    !(provider === 'codex' && workersAiModel(model)) &&
     (!plans || PlanModels.serves(provider, model))
   const offered: readonly Contracts.Payer[] =
     options.payers ?? (plans || options.subscription ? ['deployment', 'plan'] : ['deployment'])
@@ -975,7 +977,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
                 ? 'gpt-6.1-sol'
                 : (this.env.CLAUDE_MODEL ?? 'claude-opus-5-5'))
           const opened = this.prewarm(scope, descriptor, provider, model).catch(() => false)
-          if (provider === 'codex' && workersAiModels.has(model)) {
+          if (provider === 'codex' && workersAiModel(model)) {
             await Promise.all([instance, opened])
             return new Response(null, { status: 204 })
           }
@@ -1328,7 +1330,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           if (current && current !== identity) throw new Error('session authority mismatch')
           const images =
             options.workspace === false ||
-            (descriptor.provider === 'codex' && workersAiModels.has(descriptor.model ?? ''))
+            (descriptor.provider === 'codex' && workersAiModel(descriptor.model))
               ? []
               : await Files.promptImages(
                   SqlFileSystem.create(this.store, { scope }),
@@ -2446,7 +2448,7 @@ ${input.request_id}`
                 descriptor.provider === 'codex'
                   ? codexEndpoint
                   : `https://api.anthropic.com/v1/messages${descriptor.subscription ? '?beta=true' : ''}`,
-              ...(descriptor.provider === 'codex' && workersAiModels.has(descriptor.model ?? '')
+              ...(descriptor.provider === 'codex' && workersAiModel(descriptor.model)
                 ? {
                     gateway: 'workers_ai' as const,
                     cloudflare_account_id: this.env.WORKERS_AI_ACCOUNT_ID,
@@ -3739,7 +3741,7 @@ ${input.request_id}`
       if (this.env.MODEL_PRIME_IDLE_MS === undefined) return
       if (payer === 'plan' || payer === 'wallet') return
       const primed = models.filter(
-        (entry) => typeof entry[1] !== 'string' || !workersAiModels.has(entry[1]),
+        (entry) => typeof entry[1] !== 'string' || !workersAiModel(entry[1]),
       )
       if (!primed.length) return
       const idle = policy(this.env.MODEL_PRIME_IDLE_MS, 'MODEL_PRIME_IDLE_MS')
@@ -4827,7 +4829,7 @@ ${input.request_id}`
     const provider = input?.provider ?? 'claude'
     if (provider !== 'claude' && provider !== 'codex') return
     if (input?.payer === 'plan' || input?.payer === 'wallet') return
-    if (typeof input?.model === 'string' && workersAiModels.has(input.model)) return
+    if (typeof input?.model === 'string' && workersAiModel(input.model)) return
     const at = primed.get(provider)
     if (
       at !== undefined &&
