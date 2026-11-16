@@ -119,6 +119,7 @@ export type AgentConfiguration = {
   brief_finish?: boolean
   escalate?: Escalate
   fold_finish?: boolean
+  finish_ambiguity?: boolean
   finish_check?: boolean
   finish_check_min_requests?: number
   finish_retries?: number

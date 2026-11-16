@@ -96,6 +96,7 @@ impl CodexOptions {
 struct FinishLevers {
     brief_final: bool,
     brief_finish: bool,
+    finish_ambiguity: bool,
     finish_check: bool,
     finish_check_min_requests: Option<std::num::NonZeroU32>,
     finish_retries: Option<std::num::NonZeroU32>,
@@ -263,6 +264,8 @@ struct Configuration {
     low_effort_rounds: bool,
     #[serde(default)]
     persist_finish: bool,
+    #[serde(default)]
+    finish_ambiguity: bool,
     #[serde(default)]
     finish_check: bool,
     #[serde(default)]
@@ -1042,6 +1045,7 @@ fn claude_harness(
             })
             .brief_final(levers.brief_final)
             .brief_finish(levers.brief_finish)
+            .finish_ambiguity(levers.finish_ambiguity)
             .finish_check(levers.finish_check)
             .fold_finish(levers.fold_finish)
             .lean_cells(levers.lean_cells)
@@ -1255,6 +1259,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
             FinishLevers {
                 brief_final: config.brief_final,
                 brief_finish: config.brief_finish,
+                finish_ambiguity: config.finish_ambiguity,
                 finish_check: config.finish_check,
                 finish_check_min_requests: config.finish_check_min_requests,
                 finish_retries: config.finish_retries,
