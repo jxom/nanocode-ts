@@ -131,6 +131,7 @@ export type AgentConfiguration = {
   lean_cells?: boolean
   low_effort_rounds?: boolean
   persist_finish?: boolean
+  omit_media_on_empty_cut?: boolean
   persistence_nudge?: boolean
   result_effort?: Effort
   service_tier?: ServiceTier

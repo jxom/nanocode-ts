@@ -109,6 +109,7 @@ struct FinishLevers {
     low_effort_rounds: bool,
     persist_finish: bool,
     persistence_nudge: bool,
+    omit_media_on_empty_cut: bool,
     result_effort: Option<nanocode::claude::Effort>,
     skip_finish_check: bool,
     stop_at_target: bool,
@@ -275,6 +276,8 @@ struct Configuration {
     persist_finish: bool,
     #[serde(default)]
     persistence_nudge: bool,
+    #[serde(default)]
+    omit_media_on_empty_cut: bool,
     #[serde(default)]
     clearing_cache_floors: bool,
     #[serde(default)]
@@ -1112,6 +1115,7 @@ fn claude_harness(
             .low_effort_rounds(levers.low_effort_rounds)
             .persist_finish(levers.persist_finish)
             .persistence_nudge(levers.persistence_nudge)
+            .omit_media_on_empty_cut(levers.omit_media_on_empty_cut)
             .skip_finish_check(levers.skip_finish_check)
             .stop_at_target(levers.stop_at_target);
         if let Some(min_left) = levers.late_finish_check {
@@ -1340,6 +1344,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
                 low_effort_rounds: config.low_effort_rounds,
                 persist_finish: config.persist_finish,
                 persistence_nudge: config.persistence_nudge,
+                omit_media_on_empty_cut: config.omit_media_on_empty_cut,
                 result_effort: config.result_effort,
                 skip_finish_check: config.skip_finish_check,
                 stop_at_target: config.stop_at_target,

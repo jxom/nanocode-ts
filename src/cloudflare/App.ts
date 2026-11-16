@@ -80,6 +80,7 @@ export const finishLevers = [
   'fold_finish',
   'lean_cells',
   'low_effort_rounds',
+  'omit_media_on_empty_cut',
   'persist_finish',
   'persistence_nudge',
   'skip_finish_check',
@@ -141,6 +142,7 @@ export type SessionDescriptor = SessionAuthority & {
   lean_cells?: boolean
   low_effort_rounds?: boolean
   persist_finish?: boolean
+  omit_media_on_empty_cut?: boolean
   persistence_nudge?: boolean
   result_effort?: Contracts.Effort
   skip_finish_check?: boolean
