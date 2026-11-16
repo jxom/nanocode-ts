@@ -108,6 +108,7 @@ struct FinishLevers {
     late_finish_check: Option<Duration>,
     low_effort_rounds: bool,
     persist_finish: bool,
+    persistence_nudge: bool,
     result_effort: Option<nanocode::claude::Effort>,
     skip_finish_check: bool,
     stop_at_target: bool,
@@ -269,6 +270,8 @@ struct Configuration {
     low_effort_rounds: bool,
     #[serde(default)]
     persist_finish: bool,
+    #[serde(default)]
+    persistence_nudge: bool,
     #[serde(default)]
     clearing_cache_floors: bool,
     #[serde(default)]
@@ -1066,6 +1069,7 @@ fn claude_harness(
             .lean_cells(levers.lean_cells)
             .low_effort_rounds(levers.low_effort_rounds)
             .persist_finish(levers.persist_finish)
+            .persistence_nudge(levers.persistence_nudge)
             .skip_finish_check(levers.skip_finish_check)
             .stop_at_target(levers.stop_at_target);
         if let Some(min_left) = levers.late_finish_check {
@@ -1293,6 +1297,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
                     .map(|ms| Duration::from_millis(ms.get())),
                 low_effort_rounds: config.low_effort_rounds,
                 persist_finish: config.persist_finish,
+                persistence_nudge: config.persistence_nudge,
                 result_effort: config.result_effort,
                 skip_finish_check: config.skip_finish_check,
                 stop_at_target: config.stop_at_target,

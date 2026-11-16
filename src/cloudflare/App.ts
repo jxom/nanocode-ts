@@ -81,6 +81,7 @@ export const finishLevers = [
   'lean_cells',
   'low_effort_rounds',
   'persist_finish',
+  'persistence_nudge',
   'skip_finish_check',
   'stop_at_target',
 ] as const
@@ -140,6 +141,7 @@ export type SessionDescriptor = SessionAuthority & {
   lean_cells?: boolean
   low_effort_rounds?: boolean
   persist_finish?: boolean
+  persistence_nudge?: boolean
   result_effort?: Contracts.Effort
   skip_finish_check?: boolean
   stop_at_target?: boolean
