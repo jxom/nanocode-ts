@@ -63,6 +63,13 @@ export function walletEndpoint(provider: Contracts.ModelProvider): string {
   return provider === 'codex' ? Tempo.endpoint : Tempo.anthropic
 }
 
+export function preconnect(): Promise<void> {
+  return fetch(new URL(url()).origin, { method: 'HEAD', redirect: 'manual' }).then(
+    (response) => response.body?.cancel(),
+    () => undefined,
+  )
+}
+
 export function url(): string {
   return process.env.AI_GATEWAY_BASE_URL ?? 'https://ai-gateway.vercel.sh'
 }

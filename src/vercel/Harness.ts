@@ -168,6 +168,7 @@ export function create(options: create.Options = {}): Harness {
     journal: Journal.Journal,
     session: Session,
     counts: { model_requests: number; tool_calls: number; models: ModelCall[]; open_ms: number },
+    arrived: Promise<void> | undefined,
   ): Promise<void> {
     const opening = performance.now()
     const publish = publisher(ctx)
@@ -351,6 +352,10 @@ export function create(options: create.Options = {}): Harness {
         await runtime.attach(handName, connection)
       }
       counts.open_ms = performance.now() - opening
+      if (arrived) {
+        if (!plan && !wallet && !options.endpoint) void Gateway.preconnect()
+        await arrived
+      }
       let applied: Contracts.Thinking | undefined
       const placed = new Set<string>()
       let read = ctx.pending().length > 0
@@ -434,8 +439,16 @@ export function create(options: create.Options = {}): Harness {
       const counts = { model_requests: 0, tool_calls: 0, models: [] as ModelCall[], open_ms: 0 }
       let outcome: DriveReport['outcome'] = 'idle'
       let failure: unknown
+      const warm =
+        ctx.onHint && ctx.state().submissions.length === 0 ? options.warmed?.(ctx.runId) : undefined
+      const arrived = warm ? arrival(ctx, warm) : undefined
       try {
-        if (ctx.pending().length === 0 && isIdle(ctx.state(), { batches: journal.batches })) return
+        if (
+          !arrived &&
+          ctx.pending().length === 0 &&
+          isIdle(ctx.state(), { batches: journal.batches })
+        )
+          return
         const chosen = (
           ctx.config as
             | {
@@ -489,13 +502,14 @@ export function create(options: create.Options = {}): Harness {
         })
         if (derived) recorded.catch((error: unknown) => ctx.halt?.(error))
         const session = derived ? chosenSession : await recorded
-        await run(ctx, journal, session, counts)
+        await run(ctx, journal, session, counts, arrived)
         await recorded
         if (ctx.signal.aborted) {
           outcome = 'stopped'
           throw ctx.signal.reason
         }
         await journal.settle()
+        if (arrived && ctx.state().submissions.length === 0) return
         ctx.live({ type: 'idle' })
         outcome = 'settled'
       } catch (error) {
@@ -571,6 +585,7 @@ export declare namespace create {
     thinking?: Contracts.AgentConfiguration['thinking']
     tools?: HostTool[]
     wallet?(sessionId: string): Gateway.Dispatch
+    warmed?(sessionId: string): AbortSignal | undefined
     workspace?:
       | false
       | {
@@ -904,6 +919,25 @@ async function callTool(
     ctx.halt?.(error)
     throw error
   }
+}
+
+function arrival(ctx: DriveContext, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const done = () => {
+      off?.()
+      signal.removeEventListener('abort', done)
+      ctx.signal.removeEventListener('abort', done)
+      resolve()
+    }
+    const off = ctx.onHint?.((hint) => {
+      if (hint.eventType === 'hook_received') void ctx.refresh().then(done, done)
+    })
+    signal.addEventListener('abort', done, { once: true })
+    ctx.signal.addEventListener('abort', done, { once: true })
+    void ctx.refresh().then(() => {
+      if (signal.aborted || ctx.pending().length > 0) done()
+    }, done)
+  })
 }
 
 function changed(runtime: AgentRuntime.AgentRuntime, signal: AbortSignal): Promise<void> {

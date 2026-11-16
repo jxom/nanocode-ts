@@ -176,6 +176,7 @@ export function create(options: create.Options) {
     payers: chosenPayers,
     payerHarnesses,
     replicaBytes,
+    warmDriveMs,
     ...rest
   } = options
   const hands = chosenHands ?? {}
@@ -196,6 +197,7 @@ export function create(options: create.Options) {
   const replicas =
     replicaBytes === undefined ? undefined : Journal.replicas({ bytes: replicaBytes })
   const kernel = durability === 'on' && runAhead === true ? 'on' : 'strict'
+  const warming = new Map<string, AbortSignal>()
   const agent = durableAgent({
     harness: Harness.create({
       subagents: true,
@@ -206,6 +208,7 @@ export function create(options: create.Options) {
       thinking: defaultSelection.thinking,
       durability,
       ...(replicas ? { replicas } : {}),
+      ...(warmDriveMs ? { warmed: (id: string) => warming.get(id) } : {}),
     }),
     durability: kernel,
     marks: marks ?? false,
@@ -543,6 +546,12 @@ export function create(options: create.Options) {
       const started = await start(request, body)
       if (started instanceof Response) return started
       void Wasm.load()
+      if (warmDriveMs) {
+        warming.set(started.sessionId, AbortSignal.timeout(warmDriveMs))
+        waitUntil(
+          sessions.drive(started.sessionId).finally(() => warming.delete(started.sessionId)),
+        )
+      }
       return Response.json(started)
     }
     if (body.sessionId !== undefined || typeof body.text !== 'string' || !body.text)
@@ -590,7 +599,7 @@ export function create(options: create.Options) {
 export declare namespace create {
   type Options = Omit<
     Harness.create.Options,
-    'provider' | 'model' | 'thinking' | 'tools' | 'durability' | 'replicas'
+    'provider' | 'model' | 'thinking' | 'tools' | 'durability' | 'replicas' | 'warmed'
   > & {
     account?(request: Request): string | null | undefined | Promise<string | null | undefined>
     authorize?: Authorize
@@ -610,5 +619,6 @@ export declare namespace create {
     runAhead?: boolean
     tools?: HostTool[]
     traceAudience?: string
+    warmDriveMs?: number
   }
 }
