@@ -146,7 +146,7 @@ export function ToolCell(props: ToolCell.Props) {
           text={output}
         />
       )}
-      {shown && images.length > 0 && (
+      {(shown || !nested) && images.length > 0 && (
         <div {...part('images', { nested })}>
           {images.map((src, index) => (
             <Image alt={`${cell.name} image ${index + 1}`} key={index} src={src} />
