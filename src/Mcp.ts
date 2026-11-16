@@ -33,6 +33,8 @@ const encoder = new TextEncoder()
 
 const decoder = new TextDecoder()
 
+const failures = new Map<string, { at: number; error: unknown }>()
+
 const listings = new Map<string, Listing>()
 
 const refreshing = new Set<string>()
@@ -250,8 +252,21 @@ export function defer<R extends Request, A extends unknown[]>(
           return reply(body.id, shared.init, 'store ' + (Date.now() - read))
         }
 
+        const failure = failures.get(url)
+        if (
+          failure &&
+          policy.failureMs !== undefined &&
+          Date.now() - failure.at <= policy.failureMs
+        )
+          throw failure.error
+
         const at = Date.now()
-        const response = await send(request, signal, ...rest)
+        const response = await send(request, signal, ...rest).catch((error: unknown) => {
+          if (policy.failureMs !== undefined && !signal.aborted)
+            failures.set(url, { at: Date.now(), error })
+          throw error
+        })
+        failures.delete(url)
         if (!response.ok || response.headers.has('mcp-session-id')) {
           if (response.headers.has('mcp-session-id'))
             listings.set(url, { at: Date.now(), stateful: true })

@@ -555,7 +555,7 @@ export type RuntimeOptions = {
   }
   workspace?: WorkspaceHost
   fetch?(input: string, init: RequestInit, subagent: Subagent | null): Promise<Response>
-  mcp?: { cacheMs?: number; staleMs?: number; store?: McpStore }
+  mcp?: { cacheMs?: number; failureMs?: number; staleMs?: number; store?: McpStore }
   remote?: {
     failed?(): boolean
     execute(request: RemoteRequest, id: number): Promise<unknown>
