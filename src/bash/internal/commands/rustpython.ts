@@ -1,6 +1,6 @@
-import { FsError, type FileStat, type SyncFileSystem } from '../../FileSystem.ts'
-import { decode, encode } from '../Fs.ts'
-import { CommandError, type CommandContext } from '../Shell.ts'
+import { FsError, type FileStat, type FileSystem, type SyncFileSystem } from '../../FileSystem.ts'
+import { decode, encode, parentOf } from '../Fs.ts'
+import { CommandError, budget, type CommandContext, type Limits } from '../Shell.ts'
 
 type Exports = {
   memory: WebAssembly.Memory
@@ -19,6 +19,8 @@ type Instance = {
   spawn: Spawn | undefined
   stopped: () => boolean
 }
+
+export type Changes = { deleted: string[]; dirs: string[]; files: Map<string, Uint8Array> }
 
 export type Child = {
   argv: string[]
@@ -225,6 +227,283 @@ function instantiate(module: WebAssembly.Module): Instance {
   state.exports = new WebAssembly.Instance(module, imports).exports as unknown as Exports
   state.initial = state.exports.memory.buffer.byteLength
   return state
+}
+
+export function layered(
+  fs: FileSystem,
+  options: { limits: Limits },
+): {
+  changes(): Changes
+  fetch(): Promise<void>
+  files: SyncFileSystem
+  missed(): boolean
+  reset(): void
+} {
+  const stats = new Map<string, FileStat | null>()
+  const names = new Map<string, string[]>()
+  const bytes = new Map<string, Uint8Array>()
+  const trees = new Set<string>()
+  const batched = new Set<string>()
+  const wanted = {
+    list: new Set<string>(),
+    read: new Set<string>(),
+    stat: new Set<string>(),
+    tree: new Set<string>(),
+  }
+  let held = 0
+  let missing = false
+  let files = new Map<string, Uint8Array>()
+  let dirs = new Set<string>()
+  let gone = new Set<string>()
+  let touched = new Set<string>()
+  let made = new Set<string>()
+  const miss = (set: Set<string>, path: string) => {
+    set.add(path)
+    missing = true
+    return new FsError('EIO', path)
+  }
+  const hidden = (path: string) => {
+    if (files.has(path) || dirs.has(path)) return false
+    for (let at = path; ; at = parentOf(at)) {
+      if (gone.has(at)) return true
+      if (at === '/') return false
+    }
+  }
+  const kind = (path: string): 'file' | 'directory' | undefined => {
+    if (files.has(path)) return 'file'
+    if (dirs.has(path)) return 'directory'
+    if (hidden(path)) return undefined
+    if (!stats.has(path)) throw miss(wanted.stat, path)
+    return stats.get(path)?.kind
+  }
+  const read = (path: string) => {
+    const own = files.get(path)
+    if (own) return own
+    const found = kind(path)
+    if (found !== 'file') throw new FsError(found ? 'EISDIR' : 'ENOENT', path)
+    const data = bytes.get(path)
+    if (!data) throw miss(wanted.read, path)
+    return data
+  }
+  const list = (path: string) => {
+    const found = kind(path)
+    if (found !== 'directory') throw new FsError(found ? 'ENOTDIR' : 'ENOENT', path)
+    const listed = new Set<string>()
+    if (!made.has(path) && !hidden(path)) {
+      const base = names.get(path)
+      if (!base) throw miss(wanted.list, path)
+      for (const name of base) if (!hidden(join(path, name))) listed.add(name)
+    }
+    for (const key of [...files.keys(), ...dirs])
+      if (key !== '/' && parentOf(key) === path)
+        listed.add(key.slice(path === '/' ? 1 : path.length + 1))
+    return [...listed].sort()
+  }
+  const parent = (path: string) => {
+    if (kind(parentOf(path)) !== 'directory') throw new FsError('ENOENT', path)
+  }
+  const remove = (path: string) => {
+    files.delete(path)
+    dirs.delete(path)
+    touched.delete(path)
+    made.delete(path)
+    gone.add(path)
+  }
+  const write = (path: string, data: Uint8Array, append?: boolean) => {
+    if (kind(path) === 'directory') throw new FsError('EISDIR', path)
+    parent(path)
+    const before = append && kind(path) === 'file' ? read(path) : undefined
+    const joined = before ? new Uint8Array(before.length + data.length) : data
+    if (before) {
+      joined.set(before)
+      joined.set(data, before.length)
+    }
+    files.set(path, joined)
+    touched.add(path)
+  }
+  const copy = (from: string, to: string) => {
+    if (kind(from) === 'file') return write(to, read(from))
+    dirs.add(to)
+    made.add(to)
+    for (const name of list(from)) copy(join(from, name), join(to, name))
+  }
+  const weight = (paths: readonly string[]) =>
+    paths.reduce((total, path) => total + encode(path).length, 0)
+  const keepStat = (path: string, stat: FileStat | null) => {
+    if (!stats.has(path)) held += encode(path).length
+    stats.set(path, stat)
+  }
+  const keepNames = (path: string, children: string[]) => {
+    held += weight(children) - weight(names.get(path) ?? [])
+    names.set(path, children)
+  }
+  const keepBytes = (path: string, data: Uint8Array) => {
+    held += data.length - (bytes.get(path)?.length ?? 0)
+    bytes.set(path, data)
+  }
+  const fits = (more: number) => held + more <= options.limits.maxMemoryBytes
+  const linked = async (path: string) => (await fs.lstat?.(path))?.kind === 'symlink'
+  const prefetch = async (root: string): Promise<void> => {
+    trees.add(root)
+    let level = [root]
+    while (level.length) {
+      const fresh = level.filter((path) => !names.has(path))
+      const lists = await Promise.all(fresh.map((path) => fs.list(path)))
+      const listed = new Map(fresh.map((path, index) => [path, lists[index] ?? []] as const))
+      const children = level.flatMap((path) =>
+        (listed.get(path) ?? names.get(path) ?? []).map((name) => join(path, name)),
+      )
+      const unknown = children.filter((path) => !stats.has(path))
+      const found = await Promise.all(unknown.map((path) => fs.stat(path)))
+      if (!fits(weight(lists.flat()) + weight(unknown))) return
+      for (const [path, entries] of listed) keepNames(path, entries)
+      unknown.forEach((path, index) => keepStat(path, found[index] ?? null))
+      const below = children.filter((path) => stats.get(path)?.kind === 'directory')
+      const links = await Promise.all(below.map(linked))
+      level = below.filter((_path, index) => !links[index])
+    }
+  }
+  const filesIn = (dir: string) =>
+    (names.get(dir) ?? [])
+      .map((name) => join(dir, name))
+      .filter((path) => stats.get(path)?.kind === 'file')
+  const filesUnder = (root: string) =>
+    [...stats]
+      .filter((entry) => entry[1]?.kind === 'file' && within(entry[0], root))
+      .map((entry) => entry[0])
+  const batch = (path: string): string[] => {
+    const dir = parentOf(path)
+    const root = batched.size > 1 ? [...trees].find((tree) => within(path, tree)) : undefined
+    const pools = [
+      root ? filesUnder(root) : [],
+      filesIn(dir).some((sibling) => bytes.has(sibling)) ? filesIn(dir) : [],
+    ].map((pool) => pool.filter((file) => !bytes.has(file)))
+    const pool = pools.find(
+      (files) =>
+        files.includes(path) &&
+        fits(files.reduce((total, file) => total + (stats.get(file)?.size ?? 0), 0)),
+    )
+    if (!pool) return [path]
+    batched.add(dir)
+    return pool
+  }
+  const fetchTree = async (path: string): Promise<void> => {
+    const stat = stats.has(path) ? stats.get(path) : await fs.stat(path)
+    keepStat(path, stat ?? null)
+    if (stat?.kind === 'file' && !bytes.has(path)) keepBytes(path, await fs.read(path))
+    if (stat?.kind !== 'directory') return
+    const children = names.get(path) ?? (await fs.list(path))
+    keepNames(path, children)
+    for (const name of children) await fetchTree(join(path, name))
+  }
+  const fetchAll = async (paths: readonly string[]) => {
+    const data = await Promise.all(paths.map((path) => fs.read(path)))
+    paths.forEach((path, index) => keepBytes(path, data[index] ?? new Uint8Array()))
+  }
+  const checked = () =>
+    budget(
+      options.limits,
+      held,
+      'the ' + stats.size + ' paths and ' + bytes.size + ' files this Python run used',
+    )
+  return {
+    changes: () => ({
+      deleted: [...gone].filter((path) => kind(path) === undefined),
+      dirs: [...made].filter((path) => dirs.has(path)),
+      files: new Map(
+        [...touched].flatMap((path) => {
+          const data = files.get(path)
+          return data ? [[path, data] as const] : []
+        }),
+      ),
+    }),
+    async fetch() {
+      for (const path of wanted.stat) keepStat(path, await fs.stat(path))
+      for (const path of wanted.list) {
+        const up = parentOf(path)
+        const siblings = path === '/' ? undefined : names.get(up)
+        if (siblings?.some((name) => join(up, name) !== path && names.has(join(up, name))))
+          await prefetch(up)
+        else if (siblings) await prefetch(path)
+        if (names.has(path)) continue
+        const children = await fs.list(path)
+        keepNames(path, children)
+        for (const name of children) {
+          const child = join(path, name)
+          if (!stats.has(child)) keepStat(child, await fs.stat(child))
+        }
+      }
+      await fetchAll([...new Set([...wanted.read].flatMap(batch))])
+      for (const path of wanted.tree) {
+        await prefetch(path)
+        await fetchAll(filesUnder(path).filter((file) => !bytes.has(file)))
+        await fetchTree(path)
+      }
+      for (const set of Object.values(wanted)) set.clear()
+      checked()
+    },
+    files: {
+      list,
+      mkdir: (path) => {
+        if (kind(path)) throw new FsError('EEXIST', path)
+        parent(path)
+        dirs.add(path)
+        made.add(path)
+      },
+      read,
+      remove: (path) => {
+        if (!kind(path)) throw new FsError('ENOENT', path)
+        remove(path)
+      },
+      rename: (from, to) => {
+        const found = kind(from)
+        if (!found) throw new FsError('ENOENT', from)
+        if (found === 'directory' && !bytes.has(from) && !names.has(from) && !made.has(from))
+          throw miss(wanted.tree, from)
+        parent(to)
+        kind(to)
+        remove(to)
+        try {
+          copy(from, to)
+        } catch (error) {
+          if (missing) wanted.tree.add(from)
+          throw error
+        }
+        remove(from)
+      },
+      stat: (path) => {
+        const found = kind(path)
+        if (!found) return null
+        if (files.has(path))
+          return {
+            kind: 'file',
+            mode: 0o644,
+            mtime: Date.now(),
+            size: files.get(path)?.length ?? 0,
+          }
+        if (dirs.has(path)) return { kind: 'directory', mode: 0o755, mtime: Date.now(), size: 0 }
+        return stats.get(path) ?? null
+      },
+      write,
+    },
+    missed: () => missing,
+    reset() {
+      missing = false
+      files = new Map()
+      dirs = new Set()
+      gone = new Set()
+      touched = new Set()
+      made = new Set()
+    },
+  }
+}
+
+function join(base: string, name: string): string {
+  return base === '/' ? '/' + name : base + '/' + name
+}
+
+function within(path: string, dir: string): boolean {
+  return path === dir || path.startsWith(dir === '/' ? '/' : dir + '/')
 }
 
 function encodeRequest(request: Request, spawns: boolean): Uint8Array {
