@@ -1,5 +1,5 @@
 import * as FileSystem from '../FileSystem.ts'
-import { breathe, decode, encode } from './Fs.ts'
+import { breathe, decode, encode, plain } from './Fs.ts'
 import * as Shell from './Shell.ts'
 
 export type Ended =
@@ -169,6 +169,10 @@ const readEnd = 1 << 16
 const stat = new DataView(new ArrayBuffer(24))
 
 const statView = new Uint8Array(stat.buffer)
+
+const clock = new DataView(new ArrayBuffer(8))
+
+const clockBytes = new Uint8Array(clock.buffer)
 
 const ended: readonly Ended[] = [
   'exited',
@@ -579,9 +583,8 @@ function hostCall(instance: Instance, call: Call): number {
     }
 
     case kind.now: {
-      const now = new Uint8Array(8)
-      new DataView(now.buffer).setFloat64(0, Date.now(), true)
-      return input(instance, now)
+      clock.setFloat64(0, Date.now(), true)
+      return input(instance, clockBytes)
     }
 
     case kind.random: {
@@ -766,7 +769,8 @@ function config(options: run.Options): Uint8Array {
 
 function start(options: run.Options): Uint8Array {
   const out = writer()
-  out.bytes(encode(options.script))
+  if (plain(options.script)) out.string(options.script)
+  else out.bytes(encode(options.script))
   out.string('/bin/bash')
   out.u32(0)
   out.u32(0)

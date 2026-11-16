@@ -81,6 +81,10 @@ export function byte(value: number): string {
   return String.fromCharCode(b < 0x80 ? b : 0xdc00 + b)
 }
 
+export function plain(text: string): boolean {
+  return codec === undefined && wellFormed(text)
+}
+
 export function encode(text: string): Uint8Array {
   if (codec) return codec.encode(text)
   if (wellFormed(text)) return encoder.encode(text)

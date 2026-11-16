@@ -197,8 +197,8 @@ export async function create(options: create.Options = {}): Promise<Bash> {
     env,
     async exec(script: string, execOptions: ExecOptions = {}): Promise<Result> {
       const call = ++calls
-      const command = commandOf(script)
-      const started = Date.now()
+      const command = options.observe ? commandOf(script) : 'other'
+      const started = options.observe ? Date.now() : 0
       emit({ phase: 'started', call, command })
       const controller = new AbortController()
       let timedOut = false
@@ -234,16 +234,17 @@ export async function create(options: create.Options = {}): Promise<Bash> {
           if (timedOut) return 'timeout'
           return outcome.category
         })()
-        emit({
-          phase: 'finished',
-          call,
-          command,
-          status: outcome.exitCode === 0 ? 'success' : 'error',
-          category,
-          exitCode: outcome.exitCode,
-          durationMs: Date.now() - started,
-          outputTruncated: outcome.truncated,
-        })
+        if (options.observe)
+          emit({
+            phase: 'finished',
+            call,
+            command,
+            status: outcome.exitCode === 0 ? 'success' : 'error',
+            category,
+            exitCode: outcome.exitCode,
+            durationMs: Date.now() - started,
+            outputTruncated: outcome.truncated,
+          })
         return {
           stdout: outcome.stdout,
           stderr: outcome.stderr,
@@ -409,16 +410,22 @@ export async function create(options: create.Options = {}): Promise<Bash> {
   }
   const wasm = wasmHost(shell, options.wasm)
   let kept: EngineKept | undefined
+  let spare: { budget: { used: number; refused: boolean }; fs: FileSystem.FileSystem } | undefined
 
   const engineRun = async (
     engine: WebAssembly.Module,
     request: EngineRequest,
   ): Promise<EngineOutcome> => {
-    const budget = { used: 0, refused: false }
+    const lent = spare
+    spare = undefined
+    const budget = lent ? lent.budget : { used: 0, refused: false }
+    budget.used = 0
+    budget.refused = false
+    const commandFs = lent ? lent.fs : budgeted(fs, limits.maxFileOperations, budget)
     const ran = await (async () => {
       try {
         const settings: Psh.run.Options = {
-          commandFs: budgeted(fs, limits.maxFileOperations, budget),
+          commandFs,
           commands,
           cwd: request.directory,
           env: { ...env, ...request.execOptions.env, PWD: request.directory },
@@ -463,6 +470,8 @@ export async function create(options: create.Options = {}): Promise<Bash> {
         return error instanceof Error ? error : new Error(String(error))
       }
     })()
+    const refused = budget.refused
+    spare = { budget, fs: commandFs }
     if (ran instanceof Error)
       return {
         category: 'exception',
@@ -546,7 +555,7 @@ export async function create(options: create.Options = {}): Promise<Bash> {
       case 'cancelled': {
         if (ran.halted !== undefined)
           return outcome('/bin/bash: ' + ran.halted + '\n', 127, 'command_not_found')
-        if (budget.refused)
+        if (refused)
           return outcome(
             '/bin/bash: too many file operations (limit ' +
               limits.maxFileOperations +
