@@ -1,4 +1,4 @@
-const { callWasm, fromBase64, fromUtf8, hostFunction, putBytes, setTimeoutWithArgs, toBase64, utf8 } = core;
+const { callWasm, callWasmSync, fromBase64, fromUtf8, hostFunction, putBytes, setTimeoutWithArgs, toBase64, utf8 } = core;
 const log = (...args) => globalThis.console.log(...args);
 const moduleHint = (name) => {
   const bare = String(name).replace(/^node:/, "").split("/")[0];
@@ -138,8 +138,37 @@ const importHint = (error, imports) => {
   for (const [module, entries] of Object.entries(imports ?? {})) for (const [name, value] of Object.entries(entries ?? {})) if (typeof value === "function" || value instanceof Memory) names.push(module + "." + name);
   return names.length ? new Error(error.message + " (the JavaScript imports " + names.join(", ") + " are not linked: cell WebAssembly runs in the host, which provides only WASI preview1 imports)") : error;
 };
+const moduleLayout = { header: 8, sections: { imports: 2, exports: 7 }, kinds: ["function", "table", "memory", "global", "tag"] };
+const moduleEntries = (module, section) => {
+  const bytes = module instanceof Module ? module.input.bytes : undefined;
+  if (!bytes) throw new TypeError("WebAssembly.Module." + section + " expects a WebAssembly.Module built from bytes");
+  let at = moduleLayout.header;
+  const leb = () => { let value = 0, shift = 0, byte; do { byte = bytes[at++]; value += (byte & 0x7f) * 2 ** shift; shift += 7; } while (byte & 0x80); return value; };
+  const name = () => { const length = leb(); const text = new TextDecoder().decode(bytes.subarray(at, at + length)); at += length; return text; };
+  const limits = () => { const flags = bytes[at++]; leb(); if (flags & 1) leb(); };
+  const skip = [() => leb(), () => { at++; limits(); }, limits, () => { at += 2; }, () => { at++; leb(); }];
+  while (at < bytes.length) {
+    const id = bytes[at++];
+    const end = leb() + at;
+    if (id === moduleLayout.sections[section]) {
+      const entries = [];
+      for (let count = leb(); count > 0; count--) {
+        const from = section === "imports" ? name() : undefined;
+        const field = name();
+        const kind = bytes[at++];
+        if (from === undefined) leb(); else skip[kind]?.();
+        entries.push(from === undefined ? { name: field, kind: moduleLayout.kinds[kind] } : { module: from, name: field, kind: moduleLayout.kinds[kind] });
+      }
+      return entries;
+    }
+    at = end;
+  }
+  return [];
+};
 class Module {
   constructor(source) { const input = wasmSource(source); this.input = input.bytes ? { bytes: input.bytes.slice() } : input; }
+  static exports(module) { return moduleEntries(module, "exports"); }
+  static imports(module) { return moduleEntries(module, "imports"); }
 }
 class Memory {
   constructor(id) { this.id = id; }
@@ -151,13 +180,22 @@ class Memory {
 const exportsOf = (id, list, imports) => {
   const exports = {};
   for (const entry of list) {
-    if (entry.kind === "function") exports[entry.name] = async (...args) => fromWire((await callWasm({ op: "call", id, name: entry.name, args: args.map(toWire) }).catch((error) => { throw importHint(error, imports); })).result);
+    if (entry.kind === "function") exports[entry.name] = callWasmSync ? (...args) => { try { return fromWire(callWasmSync({ op: "call", id, name: entry.name, args: args.map(toWire) }).result); } catch (error) { throw importHint(error, imports); } } : async (...args) => fromWire((await callWasm({ op: "call", id, name: entry.name, args: args.map(toWire) }).catch((error) => { throw importHint(error, imports); })).result);
     else if (entry.kind === "memory") exports[entry.name] = new Memory(id);
   }
   return Object.freeze(exports);
 };
 class Instance {
   constructor(module, imports) {
+    if (callWasmSync) {
+      let reply;
+      try { reply = callWasmSync({ op: "instantiate", ...wire(wasmSource(module)) }); } catch (error) { throw importHint(error, imports); }
+      this.id = reply.id;
+      this.engine = reply.engine;
+      this.exports = exportsOf(reply.id, reply.exports, imports);
+      this.ready = Promise.resolve(this);
+      return;
+    }
     const ready = callWasm({ op: "instantiate", ...wire(wasmSource(module)) });
     this.ready = ready.then((reply) => { this.id = reply.id; this.engine = reply.engine; this.exports = exportsOf(reply.id, reply.exports, imports); return this; }, (error) => { throw importHint(error, imports); });
     this.ready.catch(() => {});
