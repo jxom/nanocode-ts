@@ -61,6 +61,8 @@ export type Escalate = {
 
 export type RefusalFallback = 'return_once' | 'session'
 
+export type ToolResultClearing = { at_least_tokens: number; keep: number }
+
 export type ReasoningMode = 'standard' | 'pro'
 
 export type RuntimeSettings = { thinking?: Thinking; service_tier?: ServiceTier }
@@ -132,6 +134,7 @@ export type AgentConfiguration = {
   skip_finish_check?: boolean
   stop_at_target?: boolean
   subagents?: boolean
+  tool_result_clearing?: ToolResultClearing
   tool_result_tokens?: number
   yield_floor_ms?: number
   yield_share?: number

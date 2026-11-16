@@ -249,6 +249,8 @@ struct Configuration {
     #[serde(default)]
     escalate: Option<Escalate>,
     #[serde(default)]
+    tool_result_clearing: Option<ToolResultClearing>,
+    #[serde(default)]
     tool_result_tokens: Option<std::num::NonZeroU64>,
     #[serde(default)]
     refusal_fallback: RefusalFallback,
@@ -343,6 +345,13 @@ struct Configuration {
 struct AttachedHand {
     connection: String,
     hand: String,
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ToolResultClearing {
+    at_least_tokens: u64,
+    keep: usize,
 }
 
 #[derive(Clone, Deserialize)]
@@ -1013,6 +1022,7 @@ fn claude_harness(
     refusal_fallback: RefusalFallback,
     levers: FinishLevers,
     escalation: Option<nanocode::claude::Escalation>,
+    tool_result_clearing: Option<ToolResultClearing>,
     tool_result_tokens: Option<std::num::NonZeroU64>,
     instructions: &dyn Fn(Option<&str>) -> String,
 ) -> (ClaudeHarness, ClaudeClient) {
@@ -1073,6 +1083,9 @@ fn claude_harness(
         }
         if let Some(escalation) = &escalation {
             claude = claude.escalate(escalation.clone());
+        }
+        if let Some(clearing) = tool_result_clearing {
+            claude = claude.tool_result_clearing(clearing.keep, clearing.at_least_tokens);
         }
         if let Some(limit) = tool_result_tokens {
             claude = claude.tool_result_tokens(limit);
@@ -1279,6 +1292,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
                 yield_share: config.yield_share,
             },
             escalation,
+            config.tool_result_clearing,
             config.tool_result_tokens,
             &instructions,
         );

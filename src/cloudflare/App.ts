@@ -141,6 +141,7 @@ export type SessionDescriptor = SessionAuthority & {
   skip_finish_check?: boolean
   stop_at_target?: boolean
   subagents?: boolean
+  tool_result_clearing?: Contracts.ToolResultClearing
   tool_result_tokens?: number
   yield_floor_ms?: number
   yield_share?: number
@@ -1171,6 +1172,23 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           !(Number.isSafeInteger(input.tool_result_tokens) && input.tool_result_tokens > 0)
         )
           return json({ error: 'tool_result_tokens must be a positive whole number' }, 400)
+        if (
+          input.tool_result_clearing !== undefined &&
+          !(
+            typeof input.tool_result_clearing === 'object' &&
+            input.tool_result_clearing !== null &&
+            Object.keys(input.tool_result_clearing).every(
+              (key) => key === 'at_least_tokens' || key === 'keep',
+            ) &&
+            [input.tool_result_clearing.at_least_tokens, input.tool_result_clearing.keep].every(
+              (value) => Number.isSafeInteger(value) && value >= 0,
+            )
+          )
+        )
+          return json(
+            { error: 'tool_result_clearing must be { at_least_tokens, keep } of whole numbers' },
+            400,
+          )
         if (input.result_effort !== undefined && !resultEfforts.includes(input.result_effort))
           return json({ error: `result_effort must be one of ${resultEfforts.join(', ')}` }, 400)
         for (const limit of [
@@ -1362,6 +1380,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           descriptor.subagents = input.subagents ?? sessionSubagents
           descriptor.deadline = input.deadline
           descriptor.escalate = input.escalate
+          descriptor.tool_result_clearing = input.tool_result_clearing
           descriptor.tool_result_tokens = input.tool_result_tokens
           descriptor.finish_check_min_requests = input.finish_check_min_requests
           descriptor.finish_retries = input.finish_retries
@@ -2322,6 +2341,9 @@ ${input.request_id}`
         ...(descriptor.refusal_fallback === undefined ? [] : [descriptor.refusal_fallback]),
         ...finishLevers.filter((lever) => descriptor[lever] === true),
         ...(descriptor.escalate === undefined ? [] : [descriptor.escalate]),
+        ...(descriptor.tool_result_clearing === undefined
+          ? []
+          : [{ tool_result_clearing: descriptor.tool_result_clearing }]),
         ...(descriptor.tool_result_tokens === undefined
           ? []
           : [{ tool_result_tokens: descriptor.tool_result_tokens }]),
@@ -2601,6 +2623,9 @@ ${input.request_id}`
                 : { codex_orchestration: descriptor.codex_orchestration }),
               ...(descriptor.deadline === undefined ? {} : { deadline: descriptor.deadline }),
               ...(descriptor.escalate === undefined ? {} : { escalate: descriptor.escalate }),
+              ...(descriptor.tool_result_clearing === undefined
+                ? {}
+                : { tool_result_clearing: descriptor.tool_result_clearing }),
               ...(descriptor.tool_result_tokens === undefined
                 ? {}
                 : { tool_result_tokens: descriptor.tool_result_tokens }),
