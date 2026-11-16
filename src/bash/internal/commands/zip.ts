@@ -59,7 +59,7 @@ function fromDos(time: number, date: number): number {
   ).getTime()
 }
 
-function readEntries(data: Uint8Array): { entries: ZipEntry[]; comment: string } {
+export function readEntries(data: Uint8Array): { entries: ZipEntry[]; comment: string } {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
   let end = -1
   for (let i = data.length - 22; i >= Math.max(0, data.length - 22 - 65535); i--) {
@@ -141,7 +141,7 @@ function readEntries(data: Uint8Array): { entries: ZipEntry[]; comment: string }
   return { entries, comment }
 }
 
-async function contents(data: Uint8Array, entry: ZipEntry): Promise<Uint8Array> {
+export async function contents(data: Uint8Array, entry: ZipEntry): Promise<Uint8Array> {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
   if (view.getUint32(entry.offset, true) !== 0x04034b50)
     throw new CommandError('bad zipfile offset (local header sig): ' + entry.name, 3)
@@ -177,7 +177,7 @@ function date(ms: number): string {
   )
 }
 
-function unsafe(name: string): boolean {
+export function unsafe(name: string): boolean {
   return name.startsWith('/') || name.split('/').includes('..')
 }
 
