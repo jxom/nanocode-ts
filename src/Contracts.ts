@@ -92,6 +92,7 @@ export type CodexOptions = {
   lenient_patches?: boolean
   max_output_tokens?: number
   min_wait_ms?: number
+  verification_requested?: boolean
 }
 
 export type AgentConfiguration = {

@@ -78,6 +78,8 @@ struct CodexOptions {
     max_output_tokens: Option<std::num::NonZeroU64>,
     #[serde(default)]
     min_wait_ms: Option<std::num::NonZeroU64>,
+    #[serde(default)]
+    verification_requested: bool,
 }
 
 impl CodexOptions {
@@ -1182,7 +1184,8 @@ fn codex_harness(
     let harness = harness.configure(move |codex| {
         let codex = codex
             .persist_finish(persist_finish)
-            .lean_custom_tool_arguments(options.lean_tool_arguments);
+            .lean_custom_tool_arguments(options.lean_tool_arguments)
+            .verification_requested(options.verification_requested);
         let custom = !Model::ALL.contains(&codex.selected_model());
         let codex = match options.max_output_tokens {
             Some(tokens) if custom => codex.max_output_tokens(tokens.get()),

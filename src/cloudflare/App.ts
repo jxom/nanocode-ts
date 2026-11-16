@@ -89,6 +89,7 @@ export const codexSwitches = [
   'compact_instructions',
   'lean_tool_arguments',
   'lenient_patches',
+  'verification_requested',
 ] as const
 
 export const codexLimits = ['context_window', 'max_output_tokens', 'min_wait_ms'] as const
@@ -154,6 +155,7 @@ export type SessionDescriptor = SessionAuthority & {
   max_output_tokens?: number
   min_wait_ms?: number
   session_name: string
+  verification_requested?: boolean
   subscription: boolean
   codex_subscription?: boolean
   payer?: Contracts.Payer
