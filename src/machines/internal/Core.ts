@@ -29,6 +29,14 @@ const feeTokens: Address[] = [
   mach,
 ]
 
+type Ledger = {
+  calls: number
+  spent: string
+  start: number
+}
+
+type Signing = Omit<KeyRecord, 'expiry'>
+
 type Payer = {
   context: { depositRaw?: string }
   fetch: (input: string, init: RequestInit & { context?: unknown }) => Promise<Response>
@@ -82,7 +90,7 @@ function exhausted(
 async function land(
   client: ReturnType<typeof chainClient>,
   signer: ReturnType<typeof Account.fromSecp256k1> | ReturnType<typeof Account.fromP256>,
-  current: KeyRecord,
+  current: Signing,
   authorization: KeyAuthorization.KeyAuthorization,
 ): Promise<void> {
   const metadata = await Actions.accessKey.getMetadata(client, {
@@ -131,7 +139,9 @@ export function create(options: Create.Options) {
   const endpoint = options.rpc ?? rpc
   const network = Egress.guard(options.fetch ?? ((input, init) => globalThis.fetch(input, init)))
   const sealing = sealer(options.secret)
+  const sponsor = options.sponsor
   let payer: { sealed: string; payer: Payer } | undefined
+  let sponsoring: Promise<Payer> | undefined
 
   async function record(): Promise<KeyRecord | undefined> {
     const sealed = await store.get<string>('key')
@@ -353,14 +363,11 @@ export function create(options: Create.Options) {
     return Payment.receipts(body, (data) => receipt(url, data))
   }
 
-  async function pay(): Promise<Payer> {
-    const sealed = await store.get<string>('key')
-    if (payer && payer.sealed === sealed) return payer.payer
-    const current = await record()
-    if (!sealed || !current)
-      throw new Error(
-        'no access key is registered for this account, or it expired: connect Tempo Wallet again',
-      )
+  async function payerOf(
+    current: Signing,
+    options: { deposit: Payment.Deposit | undefined },
+  ): Promise<Payer> {
+    const { deposit } = options
     const keyAuthorizationManager = KeyAuthorizationManager.memory()
     const authorization = current.authorization
       ? KeyAuthorization.fromRpc(current.authorization)
@@ -370,10 +377,13 @@ export function create(options: Create.Options) {
         { accessKey: current.keyAddress, address: current.address, chainId: tempo.id },
         authorization,
       )
-    const signer =
-      current.keyType === 'p256'
+    const signer = (() => {
+      if (isAddressEqual(current.address, current.keyAddress))
+        return Account.fromSecp256k1(current.key)
+      return current.keyType === 'p256'
         ? Account.fromP256(current.key, { access: current.address, keyAuthorizationManager })
         : Account.fromSecp256k1(current.key, { access: current.address, keyAuthorizationManager })
+    })()
     const client = chainClient(endpoint)
     let landed: Promise<void> | undefined
     const landing = () => {
@@ -496,12 +506,86 @@ export function create(options: Create.Options) {
       const request = payment.challenge.request as { amount?: string }
       void charge(url, BigInt(request.amount ?? '0'))
     })
-    const created: Payer = {
+    return {
       context: deposit ? { depositRaw: parseUnits(deposit.opening, tokenDecimals).toString() } : {},
       fetch: (input, init) => mppx.fetch(input, init as never),
     }
+  }
+
+  async function pay(): Promise<Payer> {
+    const sealed = await store.get<string>('key')
+    if (payer && payer.sealed === sealed) return payer.payer
+    const current = await record()
+    if (!sealed || !current)
+      throw new Error(
+        'no access key is registered for this account, or it expired: connect Tempo Wallet again',
+      )
+    const created = await payerOf(current, { deposit })
     payer = { sealed, payer: created }
     return created
+  }
+
+  async function admit(allowance: Payment.Allowance, amount: bigint): Promise<boolean> {
+    const budget = parseUnits(allowance.budget, tokenDecimals)
+    const now = Date.now()
+    let admitted = false
+    await store.update<string>('sponsored', (value) => {
+      const ledger: Ledger = value ? JSON.parse(value) : { calls: 0, spent: '0', start: now }
+      const calls = now - ledger.start < allowance.windowMs ? ledger.calls : 0
+      const spent = BigInt(ledger.spent) + amount
+      admitted = calls < allowance.calls && spent <= budget
+      if (!admitted) return value ?? JSON.stringify(ledger)
+      return JSON.stringify({
+        calls: calls + 1,
+        spent: spent.toString(),
+        start: calls ? ledger.start : now,
+      })
+    })
+    return admitted
+  }
+
+  async function refund(amount: bigint) {
+    await store.update<string>('sponsored', (value) => {
+      const ledger: Ledger = JSON.parse(value ?? '')
+      return JSON.stringify({ ...ledger, spent: (BigInt(ledger.spent) - amount).toString() })
+    })
+  }
+
+  async function sponsored(
+    target: string,
+    init: Init,
+    challenges: readonly Mcp.Challenge[],
+  ): Promise<Response | undefined> {
+    if (!sponsor) return undefined
+    const amount = Payment.price(challenges)
+    if (amount === undefined || !(await admit(sponsor.allowance, amount))) return undefined
+    try {
+      sponsoring ??= (() => {
+        const keyAddress = Account.fromSecp256k1(sponsor.key).address
+        return payerOf(
+          {
+            address: sponsor.account ?? keyAddress,
+            key: sponsor.key,
+            keyAddress,
+            keyType: 'secp256k1',
+          },
+          { deposit: sponsor.deposit },
+        )
+      })()
+      const paying = await sponsoring
+      const response = await paying.fetch(target, {
+        method: init.method,
+        headers: init.headers,
+        body: init.body,
+        signal: init.signal,
+        context: paying.context,
+      })
+      if (!response.ok || (await Mcp.outcome(response)).required) await refund(amount)
+      return response
+    } catch {
+      await refund(amount)
+      return undefined
+    }
   }
 
   async function warm(): Promise<boolean> {
@@ -514,7 +598,14 @@ export function create(options: Create.Options) {
     if (kind === 'pay' && !new Headers(init.headers).has('user-agent'))
       init = { ...init, headers: [...new Headers(init.headers), ['user-agent', 'nanocode-ts']] }
     if (kind === 'pay' && !(await record()))
-      return Payment.locked(servers, { fetch: network, scripts: options.scripts })(target, {
+      return Payment.locked(servers, {
+        fetch: network,
+        scripts: options.scripts,
+        sponsor: sponsor && {
+          allowance: sponsor.allowance,
+          pay: (challenges) => sponsored(target, init, challenges),
+        },
+      })(target, {
         method: init.method,
         headers: init.headers,
         body: init.body,

@@ -10,7 +10,11 @@ export const servers: readonly Server[] = [
   { name: 'gateway', url: 'https://gateway.tempo-dev.workers.dev/mcp' },
 ]
 
-type Challenge = { description?: string; intent?: string; request?: { amount?: string } }
+export type Challenge = {
+  description?: string
+  intent?: string
+  request?: { amount?: string; unitType?: string }
+}
 
 type Message = {
   error?: { code?: number; data?: { challenges?: Challenge[] } }
@@ -25,6 +29,7 @@ export type Call = {
 }
 
 export type Outcome = {
+  challenges: readonly Challenge[]
   description?: string
   receipt?: { channelId?: string; intent?: string; spent?: string }
   required: boolean
@@ -67,7 +72,7 @@ export async function call(
 export async function outcome(response: Response): Promise<Outcome> {
   const type = response.headers.get('content-type') ?? ''
   if (!response.body || !(type.includes('json') || type.includes('event-stream')))
-    return { required: false }
+    return { challenges: [], required: false }
   const text = await response
     .clone()
     .text()
@@ -80,6 +85,7 @@ export async function outcome(response: Response): Promise<Outcome> {
           | { challenges?: Challenge[] }
           | undefined)
   return {
+    challenges: required?.challenges ?? [],
     description: required?.challenges?.[0]?.description,
     receipt: message?.result?._meta?.['org.paymentauth/receipt'] as Outcome['receipt'],
     required: !!required,

@@ -142,6 +142,7 @@ export declare namespace create {
     scripts?: boolean
     secret: string | undefined
     servers?: readonly Mcp.Server[]
+    sponsor?: Payment.Sponsor | undefined
     store: Store
   }
 }

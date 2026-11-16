@@ -33,6 +33,7 @@ export class Wallet extends DurableObject<Env.Env> {
   protected deposit: Payment.Deposit | undefined = undefined
   protected servers: readonly Mcp.Server[] = Mcp.servers
   protected scripts = true
+  protected sponsor: ((env: Env.Env) => Payment.Sponsor | undefined) | undefined = undefined
   private holder?: Account
 
   private core(): Account {
@@ -42,6 +43,7 @@ export class Wallet extends DurableObject<Env.Env> {
       secret: this.env.KEY_SECRET,
       servers: this.servers,
       scripts: this.scripts,
+      sponsor: this.sponsor?.(this.env),
       ...(this.env.TEMPO_RPC ? { rpc: this.env.TEMPO_RPC } : {}),
     })
     return this.holder
@@ -97,20 +99,23 @@ export class Wallet extends DurableObject<Env.Env> {
   }
 }
 
-export function subclass(options: subclass.Options): typeof Wallet {
+export function subclass<E extends Env.Env>(options: subclass.Options<E>): typeof Wallet {
   const scripts = options.scripts ?? true
+  const sponsor = options.sponsor
   return class extends Wallet {
     protected override deposit = options.deposit
     protected override servers = options.servers
     protected override scripts = scripts
+    protected override sponsor = sponsor && ((env: Env.Env) => sponsor(env as E))
   }
 }
 
 export declare namespace subclass {
-  type Options = {
+  type Options<E extends Env.Env = Env.Env> = {
     deposit?: Payment.Deposit | undefined
     scripts?: boolean | undefined
     servers: readonly Mcp.Server[]
+    sponsor?: ((env: E) => Payment.Sponsor | undefined) | undefined
   }
 }
 
@@ -151,7 +156,7 @@ export function create<E extends Env.Env>(options: create.Options<E>) {
   }
 
   return {
-    Wallet: subclass({ deposit, scripts, servers }),
+    Wallet: subclass<E>({ deposit, scripts, servers, sponsor: options.sponsor }),
     egress,
     fetch,
     nanocode,
@@ -165,5 +170,6 @@ export declare namespace create {
     account: Keys.Account<E>
     payment?: Payment.Config
     scripts?: boolean
+    sponsor?: (env: E) => Payment.Sponsor | undefined
   }
 }

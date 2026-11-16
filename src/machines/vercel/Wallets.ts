@@ -35,6 +35,7 @@ export function create(options: create.Options) {
         secret: options.secret,
         servers,
         scripts: options.scripts ?? false,
+        sponsor: options.sponsor,
         fetch: Egress.guard(),
         ...(options.rpc ? { rpc: options.rpc } : {}),
       })
@@ -102,6 +103,7 @@ export declare namespace create {
     scripts?: boolean
     secret: string | undefined
     sessions(): DurableSessions
+    sponsor?: Payment.Sponsor | undefined
   }
 }
 
