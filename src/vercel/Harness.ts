@@ -292,7 +292,14 @@ export function create(options: create.Options = {}): Harness {
           {
             ...(shell ? { workspace: shell.workspace() } : {}),
             fetch: cellFetch,
-            ...(options.mcp?.store ? { mcp: { store: options.mcp.store } } : {}),
+            ...(options.mcp?.store || options.mcp?.failureMs !== undefined
+              ? {
+                  mcp: {
+                    ...(options.mcp.failureMs !== undefined ? { failureMs: options.mcp.failureMs } : {}),
+                    ...(options.mcp.store ? { store: options.mcp.store } : {}),
+                  },
+                }
+              : {}),
             ...(executor
               ? {
                   remote: {
@@ -541,6 +548,7 @@ export declare namespace create {
     instructions?: string
     maxPrompts?: number
     mcp?: {
+      failureMs?: number
       fetch?(sessionId: string): typeof fetch
       servers: Contracts.McpServer[]
       store?: Contracts.McpStore
