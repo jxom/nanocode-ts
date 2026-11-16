@@ -29,6 +29,8 @@ const codeTools = new Set(['exec', 'code_mode', 'js'])
 
 const imageUrl = /^(https?:\/\/|data:image\/(?:png|jpe?g|gif|webp|avif|bmp)[;,])/i
 
+const blobUrl = /^nanocode-blob:image\/[^;,]+;b3:[0-9a-f]{64}$/
+
 const pragmaLine = /^\s*\/\/ @exec:[^\n]*(?:\n|$)/
 
 export function clip(cell: Cell, options: clip.Options): Cell {
@@ -317,7 +319,7 @@ function imagesOf(result: unknown, found: string[] = []): string[] {
             : undefined
   if (
     typeof url === 'string' &&
-    (imageUrl.test(url.trim()) || Workspace.path(url)) &&
+    (imageUrl.test(url.trim()) || blobUrl.test(url.trim()) || Workspace.path(url)) &&
     !found.includes(url.trim())
   )
     found.push(url.trim())

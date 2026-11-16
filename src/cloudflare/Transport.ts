@@ -249,6 +249,17 @@ export function create(options: create.Options): create.ReturnType {
 
   return {
     files: {
+      async blob(url, signal) {
+        if (!state.id) throw new Error('no session yet')
+        const match = /^nanocode-blob:([^;,]+);(b3:[0-9a-f]{64})$/.exec(url)
+        if (!match) throw new Error('not a nanocode blob url')
+        const response = await fetch(path('blobs/' + encodeURIComponent(match[2]!)), {
+          headers: headers(),
+          ...(signal ? { signal } : {}),
+        })
+        if (!response.ok) throw new Error(await failure(response))
+        return new Blob([await response.arrayBuffer()], { type: match[1] })
+      },
       maxBytes: 5 * 1024 * 1024,
       scope: () => state.id,
       async upload(file, name, signal) {

@@ -7,6 +7,7 @@ import type * as Transcript from './Transcript.ts'
 export type Attachment = InternalFiles.Attachment
 
 export type Files = {
+  blob?(url: string, signal?: AbortSignal): Promise<Blob>
   maxBytes?: number
   maxFiles?: number
   read(path: string, signal?: AbortSignal): Promise<Blob>

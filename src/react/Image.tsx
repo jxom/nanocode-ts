@@ -7,10 +7,12 @@ import { ConfigContext, usePart, useSkin } from './Provider.tsx'
 
 const imageUrl = /^(https?:\/\/|data:image\/(?:png|jpe?g|gif|webp|avif|bmp)[;,])/i
 
+const blobUrl = /^nanocode-blob:image\/[^;,]+;b3:[0-9a-f]{64}$/
+
 export function imageSource(src: unknown): string | undefined {
   if (typeof src !== 'string') return undefined
   const value = src.trim()
-  return imageUrl.test(value) || Workspace.path(value) ? value : undefined
+  return imageUrl.test(value) || blobUrl.test(value) || Workspace.path(value) ? value : undefined
 }
 
 const fileTtlMs = 15_000
@@ -39,8 +41,10 @@ export function useWorkspaceFile(path: string | undefined): {
     if (!cache) fileCache.set(files, (cache = new Map()))
     let entry = cache.get(key)
     if (!entry || Date.now() - entry.at > fileTtlMs) {
-      const url = files
-        .read(path)
+      const read = blobUrl.test(path)
+        ? (files.blob?.(path) ?? Promise.reject(new Error('this transport serves no blobs')))
+        : files.read(path)
+      const url = read
         .then((blob) => ({ url: URL.createObjectURL(blob), type: blob.type }))
       entry = { at: Date.now(), url }
       cache.set(key, entry)
@@ -137,7 +141,7 @@ export function Image(props: Image.Props) {
   const skin = useSkin()
   const [failed, setFailed] = useState(false)
   const src = imageSource(props.src)
-  const path = Workspace.path(src)
+  const path = src && blobUrl.test(src) ? src : Workspace.path(src)
   if (path)
     return (
       <WorkspaceImage

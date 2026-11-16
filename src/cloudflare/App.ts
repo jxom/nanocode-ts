@@ -1075,6 +1075,17 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           return await this.childRoute(scope, parts[2], await request.json(), descriptor)
         }
         if (parts[2] === 'files') return await this.files(scope, url, request)
+        if (parts[2] === 'blobs' && parts.length === 4) {
+          if (request.method !== 'GET') return json({ error: 'method not allowed' }, 405)
+          const bytes = await this.blobs.get(decodeURIComponent(parts[3]!))
+          if (!bytes) return json({ error: 'blob not found' }, 404)
+          return new Response(bytes, {
+            headers: {
+              'content-type': 'application/octet-stream',
+              'cache-control': 'private, max-age=31536000, immutable',
+            },
+          })
+        }
         if (parts[2] === 'side_question') return await this.sideQuestion(scope, request, descriptor)
         if (parts[2] === 'subagents')
           return await this.subagents(scope, parts, url, request, descriptor)
@@ -4821,7 +4832,7 @@ ${input.request_id}`
     const files = /^\/sessions\/([^/]+)\/files(\/.*)?$/.exec(url.pathname)
     const match = files
       ? undefined
-      : /^\/sessions\/([^/]+)(?:\/(turns|events|metrics|socket|hands|crash|warm|subagents|side_question)(?:\/([^/]+)(?:\/(budget|cancel|close|events|interrupt|messages|side_question))?)?)?$/.exec(
+      : /^\/sessions\/([^/]+)(?:\/(turns|events|metrics|socket|hands|crash|warm|subagents|side_question|blobs)(?:\/([^/]+)(?:\/(budget|cancel|close|events|interrupt|messages|side_question))?)?)?$/.exec(
           url.pathname,
         )
     const routed = (() => {
@@ -4830,7 +4841,7 @@ ${input.request_id}`
       const [, , route, item, action] = match
       if (route === 'subagents') return action !== 'cancel'
       if (action !== undefined) return route === 'turns' && action === 'cancel'
-      return item === undefined || route === 'turns' || route === 'hands'
+      return item === undefined || route === 'turns' || route === 'hands' || route === 'blobs'
     })()
     if (!routed) return json({ error: 'route not found' }, 404)
     let name: string
