@@ -140,6 +140,7 @@ export type AgentConfiguration = {
   tool_result_clearing?: ToolResultClearing
   tool_result_tokens?: number
   yield_floor_ms?: number
+  stall_nudge_ms?: number
   yield_share?: number
   remote_children?: boolean
   child_lineage?: unknown

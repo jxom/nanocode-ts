@@ -149,6 +149,7 @@ export type SessionDescriptor = SessionAuthority & {
   tool_result_clearing?: Contracts.ToolResultClearing
   tool_result_tokens?: number
   yield_floor_ms?: number
+  stall_nudge_ms?: number
   yield_share?: number
   compact_instructions?: boolean
   context_window?: number
@@ -1213,6 +1214,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           'finish_retries',
           'late_finish_check_ms',
           'yield_floor_ms',
+          'stall_nudge_ms',
           ...codexLimits,
         ] as const)
           if (
@@ -1404,6 +1406,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           descriptor.late_finish_check_ms = input.late_finish_check_ms
           descriptor.result_effort = input.result_effort
           descriptor.yield_floor_ms = input.yield_floor_ms
+          descriptor.stall_nudge_ms = input.stall_nudge_ms
           descriptor.yield_share = input.yield_share
           descriptor.refusal_fallback = input.refusal_fallback
           for (const lever of finishLevers) descriptor[lever] = input[lever]
@@ -2379,6 +2382,9 @@ ${input.request_id}`
         ...(descriptor.yield_floor_ms === undefined
           ? []
           : [{ yield_floor_ms: descriptor.yield_floor_ms }]),
+        ...(descriptor.stall_nudge_ms === undefined
+          ? []
+          : [{ stall_nudge_ms: descriptor.stall_nudge_ms }]),
         ...(descriptor.yield_share === undefined ? [] : [{ yield_share: descriptor.yield_share }]),
         ...(descriptor.context_window === undefined
           ? []
@@ -2662,6 +2668,9 @@ ${input.request_id}`
               ...(descriptor.yield_floor_ms === undefined
                 ? {}
                 : { yield_floor_ms: descriptor.yield_floor_ms }),
+              ...(descriptor.stall_nudge_ms === undefined
+                ? {}
+                : { stall_nudge_ms: descriptor.stall_nudge_ms }),
               ...(descriptor.yield_share === undefined
                 ? {}
                 : { yield_share: descriptor.yield_share }),

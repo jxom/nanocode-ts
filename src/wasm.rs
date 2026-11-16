@@ -114,6 +114,7 @@ struct FinishLevers {
     stop_at_target: bool,
     yield_floor: Option<Duration>,
     yield_share: Option<std::num::NonZeroU8>,
+    stall_nudge: Option<Duration>,
 }
 
 #[derive(Clone, Copy, Default, Deserialize)]
@@ -294,6 +295,8 @@ struct Configuration {
     stop_at_target: bool,
     #[serde(default)]
     yield_floor_ms: Option<std::num::NonZeroU64>,
+    #[serde(default)]
+    stall_nudge_ms: Option<std::num::NonZeroU64>,
     #[serde(default)]
     yield_share: Option<std::num::NonZeroU8>,
     #[serde(default)]
@@ -1129,6 +1132,9 @@ fn claude_harness(
         if let Some(percent) = levers.yield_share {
             claude = claude.yield_share(percent);
         }
+        if let Some(every) = levers.stall_nudge {
+            claude = claude.stall_nudge(every);
+        }
         if let Some(escalation) = &escalation {
             claude = claude.escalate(escalation.clone());
         }
@@ -1341,6 +1347,9 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
                     .yield_floor_ms
                     .map(|ms| Duration::from_millis(ms.get())),
                 yield_share: config.yield_share,
+                stall_nudge: config
+                    .stall_nudge_ms
+                    .map(|ms| Duration::from_millis(ms.get())),
             },
             escalation,
             config.tool_result_clearing,
