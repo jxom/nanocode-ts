@@ -161,6 +161,9 @@ dependencies = [
 [[package]]
 name = "nanocode-sys"
 version = "0.7.0"
+dependencies = [
+ "djs-libm",
+]
 
 [[package]]
 name = "nanocode-trace"
@@ -220,6 +223,7 @@ version = "0.0.0"
 name = "psh-utils"
 version = "0.0.0"
 dependencies = [
+ "djs-libm",
  "memchr",
  "nanocode-compression",
  "nanocode-digest",
