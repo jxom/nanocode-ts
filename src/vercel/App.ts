@@ -137,7 +137,15 @@ function command(body: Body): Harness.SubagentCommand | string {
   }
 }
 
-type Sending = { fresh: boolean; kind: string; text: string; sent?: Promise<string> }
+type Sending = {
+  fresh: boolean
+  kind: string
+  sent?: Promise<string>
+  settled?: number
+  started: number
+  submitting?: number
+  text: string
+}
 
 function carried(value: unknown): Attachments.File[] | string {
   if (!Array.isArray(value) || value.length > 8) return 'attachments must be at most 8 files'
@@ -224,13 +232,22 @@ export function create(options: create.Options) {
           drive: (id, meta) => sessions.drive(id, meta),
         })
   const sending = new AsyncHooks.AsyncLocalStorage<Sending>()
-  const submit = (id: string, text: string, kind: string) =>
-    sessions.send(
+  const submit = (id: string, text: string, kind: string) => {
+    const current = sending.getStore()
+    if (current) current.submitting = performance.now()
+    const sent = sessions.send(
       id,
       text,
       kind as Parameters<typeof sessions.send>[2],
       turns ? { wake: 'backstop', waitUntil } : {},
     )
+    if (current)
+      sent.then(
+        () => (current.settled = performance.now()),
+        () => undefined,
+      )
+    return sent
+  }
   const chat = chatRoute(
     {
       start: () =>
@@ -259,17 +276,30 @@ export function create(options: create.Options) {
       },
     },
   )
-  const post = (request: Request, body: Body, fresh: boolean) =>
-    typeof body.text === 'string'
-      ? sending.run(
-          {
-            fresh,
-            kind: typeof body.kind === 'string' ? body.kind : 'prompt',
-            text: body.text,
-          },
-          () => chat.POST(request),
-        )
-      : chat.POST(request)
+  const post = async (request: Request, body: Body, fresh: boolean) => {
+    if (typeof body.text !== 'string') return chat.POST(request)
+    const current: Sending = {
+      fresh,
+      kind: typeof body.kind === 'string' ? body.kind : 'prompt',
+      started: performance.now(),
+      text: body.text,
+    }
+    const response = await sending.run(current, () => chat.POST(request))
+    const timing = [`route;dur=${(performance.now() - current.started).toFixed(1)}`]
+    if (current.submitting !== undefined)
+      timing.push(`admit;dur=${(current.submitting - current.started).toFixed(1)}`)
+    if (current.submitting !== undefined && current.settled !== undefined)
+      timing.push(`submit;dur=${(current.settled - current.submitting).toFixed(1)}`)
+    if (typeof body.sessionId === 'string')
+      timing.push(`warm;desc=${warming.has(body.sessionId) ? 'alive' : 'none'}`)
+    const headers = new Headers(response.headers)
+    headers.append('server-timing', timing.join(', '))
+    return new Response(response.body, {
+      headers,
+      status: response.status,
+      statusText: response.statusText,
+    })
+  }
   const handRoutes = Hands.route({
     world: getWorld,
     owns: async (sessionId, channel) =>
