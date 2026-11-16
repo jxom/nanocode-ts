@@ -156,10 +156,12 @@ impl FunctionHandler for File {
                 .ok_or("file expects { op, path }")?;
             match input.get("op").and_then(Value::as_str) {
                 Some("read") => {
-                    let data =
-                        call_bytes_with(&json!({"op": "cell_read", "path": path, "cwd": self.0}))
-                            .await
-                            .map_err(failure)?;
+                    let data = call_bytes_with(
+                        &json!({"op": "cell_read", "path": path, "cwd": self.0}),
+                        None,
+                    )
+                    .await
+                    .map_err(failure)?;
                     Ok(json!({"bytes_ref": bytes::put(data)}))
                 }
                 Some(op @ ("write" | "append")) => {

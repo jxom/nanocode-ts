@@ -2606,6 +2606,7 @@ ${input.request_id}`
                   ? {}
                   : { subagents: descriptor.subagents ?? options.subagents }),
               ...(options.remoteSubagents && !child ? { remote_children: true } : {}),
+              ...(options.rootRegion ? { root_region: true } : {}),
               ...(options.hedge ? { hedge: options.hedge } : {}),
               ...(options.maxResidentSubagents === undefined
                 ? {}
@@ -5059,6 +5060,7 @@ export declare namespace create {
     plans?: Plans.Options<E>
     recordSession?(account: string, name: string, env: E): Promise<boolean> | boolean
     retainedTurns?: number
+    rootRegion?: boolean
     streamToolInput?: boolean
     subagentBudgets?: boolean
     cellInterruptChecks?: number

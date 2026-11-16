@@ -94,7 +94,7 @@ impl FileHost for HostFiles {
             {
                 return Ok(None);
             }
-            call_bytes_with(&json!({"op": "cell_read", "path": path, "cwd": "/"}))
+            call_bytes_with(&json!({"op": "cell_read", "path": path, "cwd": "/"}), None)
                 .await
                 .map(Some)
                 .map_err(failure)

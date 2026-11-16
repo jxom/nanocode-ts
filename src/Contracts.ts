@@ -146,6 +146,7 @@ export type AgentConfiguration = {
   hedge?: { cap_percent?: number; floor_ms?: number; window?: number }
   providers?: Partial<Record<ModelProvider, ProviderEndpoint>>
   remote?: boolean
+  root_region?: boolean
   code_mode?: boolean
   executor?: string
   hands?: boolean

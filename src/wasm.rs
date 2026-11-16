@@ -217,6 +217,8 @@ struct Configuration {
     runtime_id: String,
     started_ms: f64,
     #[serde(default)]
+    root_region: bool,
+    #[serde(default)]
     provider: Provider,
     #[serde(default)]
     model: Option<String>,
@@ -948,6 +950,34 @@ fn hedging(hedge: &Hedge) -> Result<Arc<Hedging>, Opening> {
     }))
 }
 
+async fn fire_root_region(client: &ClaudeClient, session: &str) {
+    let region = match bridge::call_optional_bytes(
+        json!({"op": "root_region", "session_id": session}),
+    )
+    .await
+    {
+        Ok(Some(region)) => region,
+        Ok(None) => return,
+        Err(error) => {
+            drop(
+                bridge::call(
+                    json!({"op": "root_region_event", "event": "invalid", "error": error}),
+                )
+                .await,
+            );
+            return;
+        }
+    };
+    match client.arm_root_region(&region).await {
+        Ok(Some(armed)) => armed.fire(),
+        Ok(None) => {}
+        Err(error) => {
+            client.clear_root_region();
+            drop(bridge::call(json!({"op": "root_region_event", "event": "invalid", "error": error.to_string()})).await);
+        }
+    }
+}
+
 async fn log(scope: &str) -> Result<Arc<Log>, String> {
     if let Some(log) = LOGS.with_borrow(|logs| logs.get(scope).cloned()) {
         return Ok(log);
@@ -1033,6 +1063,7 @@ fn claude_harness(
     tool_result_clearing: Option<ToolResultClearing>,
     tool_result_tokens: Option<std::num::NonZeroU64>,
     instructions: &dyn Fn(Option<&str>) -> String,
+    root: Option<&str>,
 ) -> (ClaudeHarness, ClaudeClient) {
     let http = nanocode::claude::transport::HttpClient::new(
         nanocode::claude::transport::SenderTransport(transport::WorkerTransport::CLAUDE),
@@ -1044,6 +1075,14 @@ fn claude_harness(
     );
     if endpoint.subscription {
         client = client.subscription_compatibility();
+    }
+    if let Some(session) = root {
+        client = client.with_root_region(
+            session,
+            store::WorkerRegion {
+                session: session.to_owned(),
+            },
+        );
     }
     let max_tokens = endpoint.max_tokens;
     let harness = match orchestration {
@@ -1117,6 +1156,10 @@ fn claude_harness(
     (harness, client)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "each argument is one session setting of the Codex harness"
+)]
 fn codex_harness(
     endpoint: Endpoint,
     hedging: Arc<Hedging>,
@@ -1213,13 +1256,6 @@ fn codex_harness(
 
 async fn open(mut config: Configuration) -> Result<Session, Opening> {
     let coalesce = Duration::from_millis(config.event_coalesce_ms);
-    let log = log(&config.scope).await?;
-    if config.remote_children {
-        log.settle_durably();
-    }
-    let store = nanocode::session_store(log.store())
-        .map_err(text)?
-        .with_logged_prompts();
     let model = config.model().map_err(configuration)?;
     let subagent_models = config.subagent_models().map_err(configuration)?;
     let thinking = config.thinking().map_err(configuration)?;
@@ -1310,6 +1346,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
             config.tool_result_clearing,
             config.tool_result_tokens,
             &instructions,
+            config.root_region.then_some(config.session_id.as_str()),
         );
         let harness = harness.headless(config.headless);
         match config.deadline {
@@ -1323,6 +1360,18 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
             None => (harness, client),
         }
     });
+    if let Some((_, client)) = &claude
+        && config.root_region
+    {
+        fire_root_region(client, &config.session_id).await;
+    }
+    let log = log(&config.scope).await?;
+    if config.remote_children {
+        log.settle_durably();
+    }
+    let store = nanocode::session_store(log.store())
+        .map_err(text)?
+        .with_logged_prompts();
     let codex_search = codex
         .as_ref()
         .filter(|endpoint| {

@@ -41,6 +41,10 @@ export type Metrics = {
   host_calls: number
   store_calls: number
   log_calls: number
+  root_regions_adopted: number
+  root_regions_dropped: number
+  root_regions_invalid: number
+  root_regions_stale: number
   model_requests: number
   model_sockets: number
   socket_sends: number
@@ -205,6 +209,10 @@ async function create(
       host_calls: 0,
       store_calls: 0,
       log_calls: 0,
+      root_regions_adopted: 0,
+      root_regions_dropped: 0,
+      root_regions_invalid: 0,
+      root_regions_stale: 0,
       model_requests: 0,
       model_sockets: 0,
       socket_sends: 0,
@@ -798,7 +806,7 @@ async function create(
               await state.sql.transaction(
                 'store',
                 request.operation,
-                internal.statements(request.statements),
+                internal.regionStatements(request),
                 request.access,
               ),
             )
@@ -818,10 +826,31 @@ async function create(
             await state.sql.transaction(
               'log',
               request.operation,
-              internal.statements(request.statements),
+              internal.regionStatements(request),
               request.access,
             ),
           )
+        }
+        case 'root_region': {
+          const started = performance.now()
+          const rows = await state.sql.transaction(
+            'store',
+            'root_region',
+            [
+              [rootRegionSchema],
+              ['SELECT region FROM nanocode_root_region WHERE session_id = ?', request.session_id],
+            ],
+            'schema',
+          )
+          state.timings.record('root_region.read', performance.now() - started)
+          const region = rows[1]?.[0]?.[0]
+          return region instanceof ArrayBuffer ? new Uint8Array(region) : null
+        }
+        case 'root_region_event': {
+          if (request.event === 'adopted') state.counters.root_regions_adopted++
+          else if (request.event === 'stale') state.counters.root_regions_stale++
+          else state.counters.root_regions_invalid++
+          return null
         }
         default:
           throw new Error('unsupported host operation')
@@ -840,6 +869,30 @@ async function create(
 
     notify() {
       for (const watcher of [...state.watchers]) watcher()
+    },
+
+    regionStatements(request: any): Contracts.Statement[] {
+      const statements = internal.statements(request.statements)
+      const region = request.root_region
+      if (!region) return statements
+
+      const body: Uint8Array | undefined = request.body
+      const fits =
+        region.put &&
+        body !== undefined &&
+        (state.sql.value_limit === undefined || body.byteLength <= state.sql.value_limit)
+      if (region.put && !fits) state.counters.root_regions_dropped++
+      return [
+        ...statements,
+        [rootRegionSchema],
+        fits
+          ? [
+              'INSERT OR REPLACE INTO nanocode_root_region (session_id, region) VALUES (?, ?)',
+              region.session_id,
+              body.slice().buffer,
+            ]
+          : ['DELETE FROM nanocode_root_region WHERE session_id = ?', region.session_id],
+      ]
     },
 
     statements(statements: any[]): Contracts.Statement[] {
@@ -1683,6 +1736,9 @@ export function encodeError(error: unknown) {
 export type AgentRuntime = Awaited<ReturnType<typeof create>>
 
 const FRAMED = Symbol('framed')
+
+const rootRegionSchema =
+  'CREATE TABLE IF NOT EXISTS nanocode_root_region (session_id TEXT PRIMARY KEY, region BLOB NOT NULL)'
 
 type Framed = { [FRAMED]: true; head: unknown; body: Uint8Array }
 

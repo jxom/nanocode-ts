@@ -283,6 +283,7 @@ export function create(options: create.Options = {}): Harness {
             gateway: plan || wallet ? undefined : gateway,
             event_coalesce_ms: options.eventCoalesceMs ?? defaultEventCoalesceMs,
             stream_tool_input: options.streamToolInput,
+            ...(options.rootRegion ? { root_region: true } : {}),
             ...(executor ? { hands: true } : {}),
             tools: definitions,
             ...(options.webSearch === false ? { web_search: false } : {}),
@@ -574,6 +575,7 @@ export declare namespace create {
     provider?: Contracts.ModelProvider
     replicas?: Journal.Replicas
     report?: (report: DriveReport) => void
+    rootRegion?: boolean
     sessionFetch?(sessionId: string): typeof fetch
     streamToolInput?: boolean
     subscription?(session: {

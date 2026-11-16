@@ -1,10 +1,15 @@
-use nanocode::durability::{
-    BlobKey, BlobStore, Sql, SqlAccess, SqlRow, SqlStatement, StoreError, StoreFuture,
+use std::cell::RefCell;
+
+use nanocode::{
+    claude::RootRegion,
+    durability::{
+        BlobKey, BlobStore, Sql, SqlAccess, SqlRow, SqlStatement, StoreError, StoreFuture,
+    },
 };
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use super::bridge::{call_bytes_with, call_optional_bytes, call_with_body};
+use super::bridge::{call, call_bytes_with, call_optional_bytes, call_with_body, spawn};
 
 const NULL_CELL: u32 = u32::MAX;
 
@@ -21,11 +26,54 @@ struct Transaction<'a> {
     op: &'static str,
     access: &'static str,
     operation: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    root_region: Option<RegionHead<'a>>,
     statements: Interned<'a>,
 }
 
+#[derive(Serialize)]
+struct RegionHead<'a> {
+    put: bool,
+    session_id: &'a str,
+}
+
+struct RegionWrite {
+    bytes: Option<Vec<u8>>,
+    session: String,
+}
+
 thread_local! {
+    static REGION: RefCell<Option<RegionWrite>> = const { RefCell::new(None) };
     static SENT: std::cell::RefCell<std::collections::HashMap<usize, u32>> = std::cell::RefCell::default();
+}
+
+pub struct WorkerRegion {
+    pub session: String,
+}
+
+impl RootRegion for WorkerRegion {
+    fn adopted(&self, fresh: bool) {
+        spawn(async move {
+            drop(call(json!({"op": "root_region_event", "event": if fresh { "adopted" } else { "stale" }})).await);
+        });
+    }
+
+    fn store(&self, region: Option<Vec<u8>>) {
+        let put = region.is_some();
+        REGION.set(Some(RegionWrite {
+            bytes: region,
+            session: self.session.clone(),
+        }));
+        if !put {
+            return;
+        }
+
+        spawn(async {
+            if REGION.with_borrow(Option::is_some) {
+                drop(WorkerStore::log().transaction("root_region", &[]).await);
+            }
+        });
+    }
 }
 
 struct Interned<'a> {
@@ -158,18 +206,38 @@ impl Sql for WorkerStore {
         statements: &'a [SqlStatement<'a>],
     ) -> StoreFuture<'a, Result<Vec<Vec<SqlRow>>, StoreError>> {
         Box::pin(async move {
-            let bytes = call_bytes_with(&Transaction {
-                op: self.0,
-                access: match access {
-                    SqlAccess::Read => "read",
-                    SqlAccess::Write => "write",
-                    SqlAccess::Schema => "schema",
+            let region = match access {
+                SqlAccess::Write => REGION.take(),
+                SqlAccess::Read | SqlAccess::Schema => None,
+            };
+            let reply = call_bytes_with(
+                &Transaction {
+                    op: self.0,
+                    access: match access {
+                        SqlAccess::Read => "read",
+                        SqlAccess::Write => "write",
+                        SqlAccess::Schema => "schema",
+                    },
+                    operation,
+                    root_region: region.as_ref().map(|region| RegionHead {
+                        put: region.bytes.is_some(),
+                        session_id: &region.session,
+                    }),
+                    statements: Interned::new(statements),
                 },
-                operation,
-                statements: Interned::new(statements),
-            })
-            .await
-            .map_err(|error| StoreError::Backend(error.to_string()))?;
+                region.as_ref().and_then(|region| region.bytes.as_deref()),
+            )
+            .await;
+            if reply.is_err()
+                && let Some(region) = region
+            {
+                REGION.with_borrow_mut(|pending| {
+                    if pending.is_none() {
+                        *pending = Some(region);
+                    }
+                });
+            }
+            let bytes = reply.map_err(|error| StoreError::Backend(error.to_string()))?;
             Rows {
                 bytes: &bytes,
                 offset: 0,
