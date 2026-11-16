@@ -39,6 +39,10 @@ const rejected = process.argv.includes('--rejected')
 const keyed = process.argv.includes('--key')
 const anthropicKey = (keyed ? process.env.ANTHROPIC_API_KEY : undefined) ?? 'sk-ant-invalid'
 const claudeModel = arg('claude-model', 'claude-haiku-4-5')
+const model = arg('model', '')
+const samePrompt = process.argv.includes('--same-prompt')
+const nonces = new Map<number, string>()
+const nonce = (index: number) => nonces.get(index) ?? nonces.set(index, String(Math.random()).slice(2, 8)).get(index)!
 const codexModel = arg('codex-model', 'gpt-6-luna')
 const rows = 40
 const cols = 120
@@ -61,11 +65,11 @@ const lanes: { [name: string]: Lane } = {
       Fs.writeFileSync(home + '/.claude/.claude.json', JSON.stringify({ bypassPermissionsModeAccepted: true, customApiKeyResponses: { approved: ['fixture-key', anthropicKey.slice(-20)], rejected: [] }, hasCompletedOnboarding: true, projects: { [Fs.realpathSync(cwd)]: { hasCompletedProjectOnboarding: true, hasTrustDialogAccepted: true } } }))
       Fs.writeFileSync(home + '/.claude/settings.json', JSON.stringify({ permissions: { allow: ['Bash(true)'] }, theme: 'dark' }))
     },
-    tui: () => [bins.claude],
+    tui: () => [bins.claude, ...(model ? ['--model', model] : [])],
   },
   codex: {
     env: (home) => ({ ...base, BENCH_KEY: 'fixture-key', CODEX_HOME: home + '/.codex', HOME: home }),
-    ready: 'bench/model',
+    ready: 'Ask Codex to do anything',
     setup: (home, cwd) => {
       Fs.mkdirSync(home + '/.codex', { recursive: true })
       Fs.writeFileSync(home + '/.codex/config.toml', 'approval_policy = "never"\ncheck_for_update_on_startup = false\nsandbox_mode = "danger-full-access"\n\n[analytics]\nenabled = false\n\n[feedback]\nenabled = false\n\n[projects."' + cwd + '"]\ntrust_level = "trusted"\n')
@@ -112,7 +116,7 @@ function ncClaudeLane(bin: string): Lane {
     env: (home, url) => ({ ...base, HOME: home, NANOCODE_ANTHROPIC_API_KEY: 'fixture-key', NANOCODE_ANTHROPIC_BASE_URL: url + '/v1', NANOCODE_TELEMETRY: 'off' }),
     exec: (home, url, prompt) => [bin, 'exec', '--home', home + '/.nanocode', '-m', 'claude-opus-4-6', '--ephemeral', prompt],
     ready: 'Ask anything',
-    tui: (home) => [bin, '--home', home + '/.nanocode', '-m', 'claude-opus-4-6', '--ephemeral'],
+    tui: (home) => [bin, '--home', home + '/.nanocode', ...(model ? ['--harness', 'claude', '-m', model] : ['-m', 'claude-opus-4-6']), '--ephemeral'],
   }
 }
 
@@ -293,7 +297,7 @@ async function tuiSample(name: string, lane: Lane, url: string, index: number): 
   }
   await sleep(settle)
   for (let turn = 1; turn <= turns; turn++) {
-    const run = name.replace(/[^A-Za-z0-9]/g, '-') + '-' + index + '-' + turn + '-' + String(Math.random()).slice(2, 8)
+    const run = samePrompt ? 'r' + index + '-t' + turn + '-' + nonce(index) : name.replace(/[^A-Za-z0-9]/g, '-') + '-' + index + '-' + turn + '-' + String(Math.random()).slice(2, 8)
     const mark = marks(turn)
     term.reset()
     const pair = mark.first.slice(0, 2)
@@ -311,9 +315,9 @@ async function tuiSample(name: string, lane: Lane, url: string, index: number): 
     if (process.env.SLA_DEBUG) console.error(name, index, turn, 'seen', seen !== undefined, 'last', last !== undefined)
     await sleep(300)
     if (process.env.SLA_STREAM) Fs.appendFileSync(process.env.SLA_STREAM, JSON.stringify({ chunks: term.trace().map((entry) => [ms(entry[0], enter), entry[1]]), e2e: ms(seen, enter), index, lane: name, turn, wall }) + '\n')
-    const entries = live ? [] : await log(url, run)
+    const entries = live ? [] : (await log(url, run)).filter((entry) => !samePrompt || BigInt(entry.arrive_ns) >= enter)
     if (process.env.SLA_TRACE) Fs.appendFileSync(process.env.SLA_TRACE, JSON.stringify({ enter: String(enter), headers: String(entries.find((entry) => entry.kind !== 'side')?.headers_ns), lane: name, turn }) + '\n')
-    out.push({ index, lane: name, ready: ms(ready, started), turn, wall, ...(live ? { e2e: ms(seen, enter) } : derive(entries, enter, seen, last)), ...(seen ? {} : { error: 'no token: ' + term.plain().slice(-300) }) })
+    out.push({ index, lane: name, round: index, session: name + '-' + index, build: builds.get(name), match: (model || 'default') + '|' + (samePrompt ? 'same-prompt' : 'lane-prompt') + '|' + (live ? 'live' : 'mock') + '|' + cols + 'x' + rows, ready: ms(ready, started), turn, wall, ...(live ? { e2e: ms(seen, enter) } : derive(entries, enter, seen, last)), ...(seen ? {} : { error: 'no token: ' + term.plain().slice(-300) }) })
     await sleep(live ? 3000 : 500)
   }
   term.kill()
@@ -392,10 +396,16 @@ const pct = (values: number[], p: number) => {
 }
 
 const names = arg('lanes', 'nc,claude,codex').split(',')
+const builds = new Map(names.map((name) => {
+  const bin = laneOf(name).tui(Path.join(work, 'version'), '')[0]!
+  const version = ChildProcess.spawnSync(bin, ['--version'], { encoding: 'utf8', env: { ...process.env, HOME: Path.join(work, 'version') } })
+  return [name, (version.stdout ?? '').trim().split('\n')[0] || 'unknown']
+}))
 const fx = live ? { child: { kill: () => true }, url: '' } : await fixture()
 const all: Sample[] = []
 Fs.mkdirSync(root, { recursive: true })
-for (let index = 0; index < samples; index++) {
+const offset = Number(arg('offset', '0'))
+for (let index = offset; index < offset + samples; index++) {
   for (const name of index % 2 === 0 ? names : [...names].reverse()) {
     const lane = laneOf(name)
     const result = mode === 'exec' ? await execSample(name, lane, fx.url, index) : mode === 'resume' ? await resumeSample(name, lane, fx.url, index) : await tuiSample(name, lane, fx.url, index)
