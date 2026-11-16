@@ -172,7 +172,7 @@ export async function create(options: create.Options = {}): Promise<Bash> {
       ...options.commands,
     }),
   )
-  if (!options.python?.remote && !options.python?.module && !(options.webassembly ?? compiles()))
+  if (!options.python?.module && !(options.webassembly ?? compiles()))
     for (const name of ['python', 'python3', 'pip', 'pip3'])
       if (!options.commands?.[name]) commands.delete(name)
   let calls = 0
@@ -608,7 +608,7 @@ const githubFileInstructions =
   'For single files, read `https://raw.githubusercontent.com/OWNER/REPO/REF/PATH` (REF may be HEAD), and for archives `https://codeload.github.com/OWNER/REPO/tar.gz/REF`, rather than api.github.com: this host may share its address with others, so the API can answer 403 rate limit exceeded.'
 
 const programInstructions =
-  "WebAssembly programs built for WASI (wasm32-wasi) run directly: `./prog.wasm ARGS`, `wasm prog.wasm ARGS` or `wasmtime prog.wasm ARGS`, with stdin, stdout, exit codes, the environment and the files under the working directory (up to 64 MiB, written back when the program exits). There is no C or Rust compiler: write WebAssembly text and assemble it with `wat2wasm prog.wat` (writes prog.wasm; flat or folded instructions, memory, data, globals and imports such as WASI's `fd_write`), rather than writing module bytes by hand, or download the .wasm file. `wasm --invoke NAME FILE ARGS` calls one exported function and prints its result. Python 3 runs on Pyodide (CPython compiled to WebAssembly, loaded on first use): `python3 script.py ARGS`, `python3 -c CODE`, `python3 -m MODULE` and stdin work on the files under the working directory and /tmp, numpy, pandas and the other packages Pyodide ships load when imported, and `pip install PKG` installs pure-Python wheels for the rest of the session. Python has no network access (urllib, requests and sockets fail), so download files with curl first and read them from Python."
+  "WebAssembly programs built for WASI (wasm32-wasi) run directly: `./prog.wasm ARGS`, `wasm prog.wasm ARGS` or `wasmtime prog.wasm ARGS`, with stdin, stdout, exit codes, the environment and the files under the working directory (up to 64 MiB, written back when the program exits). There is no C or Rust compiler: write WebAssembly text and assemble it with `wat2wasm prog.wat` (writes prog.wasm; flat or folded instructions, memory, data, globals and imports such as WASI's `fd_write`), rather than writing module bytes by hand, or download the .wasm file. `wasm --invoke NAME FILE ARGS` calls one exported function and prints its result. Python 3 runs on nanocode's Python (RustPython compiled to WebAssembly with compiled-in C extensions such as numpy, matplotlib, pyyaml, regex, msgpack, ujson, markupsafe and kiwisolver): `python3 script.py ARGS`, `python3 -c CODE`, `python3 -m MODULE` and stdin work on the workspace's files, and `pip install PKG` installs pure-Python (py3-none-any) wheels from PyPI into the workspace's site-packages; packages that need other compiled code don't install. Python has no network access (urllib, requests and sockets fail), so download files with curl first and read them from Python."
 
 export const instructions =
   gitInstructions + ' ' + githubFileInstructions + ' ' + programInstructions

@@ -6,7 +6,6 @@ import * as Bash from '../bash/Bash.ts'
 import type * as FileSystem from '../bash/FileSystem.ts'
 import * as GitHub from '../bash/GitHub.ts'
 import * as Mount from '../bash/Mount.ts'
-import type * as Python from '../bash/Python.ts'
 import * as SqlFileSystem from '../bash/SqlFileSystem.ts'
 import * as Contracts from '../Contracts.ts'
 import * as EventHub from '../EventHub.ts'
@@ -221,7 +220,6 @@ export type HostToolCall = {
 const workspaceMemoryBytes = 48 * 1024 * 1024
 
 const workspaceFileBytes = 32 * 1024 * 1024
-const pythonRemoteBytes = 256 * 1024 * 1024
 const pythonStepsPerMs = 42_000
 const pythonCpuMs = 5_000
 
@@ -2502,9 +2500,6 @@ ${input.request_id}`
           )
         }
         const cellFetch = guarded()
-        const pythonRemote = options.workspace
-          ? options.workspace.python?.(authority, this.env)
-          : undefined
         const pythonModule = options.workspace ? await options.workspace.pythonModule : undefined
         const mcpServers =
           typeof options.mcp?.servers === 'function'
@@ -2536,27 +2531,16 @@ ${input.request_id}`
                 github: { archive: false, ...options.workspace?.github },
                 wasm: { interpreter },
                 ...(options.workspace?.psh ? { psh: options.workspace.psh } : {}),
-                ...(pythonRemote || pythonModule
+                ...(pythonModule
                   ? {
                       python: {
-                        ...(pythonModule
-                          ? {
-                              module: pythonModule,
-                              cpuMs:
-                                options.workspace?.pythonCpuMs ??
-                                (this.env.PYTHON_CPU_MS === undefined
-                                  ? pythonCpuMs
-                                  : policy(this.env.PYTHON_CPU_MS, 'PYTHON_CPU_MS')),
-                              stepsPerMs: pythonStepsPerMs,
-                            }
-                          : {}),
-                        ...(pythonRemote
-                          ? {
-                              remote: pythonRemote,
-                              maxBytes: pythonRemoteBytes,
-                              mirror: sessionId + ':' + scope,
-                            }
-                          : {}),
+                        module: pythonModule,
+                        cpuMs:
+                          options.workspace?.pythonCpuMs ??
+                          (this.env.PYTHON_CPU_MS === undefined
+                            ? pythonCpuMs
+                            : policy(this.env.PYTHON_CPU_MS, 'PYTHON_CPU_MS')),
+                        stepsPerMs: pythonStepsPerMs,
                       },
                     }
                   : {}),
@@ -5113,7 +5097,6 @@ export declare namespace create {
           maxFileBytes?: number
           mounts?(authority: SessionAuthority, env: E): Record<string, FileSystem.FileSystem>
           psh?: WebAssembly.Module | Promise<WebAssembly.Module>
-          python?(authority: SessionAuthority, env: E): Python.Remote | undefined
           pythonCpuMs?: number
           pythonModule?: WebAssembly.Module | Promise<WebAssembly.Module>
         }

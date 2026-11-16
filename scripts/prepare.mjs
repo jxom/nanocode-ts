@@ -100,7 +100,7 @@ if (current(dist, print)) {
         source +
         ' not found) and no Rust toolchain with ../nanocodex to build it. node scripts/release.mjs publishes ' +
         tag(print) +
-        " from a commit with these Rust inputs; pin a commit whose release exists, or set NANOCODE_TS_WASM_URL to a nanocode-wasm tarball.",
+        ' from a commit with these Rust inputs; pin a commit whose release exists, or set NANOCODE_TS_WASM_URL to a nanocode-wasm tarball.',
     )
     process.exit(1)
   }
@@ -110,7 +110,6 @@ function typescript() {
   const paths = [
     'package.json',
     'package-lock.json',
-    'scripts/pyodide.mjs',
     ...readdirSync(root).filter((name) => /^tsconfig.*\.json$/.test(name)),
   ]
   for (const entry of readdirSync(join(root, 'src'), { recursive: true, withFileTypes: true })) {

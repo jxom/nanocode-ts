@@ -4324,7 +4324,7 @@ function syntax(error: ParseError, label: string, offset = 0): string {
 }
 
 export const UNSUPPORTED =
-  /^(unrecognized|invalid|unsupported|unknown) option|^Unknown option|not supported|network access is not available|Cannot find package 'pyodide'/
+  /^(unrecognized|invalid|unsupported|unknown) option|^Unknown option|not supported|network access is not available/
 
 export function missing(name: string): string {
   if (/^(node|nodejs|npm|npx|pnpm|yarn|bun|bunx|deno|tsc|tsx|ts-node)$/.test(name))

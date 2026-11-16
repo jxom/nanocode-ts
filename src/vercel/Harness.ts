@@ -241,7 +241,7 @@ export function create(options: create.Options = {}): Harness {
         : await Bash.create({
             fs: files,
             cwd: options.workspace?.cwd ?? '/workspace',
-            python: { mirror: ctx.runId },
+            python: {},
             ...(options.workspace?.files ? { files: options.workspace.files } : {}),
             ...(options.workspace?.github ? { github: options.workspace.github } : {}),
             ...(options.workspace?.psh ? { psh: options.workspace.psh } : {}),
@@ -298,7 +298,9 @@ export function create(options: create.Options = {}): Harness {
             ...(options.mcp?.store || options.mcp?.failureMs !== undefined
               ? {
                   mcp: {
-                    ...(options.mcp.failureMs !== undefined ? { failureMs: options.mcp.failureMs } : {}),
+                    ...(options.mcp.failureMs !== undefined
+                      ? { failureMs: options.mcp.failureMs }
+                      : {}),
                     ...(options.mcp.store ? { store: options.mcp.store } : {}),
                   },
                 }

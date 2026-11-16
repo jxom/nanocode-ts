@@ -37,7 +37,7 @@ These principles come from nanocodexyz/nanocode's `AGENTS.md` and apply to every
 - Import module-shaped internal files as namespaces (`import * as Store from './Store.ts'`) and access members through the module name. Named imports are fine for types, leaf helpers, command handlers, and third-party APIs that are not module namespaces.
 - Import Node built-ins as namespaces unless the neighboring code or API is clearer with a named import.
 - Re-export public module files as namespaces (`export * as Store from './Store.ts'`). Avoid flattening sibling-module symbols into a barrel.
-- Use static imports. Reserve dynamic imports for a real runtime or bundle boundary, such as a lazily loaded wallet or Pyodide, not dependency-cycle workarounds.
+- Use static imports. Reserve dynamic imports for a real runtime or bundle boundary, such as a lazily loaded wallet, not dependency-cycle workarounds.
 - Use `import type` and `export type` where an import or export is type-only.
 - Use functions and plain data for normal APIs. Classes are limited to errors and framework-required entrypoints such as Durable Objects.
 - Keep error classes in the module that throws them, ordered alphabetically with its public exports. Set custom error `name` values to the namespaced form, such as `Config.InvalidError`.

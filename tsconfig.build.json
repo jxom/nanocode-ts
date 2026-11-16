@@ -19,7 +19,6 @@
     "src/cloudflare/Listings.ts",
     "src/cloudflare/Plans.ts",
     "src/cloudflare/Pool.ts",
-    "src/cloudflare/python.ts",
     "src/cloudflare/Relay.ts",
     "src/cloudflare/wasm.d.ts",
     "src/machines/cloudflare/**"
