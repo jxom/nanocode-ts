@@ -10,9 +10,9 @@ use nanocode_code_mode::{
         HandEnvironment, HandHost, HandPermission, HandSession, RemoteFrame as Frame,
     },
 };
+use nanocode_sync::mpsc;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use nanocode_sync::mpsc;
 
 use super::{
     bridge::{call, spawn},

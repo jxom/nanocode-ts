@@ -93,7 +93,11 @@ impl ToolSelections {
                 .entry(backend.to_owned())
                 .or_default()
                 .exclude
-                .extend(nanocode::process::JOB_TOOLS.iter().map(|name| (*name).to_owned()));
+                .extend(
+                    nanocode::process::JOB_TOOLS
+                        .iter()
+                        .map(|name| (*name).to_owned()),
+                );
         }
         Self(selections)
     }

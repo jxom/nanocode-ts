@@ -6,16 +6,16 @@ use std::{
     time::Duration,
 };
 
-use nanocode_http::{
-    StatusCode,
-    header::{HeaderMap, HeaderName, HeaderValue},
-};
 use nanocode::{
     codex::transport::host::{
         ConnectedHost, HostConnectRequest, HostConnection, HostConnectionMetadata, HostError,
         HostFuture, HostHttpResponse, HostMessage, HostTransport, send_http,
     },
     http::{BoxFuture, Error, Request, Response, Sender, origin},
+};
+use nanocode_http::{
+    StatusCode,
+    header::{HeaderMap, HeaderName, HeaderValue},
 };
 use serde_json::{Value, json};
 

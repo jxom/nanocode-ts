@@ -65,6 +65,33 @@ enum RefusalFallback {
     Session,
 }
 
+#[derive(Clone, Copy, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CodexOptions {
+    #[serde(default)]
+    compact_instructions: bool,
+    #[serde(default)]
+    lean_tool_arguments: bool,
+    #[serde(default)]
+    lenient_patches: bool,
+    #[serde(default)]
+    max_output_tokens: Option<std::num::NonZeroU64>,
+    #[serde(default)]
+    min_wait_ms: Option<std::num::NonZeroU64>,
+}
+
+impl CodexOptions {
+    const fn tool_settings(self) -> nanocode::tool_contract::ToolSettings {
+        nanocode::tool_contract::ToolSettings {
+            lenient_patches: self.lenient_patches,
+            min_wait_ms: match self.min_wait_ms {
+                Some(ms) => Some(ms.get()),
+                None => None,
+            },
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 struct FinishLevers {
     brief_final: bool,
@@ -285,6 +312,8 @@ struct Configuration {
     #[serde(default)]
     auto_compact_window_tokens: Option<u64>,
     #[serde(default)]
+    codex_options: CodexOptions,
+    #[serde(default)]
     environment: Option<Environment>,
     #[serde(default)]
     tools: Vec<tools::HostTool>,
@@ -320,16 +349,22 @@ struct Escalate {
 impl Escalate {
     fn escalation(self) -> Result<nanocode::claude::Escalation, Opening> {
         let trigger = match (self.context_tokens, self.tool_errors) {
-            (Some(context_tokens), Some(tool_errors)) => nanocode::claude::EscalationTrigger::Either {
-                context_tokens,
-                tool_errors,
-            },
+            (Some(context_tokens), Some(tool_errors)) => {
+                nanocode::claude::EscalationTrigger::Either {
+                    context_tokens,
+                    tool_errors,
+                }
+            }
             (Some(context_tokens), None) => {
                 nanocode::claude::EscalationTrigger::ContextTokens(context_tokens)
             }
-            (None, Some(tool_errors)) => nanocode::claude::EscalationTrigger::ToolErrors(tool_errors),
+            (None, Some(tool_errors)) => {
+                nanocode::claude::EscalationTrigger::ToolErrors(tool_errors)
+            }
             (None, None) => {
-                return Err(configuration("escalate needs context_tokens or tool_errors"));
+                return Err(configuration(
+                    "escalate needs context_tokens or tool_errors",
+                ));
             }
         };
         Ok(nanocode::claude::Escalation {
@@ -975,8 +1010,11 @@ fn claude_harness(
     let http = nanocode::claude::transport::HttpClient::new(
         nanocode::claude::transport::SenderTransport(transport::WorkerTransport::CLAUDE),
     );
-    let mut client =
-        ClaudeClient::with_auth_headers(http, endpoint.endpoint, nanocode_http::header::HeaderMap::new());
+    let mut client = ClaudeClient::with_auth_headers(
+        http,
+        endpoint.endpoint,
+        nanocode_http::header::HeaderMap::new(),
+    );
     if endpoint.subscription {
         client = client.subscription_compatibility();
     }
@@ -1050,6 +1088,7 @@ fn codex_harness(
     environment: Option<ExecutionEnvironment>,
     orchestration: CodexOrchestration,
     persist_finish: bool,
+    options: CodexOptions,
     instructions: &dyn Fn(Option<&str>) -> String,
 ) -> Result<CodexHarness, Opening> {
     let openai = match (endpoint.subscription, endpoint.gateway) {
@@ -1106,8 +1145,21 @@ fn codex_harness(
         CodexOrchestration::CodeMode | CodexOrchestration::Jobs => harness,
         CodexOrchestration::Direct => harness.direct_tools_for(|_| true),
     };
+    let compact_instructions = options.compact_instructions && endpoint.instructions.is_none();
     let harness = harness.configure(move |codex| {
-        let codex = codex.persist_finish(persist_finish);
+        let codex = codex
+            .persist_finish(persist_finish)
+            .lean_custom_tool_arguments(options.lean_tool_arguments);
+        let custom = !Model::ALL.contains(&codex.selected_model());
+        let codex = match options.max_output_tokens {
+            Some(tokens) if custom => codex.max_output_tokens(tokens.get()),
+            _ => codex,
+        };
+        let codex = if compact_instructions && custom {
+            codex.compact_instructions()
+        } else {
+            codex
+        };
         Ok(match &environment {
             Some(environment) => codex.execution_environment(environment.clone()),
             None => codex,
@@ -1174,7 +1226,11 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
     let (claude, codex) = config.endpoints().map_err(configuration)?;
     let hedging = hedging(&config.hedge)?;
     let claude_search_tokens = claude.as_ref().map(|endpoint| endpoint.max_tokens);
-    let escalation = config.escalate.take().map(Escalate::escalation).transpose()?;
+    let escalation = config
+        .escalate
+        .take()
+        .map(Escalate::escalation)
+        .transpose()?;
     let claude = claude.map(|endpoint| {
         let (harness, client) = claude_harness(
             endpoint,
@@ -1200,7 +1256,9 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
                 result_effort: config.result_effort,
                 skip_finish_check: config.skip_finish_check,
                 stop_at_target: config.stop_at_target,
-                yield_floor: config.yield_floor_ms.map(|ms| Duration::from_millis(ms.get())),
+                yield_floor: config
+                    .yield_floor_ms
+                    .map(|ms| Duration::from_millis(ms.get())),
                 yield_share: config.yield_share,
             },
             escalation,
@@ -1253,6 +1311,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
                 codex_environment.as_ref().map(Environment::codex),
                 config.codex_orchestration,
                 config.persist_finish,
+                config.codex_options,
                 &instructions,
             )?;
             Some(match config.deadline {
@@ -1410,8 +1469,11 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
         .build()
         .map_err(configuration)
     };
-    let gated = |tools: Tools| {
-        let builder = tools.into_builder().effect_gate(log.gate());
+    let gated = |tools: Tools, settings: nanocode::tool_contract::ToolSettings| {
+        let builder = tools
+            .into_builder()
+            .effect_gate(log.gate())
+            .tool_settings(settings);
         match config.cell_yield_ms {
             Some(after) => builder.cell_yield(Duration::from_millis(after)),
             None => builder,
@@ -1426,12 +1488,21 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
         );
     }
     if let Some((harness, _)) = claude {
-        builder = builder.claude(harness.tools(gated(selected(Provider::Claude)?)?));
+        builder = builder.claude(harness.tools(gated(
+            selected(Provider::Claude)?,
+            nanocode::tool_contract::ToolSettings::DEFAULT,
+        )?));
     }
     if let Some(harness) = codex {
         let jobs = matches!(config.codex_orchestration, CodexOrchestration::Jobs);
         builder = builder.openai(
-            harness.tools(gated(selected(Provider::Codex)?)?.with_background_jobs(jobs)),
+            harness.tools(
+                gated(
+                    selected(Provider::Codex)?,
+                    config.codex_options.tool_settings(),
+                )?
+                .with_background_jobs(jobs),
+            ),
         );
     }
     if config.subagents == Some(false) {

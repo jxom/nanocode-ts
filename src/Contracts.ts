@@ -84,6 +84,14 @@ export type AgentEnvironment = {
   project_instructions?: string
 }
 
+export type CodexOptions = {
+  compact_instructions?: boolean
+  lean_tool_arguments?: boolean
+  lenient_patches?: boolean
+  max_output_tokens?: number
+  min_wait_ms?: number
+}
+
 export type AgentConfiguration = {
   scope: string
   provider?: ModelProvider
@@ -139,6 +147,7 @@ export type AgentConfiguration = {
   stream_tool_input?: boolean
   headless?: boolean
   auto_compact_window_tokens?: number
+  codex_options?: CodexOptions
   environment?: AgentEnvironment
   tools?: HostTool[]
   web_search?: boolean | Partial<Record<ModelProvider, boolean>>

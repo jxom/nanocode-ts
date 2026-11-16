@@ -82,6 +82,23 @@ export const finishLevers = [
   'stop_at_target',
 ] as const
 
+export const codexSwitches = [
+  'compact_instructions',
+  'lean_tool_arguments',
+  'lenient_patches',
+] as const
+
+export const codexLimits = ['context_window', 'max_output_tokens', 'min_wait_ms'] as const
+
+function codexOptions(descriptor: SessionDescriptor): Contracts.CodexOptions | undefined {
+  const options: Contracts.CodexOptions = {}
+  for (const name of codexSwitches) if (descriptor[name] === true) options[name] = true
+  if (descriptor.max_output_tokens !== undefined)
+    options.max_output_tokens = descriptor.max_output_tokens
+  if (descriptor.min_wait_ms !== undefined) options.min_wait_ms = descriptor.min_wait_ms
+  return Object.keys(options).length === 0 ? undefined : options
+}
+
 export const resultEfforts: readonly Contracts.Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
 
 export const codexOrchestrations: readonly Contracts.CodexOrchestration[] = [
@@ -122,6 +139,12 @@ export type SessionDescriptor = SessionAuthority & {
   tool_result_tokens?: number
   yield_floor_ms?: number
   yield_share?: number
+  compact_instructions?: boolean
+  context_window?: number
+  lean_tool_arguments?: boolean
+  lenient_patches?: boolean
+  max_output_tokens?: number
+  min_wait_ms?: number
   session_name: string
   subscription: boolean
   codex_subscription?: boolean
@@ -1135,7 +1158,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
             { error: `refusal_fallback must be one of ${refusalFallbacks.join(', ')}` },
             400,
           )
-        for (const lever of finishLevers)
+        for (const lever of [...finishLevers, ...codexSwitches])
           if (input[lever] !== undefined && typeof input[lever] !== 'boolean')
             return json({ error: `${lever} must be a boolean` }, 400)
         if (
@@ -1149,6 +1172,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           'finish_check_min_requests',
           'late_finish_check_ms',
           'yield_floor_ms',
+          ...codexLimits,
         ] as const)
           if (
             input[limit] !== undefined &&
@@ -1340,6 +1364,8 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           descriptor.yield_share = input.yield_share
           descriptor.refusal_fallback = input.refusal_fallback
           for (const lever of finishLevers) descriptor[lever] = input[lever]
+          for (const name of codexSwitches) descriptor[name] = input[name]
+          for (const name of codexLimits) descriptor[name] = input[name]
           descriptor.thinking = input.thinking
           descriptor.web_search = input.web_search
           await subscribing
@@ -2305,6 +2331,12 @@ ${input.request_id}`
           ? []
           : [{ yield_floor_ms: descriptor.yield_floor_ms }]),
         ...(descriptor.yield_share === undefined ? [] : [{ yield_share: descriptor.yield_share }]),
+        ...(descriptor.context_window === undefined
+          ? []
+          : [{ context_window: descriptor.context_window }]),
+        ...(codexOptions(descriptor) === undefined
+          ? []
+          : [{ codex_options: codexOptions(descriptor) }]),
       ])
     }
 
@@ -2493,6 +2525,12 @@ ${input.request_id}`
               provider,
               model,
               ...limits,
+              ...(descriptor.context_window === undefined
+                ? {}
+                : { auto_compact_window_tokens: descriptor.context_window }),
+              ...(codexOptions(descriptor) === undefined
+                ? {}
+                : { codex_options: codexOptions(descriptor) }),
               subscription: descriptor.subscription,
               endpoint:
                 descriptor.provider === 'codex'
