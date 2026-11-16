@@ -74,6 +74,7 @@ export const refusalFallbacks: readonly Contracts.RefusalFallback[] = ['return_o
 export const finishLevers = [
   'brief_final',
   'brief_finish',
+  'clearing_cache_floors',
   'finish_ambiguity',
   'finish_check',
   'fold_finish',
@@ -127,6 +128,7 @@ export type SessionDescriptor = SessionAuthority & {
   refusal_fallback?: Contracts.RefusalFallback
   brief_final?: boolean
   brief_finish?: boolean
+  clearing_cache_floors?: boolean
   escalate?: Contracts.Escalate
   fold_finish?: boolean
   finish_ambiguity?: boolean

@@ -96,6 +96,7 @@ impl CodexOptions {
 struct FinishLevers {
     brief_final: bool,
     brief_finish: bool,
+    clearing_cache_floors: bool,
     finish_ambiguity: bool,
     finish_check: bool,
     finish_check_min_requests: Option<std::num::NonZeroU32>,
@@ -266,6 +267,8 @@ struct Configuration {
     low_effort_rounds: bool,
     #[serde(default)]
     persist_finish: bool,
+    #[serde(default)]
+    clearing_cache_floors: bool,
     #[serde(default)]
     finish_ambiguity: bool,
     #[serde(default)]
@@ -1084,6 +1087,9 @@ fn claude_harness(
         if let Some(escalation) = &escalation {
             claude = claude.escalate(escalation.clone());
         }
+        if levers.clearing_cache_floors {
+            claude = claude.clearing_cache_floors();
+        }
         if let Some(clearing) = tool_result_clearing {
             claude = claude.tool_result_clearing(clearing.keep, clearing.at_least_tokens);
         }
@@ -1272,6 +1278,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
             FinishLevers {
                 brief_final: config.brief_final,
                 brief_finish: config.brief_finish,
+                clearing_cache_floors: config.clearing_cache_floors,
                 finish_ambiguity: config.finish_ambiguity,
                 finish_check: config.finish_check,
                 finish_check_min_requests: config.finish_check_min_requests,

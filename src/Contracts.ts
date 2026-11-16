@@ -119,6 +119,7 @@ export type AgentConfiguration = {
   refusal_fallback?: RefusalFallback
   brief_final?: boolean
   brief_finish?: boolean
+  clearing_cache_floors?: boolean
   escalate?: Escalate
   fold_finish?: boolean
   finish_ambiguity?: boolean
