@@ -255,6 +255,20 @@ function pure(filename: string): boolean {
   )
 }
 
+function platform(filename: string): number {
+  const [python, abi, platforms] = tags(filename)
+  const version = /^cp3(\d+)$/.exec(python)
+  if (!version || Number(version[1]) > 14 || !(abi === python || abi === 'abi3')) return -1
+  return platforms.split('.').some((tag) => /^(many|musl)linux.*_x86_64$/.test(tag))
+    ? Number(version[1])
+    : -1
+}
+
+function compiledModule(name: string): string | undefined {
+  const match = /^((?:[A-Za-z_]\w*\/)*[A-Za-z_]\w*)\.[^/]*(?:so|pyd)$/.exec(name)
+  return match ? match[1].replace(/\//g, '.') : undefined
+}
+
 function fits(requires: string | null | undefined): boolean {
   if (!requires) return true
   try {
@@ -340,6 +354,25 @@ function size(bytes: number): string {
     : Math.ceil(bytes / 1024) + ' kB'
 }
 
+function binary(name: string): boolean {
+  return /\.(so|pyd|dylib)(\.[\w.]+)?$/.test(name)
+}
+
+type Carried = { builtin: Set<string>; frozen: Set<string> }
+
+async function carried(ctx: CommandContext): Promise<Carried> {
+  const ran = await ctx.exec(
+    "python3 -c 'import sys, _imp; print(*sys.builtin_module_names); print(*_imp._frozen_module_names())'",
+  )
+  const [builtin, frozen] = ran.stdout.split('\n')
+  if (ran.status !== 0 || frozen === undefined)
+    throw new CommandError("could not list python3's built-in modules", 1)
+  return {
+    builtin: new Set(builtin.trim().split(/\s+/)),
+    frozen: new Set(frozen.trim().split(/\s+/)),
+  }
+}
+
 async function install(ctx: CommandContext, wanted: Requirement[], flags: Flags): Promise<number> {
   const fetch = ctx.fetch
   if (!fetch) throw new CommandError('network access is not available in this shell', 1)
@@ -350,6 +383,7 @@ async function install(ctx: CommandContext, wanted: Requirement[], flags: Flags)
   const queue = wanted.map((requirement) => ({ requirement, top: true }))
   const chosen = new Map<string, string>()
   const done: string[] = []
+  const modules = await carried(ctx)
   for (let item = queue.shift(); item; item = queue.shift()) {
     const { requirement, top } = item
     const key = normalize(requirement.name)
@@ -368,12 +402,13 @@ async function install(ctx: CommandContext, wanted: Requirement[], flags: Flags)
         )
       continue
     }
-    if (key in shipped) {
+    const module = key.replace(/-/g, '_')
+    if (modules.builtin.has(module) || modules.frozen.has(module)) {
       say(
         'Requirement already satisfied: ' +
           requirement.name +
-          " (ships with nanocode's Python as the module " +
-          shipped[key] +
+          ' (python.wasm carries the module ' +
+          module +
           ')',
       )
       chosen.set(key, '')
@@ -423,10 +458,14 @@ async function install(ctx: CommandContext, wanted: Requirement[], flags: Flags)
     const pick = (flags.pre || !stable.length ? candidates : stable)[0]
     if (!pick)
       throw new CommandError('No matching distribution found for ' + spelled(requirement), 1)
-    const wheel = pick.files.find(
-      (file) =>
-        file.packagetype === 'bdist_wheel' && pure(file.filename) && fits(file.requires_python),
+    const wheels = pick.files.filter(
+      (file) => file.packagetype === 'bdist_wheel' && fits(file.requires_python),
     )
+    const wheel =
+      wheels.find((file) => pure(file.filename)) ??
+      wheels
+        .filter((file) => platform(file.filename) >= 0)
+        .sort((a, b) => platform(b.filename) - platform(a.filename))[0]
     if (!wheel) {
       const kinds = [
         ...new Set(
@@ -439,7 +478,7 @@ async function install(ctx: CommandContext, wanted: Requirement[], flags: Flags)
         project.info.name +
           ' ' +
           pick.text +
-          ' has no pure-Python (py3-none-any) wheel for Python 3.14, only ' +
+          ' has no pure-Python (py3-none-any) or CPython 3 x86_64 Linux wheel for Python 3.14, only ' +
           kinds.slice(0, 5).join(', ') +
           (kinds.length > 5 ? ' and ' + (kinds.length - 5) + ' more' : '') +
           ". nanocode's Python cannot build source distributions or load compiled wheels; the compiled modules it ships are " +
@@ -454,14 +493,17 @@ async function install(ctx: CommandContext, wanted: Requirement[], flags: Flags)
       throw new CommandError('could not download ' + wheel.url + ': HTTP ' + download.status, 1)
     const data = new Uint8Array(await download.arrayBuffer())
     const { entries } = readEntries(data)
-    const compiled = entries
-      .filter((entry) => /\.(so|pyd|dylib)$/.test(entry.name))
-      .map((entry) => entry.name)
-    if (compiled.length)
+    const absent = entries
+      .filter((entry) => binary(entry.name) && !/^[^/]+\.libs\//.test(entry.name))
+      .map((entry) => compiledModule(entry.name) ?? entry.name)
+      .filter((name) => !modules.builtin.has(name))
+    if (absent.length)
       throw new CommandError(
         wheel.filename +
-          " contains compiled modules nanocode's Python cannot load: " +
-          compiled.join(', '),
+          " has compiled modules nanocode's Python does not carry: " +
+          absent.join(', ') +
+          '; the compiled modules it carries come from ' +
+          shippedModules.join(', '),
         1,
       )
     const info = entries.find((entry) => /^[^/]+\.dist-info\/METADATA$/.test(entry.name))
@@ -473,7 +515,7 @@ async function install(ctx: CommandContext, wanted: Requirement[], flags: Flags)
     }
     const left: string[] = []
     for (const entry of entries) {
-      if (entry.directory || unsafe(entry.name)) continue
+      if (entry.directory || unsafe(entry.name) || binary(entry.name)) continue
       const scheme = /^[^/]+\.data\/([^/]+)\/(.+)$/.exec(entry.name)
       if (scheme && scheme[1] !== 'purelib' && scheme[1] !== 'platlib') {
         left.push(entry.name)
@@ -566,14 +608,7 @@ export async function pip(ctx: CommandContext, args: string[]): Promise<number> 
     for (const name of rest.filter((arg) => arg !== '-y' && arg !== '--yes')) {
       const found = present.get(normalize(name))
       if (!found) {
-        ctx.stderr.write(
-          'WARNING: Skipping ' +
-            name +
-            (normalize(name) in shipped
-              ? " as it ships with nanocode's Python"
-              : ' as it is not installed') +
-            '.\n',
-        )
+        ctx.stderr.write('WARNING: Skipping ' + name + ' as it is not installed' + '.\n')
         continue
       }
       await remove(ctx.fs, found)
