@@ -120,6 +120,7 @@ export type AgentConfiguration = {
   escalate?: Escalate
   fold_finish?: boolean
   finish_check_min_requests?: number
+  finish_retries?: number
   late_finish_check_ms?: number
   lean_cells?: boolean
   low_effort_rounds?: boolean

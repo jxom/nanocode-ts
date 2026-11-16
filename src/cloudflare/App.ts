@@ -128,6 +128,7 @@ export type SessionDescriptor = SessionAuthority & {
   escalate?: Contracts.Escalate
   fold_finish?: boolean
   finish_check_min_requests?: number
+  finish_retries?: number
   late_finish_check_ms?: number
   lean_cells?: boolean
   low_effort_rounds?: boolean
@@ -1170,6 +1171,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           return json({ error: `result_effort must be one of ${resultEfforts.join(', ')}` }, 400)
         for (const limit of [
           'finish_check_min_requests',
+          'finish_retries',
           'late_finish_check_ms',
           'yield_floor_ms',
           ...codexLimits,
@@ -1358,6 +1360,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           descriptor.escalate = input.escalate
           descriptor.tool_result_tokens = input.tool_result_tokens
           descriptor.finish_check_min_requests = input.finish_check_min_requests
+          descriptor.finish_retries = input.finish_retries
           descriptor.late_finish_check_ms = input.late_finish_check_ms
           descriptor.result_effort = input.result_effort
           descriptor.yield_floor_ms = input.yield_floor_ms
@@ -2321,6 +2324,9 @@ ${input.request_id}`
         ...(descriptor.finish_check_min_requests === undefined
           ? []
           : [{ finish_check_min_requests: descriptor.finish_check_min_requests }]),
+        ...(descriptor.finish_retries === undefined
+          ? []
+          : [{ finish_retries: descriptor.finish_retries }]),
         ...(descriptor.late_finish_check_ms === undefined
           ? []
           : [{ late_finish_check_ms: descriptor.late_finish_check_ms }]),
@@ -2597,6 +2603,9 @@ ${input.request_id}`
               ...(descriptor.finish_check_min_requests === undefined
                 ? {}
                 : { finish_check_min_requests: descriptor.finish_check_min_requests }),
+              ...(descriptor.finish_retries === undefined
+                ? {}
+                : { finish_retries: descriptor.finish_retries }),
               ...(descriptor.late_finish_check_ms === undefined
                 ? {}
                 : { late_finish_check_ms: descriptor.late_finish_check_ms }),

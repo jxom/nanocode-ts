@@ -97,6 +97,7 @@ struct FinishLevers {
     brief_final: bool,
     brief_finish: bool,
     finish_check_min_requests: Option<std::num::NonZeroU32>,
+    finish_retries: Option<std::num::NonZeroU32>,
     fold_finish: bool,
     lean_cells: bool,
     late_finish_check: Option<Duration>,
@@ -263,6 +264,8 @@ struct Configuration {
     persist_finish: bool,
     #[serde(default)]
     finish_check_min_requests: Option<std::num::NonZeroU32>,
+    #[serde(default)]
+    finish_retries: Option<std::num::NonZeroU32>,
     #[serde(default)]
     late_finish_check_ms: Option<std::num::NonZeroU64>,
     #[serde(default)]
@@ -1048,6 +1051,9 @@ fn claude_harness(
         if let Some(min) = levers.finish_check_min_requests {
             claude = claude.finish_check_min_requests(min);
         }
+        if let Some(retries) = levers.finish_retries {
+            claude = claude.finish_retries(retries);
+        }
         if let Some(effort) = levers.result_effort {
             claude = claude.result_effort(effort);
         }
@@ -1246,6 +1252,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
                 brief_final: config.brief_final,
                 brief_finish: config.brief_finish,
                 finish_check_min_requests: config.finish_check_min_requests,
+                finish_retries: config.finish_retries,
                 fold_finish: config.fold_finish,
                 lean_cells: config.lean_cells,
                 late_finish_check: config
