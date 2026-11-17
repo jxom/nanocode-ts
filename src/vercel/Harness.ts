@@ -252,6 +252,7 @@ export function create(options: create.Options = {}): Harness {
       options.mcp?.fetch?.(ctx.runId) ??
       ((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init))
     const stop = () => void runtime.dispose().catch(() => undefined)
+    let held: hold.ReturnType | undefined
     ctx.signal.addEventListener('abort', stop, { once: true })
     try {
       try {
@@ -360,6 +361,7 @@ export function create(options: create.Options = {}): Harness {
       let applied: Contracts.Thinking | undefined
       const placed = new Set<string>()
       let read = ctx.pending().length > 0
+      held = hold(ctx)
       for (;;) {
         if (read) read = false
         else await ctx.refresh()
@@ -384,6 +386,7 @@ export function create(options: create.Options = {}): Harness {
         const next = (await runtime.pending(scope))[0]
         if (!next) {
           if (await runtime.settle()) return
+          await held.begin()
           await changed(runtime, ctx.signal)
           continue
         }
@@ -392,6 +395,7 @@ export function create(options: create.Options = {}): Harness {
           await runtime.setThinking(wanted)
           applied = wanted
         }
+        await held.begin()
         const driving = runtime.drive(next.report.request_id)
         const steering = steer(
           ctx,
@@ -421,6 +425,7 @@ export function create(options: create.Options = {}): Harness {
       throw error
     } finally {
       ctx.signal.removeEventListener('abort', stop)
+      await held?.end()
       await executor?.dispose().catch(() => undefined)
       await runtime.dispose().catch(() => undefined)
     }
@@ -920,6 +925,46 @@ async function callTool(
       )
     ctx.halt?.(error)
     throw error
+  }
+}
+
+function hold(ctx: DriveContext): hold.ReturnType {
+  let begun: Promise<void> | undefined
+  let effect: Promise<void> | undefined
+  let release = () => {}
+  const released = new Promise<void>((resolve) => {
+    release = resolve
+  })
+
+  return {
+    begin() {
+      begun ??= new Promise<void>((resolve, reject) => {
+        effect = ctx.effect(
+          `nanocode.hold:${crypto.randomUUID()}`,
+          { name: 'nanocode.hold', replay: 'never', input: {} },
+          (io) => {
+            resolve()
+            return new Promise<void>((done) => {
+              void released.then(done)
+              io.signal.addEventListener('abort', () => done(), { once: true })
+            })
+          },
+        )
+        effect.catch(reject)
+      })
+      return begun
+    },
+    async end() {
+      release()
+      await effect?.catch((error: unknown) => ctx.halt?.(error))
+    },
+  }
+}
+
+declare namespace hold {
+  type ReturnType = {
+    begin(): Promise<void>
+    end(): Promise<void>
   }
 }
 
