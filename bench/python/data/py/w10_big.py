@@ -2,8 +2,10 @@ import csv, os, sys
 import numpy as np
 
 path = sys.argv[1]
+# W10 probes the largest CSV that fits the memory cap, so it reads through
+# csv and numpy: importing pandas alone holds about 43 MiB of the 48.
 try:
-    if os.environ.get("BENCH_NUMPY"):
+    if not os.environ.get("BENCH_PANDAS"):
         raise ImportError
     import pandas as pd
 except ImportError:

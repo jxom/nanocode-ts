@@ -9,7 +9,7 @@ gh release download build-<sha> -R nanocodexyz/nanocode-ts -D output/rel && tar 
 node bench/python/data/run.ts output/rel/package/dist --label build-<sha> [--only W1,W3] [--limits 48,unl] [--warm 3]
 ```
 
-It prints a markdown table and one SCORE line, and writes every step's timings and memory to `output/data/<label>.json`. Fixtures come from seeded generators in `fixtures.ts` (nothing big is committed); `expected.json` holds CPython 3.13's output for each step (numpy 2.5.5, matplotlib 3.11.2, pandas 3.1.1, polars 2.1.0), regenerated with `node bench/python/data/reference.ts <venv>/bin/python`. A step passes when it exits 0 and prints exactly that output (a `mode=` line, pandas or numpy, is left out). W3, W6 and W10 use pandas when it imports and a numpy/csv path with the same output otherwise (`BENCH_NUMPY=1` forces it); W9 is skipped while polars does not import.
+It prints a markdown table and one SCORE line, and writes every step's timings and memory to `output/data/<label>.json`. Fixtures come from seeded generators in `fixtures.ts` (nothing big is committed); `expected.json` holds CPython 3.13's output for each step (numpy 2.5.5, matplotlib 3.11.2, pandas 3.1.1, polars 2.1.0), regenerated with `node bench/python/data/reference.ts <venv>/bin/python`. A step passes when it exits 0 and prints exactly that output (a `mode=` line, pandas or numpy, is left out). W3 and W6 use pandas when it imports and a numpy/csv path with the same output otherwise (`BENCH_NUMPY=1` forces it); W10 reads through csv and numpy, since importing pandas alone holds about 43 MiB of the 48 MiB cap (`BENCH_PANDAS=1` uses pandas); W9 is skipped while polars does not import.
 
 | id | workload |
 | --- | --- |
