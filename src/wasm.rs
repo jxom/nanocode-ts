@@ -1311,6 +1311,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
     }
     let environment = resolve(environment)?;
     let (claude, codex) = config.endpoints().map_err(configuration)?;
+    let claude_only = claude.is_some() && codex.is_none();
     let hedging = hedging(&config.hedge)?;
     let claude_search_tokens = claude.as_ref().map(|endpoint| endpoint.max_tokens);
     let escalation = config
@@ -1616,7 +1617,7 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
             ),
         );
     }
-    if config.subagents == Some(false) {
+    if !config.subagents.unwrap_or(!(single_hand && claude_only)) {
         builder = builder.without_subagents();
     } else if config.remote_children {
         builder = builder.child_host(children::HostChildren);
