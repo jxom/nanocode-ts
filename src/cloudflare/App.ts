@@ -71,6 +71,13 @@ export const claudeOrchestrations: readonly Contracts.ClaudeOrchestration[] = [
 
 export const refusalFallbacks: readonly Contracts.RefusalFallback[] = ['return_once', 'session']
 
+export const defaultProvider: Contracts.ModelProvider = 'claude'
+
+const instructionsError = 'project_instructions must be a string of at most 32768 characters'
+function instructionsText(value: unknown): boolean {
+  return typeof value === 'string' && value.length <= 32_768
+}
+
 export const finishLevers = [
   'brief_final',
   'brief_finish',
@@ -125,6 +132,7 @@ export type SessionDescriptor = SessionAuthority & {
   model?: string
   thinking?: Contracts.Thinking
   web_search?: boolean
+  project_instructions?: string
   claude_orchestration?: Contracts.ClaudeOrchestration
   codex_orchestration?: Contracts.CodexOrchestration
   deadline?: Contracts.Deadline
@@ -1012,6 +1020,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
             model?: unknown
             payer?: unknown
             web_search?: unknown
+            project_instructions?: unknown
           } | null
           const provider =
             this.metadata.get(`model_provider:${scope}`) ?? input?.provider ?? 'claude'
@@ -1021,6 +1030,11 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           if (webSearch !== undefined && typeof webSearch !== 'boolean')
             return json({ error: 'web_search must be a boolean' }, 400)
           if (webSearch !== undefined) descriptor.web_search = webSearch
+          const project = input?.project_instructions
+          if (project !== undefined && !instructionsText(project))
+            return json({ error: instructionsError }, 400)
+          if (project !== undefined)
+            descriptor.project_instructions = (project as string) || undefined
           const payer = this.metadata.get(`payer:${scope}`) ?? input?.payer
           if (payer !== undefined && !offered.includes(payer as Contracts.Payer))
             return json({ error: `payer must be one of ${offered.join(', ')}` }, 400)
@@ -1155,6 +1169,11 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           return json({ error: 'steer must be a boolean' }, 400)
         if (input.web_search !== undefined && typeof input.web_search !== 'boolean')
           return json({ error: 'web_search must be a boolean' }, 400)
+        if (
+          input.project_instructions !== undefined &&
+          !instructionsText(input.project_instructions)
+        )
+          return json({ error: instructionsError }, 400)
         if (
           input.claude_orchestration !== undefined &&
           !claudeOrchestrations.includes(input.claude_orchestration)
@@ -1427,6 +1446,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           for (const name of codexLimits) descriptor[name] = input[name]
           descriptor.thinking = input.thinking
           descriptor.web_search = input.web_search
+          descriptor.project_instructions = input.project_instructions || undefined
           await subscribing
           lap('subscribe')
           if (descriptor.provider === 'codex')
@@ -2399,6 +2419,9 @@ ${input.request_id}`
           ? []
           : [{ stall_nudge_ms: descriptor.stall_nudge_ms }]),
         ...(descriptor.yield_share === undefined ? [] : [{ yield_share: descriptor.yield_share }]),
+        ...(descriptor.project_instructions === undefined
+          ? []
+          : [{ project_instructions: descriptor.project_instructions }]),
         ...(descriptor.context_window === undefined
           ? []
           : [{ context_window: descriptor.context_window }]),
@@ -2731,6 +2754,9 @@ ${input.request_id}`
             },
             {
               ...(shell ? { workspace: shell.workspace() } : {}),
+              ...(descriptor.project_instructions && !child
+                ? { instructions: descriptor.project_instructions }
+                : {}),
               ...(mcpStore ? { mcp: { store: mcpStore } } : {}),
               fetch: (input, init, subagent) =>
                 subagent ? guarded(subagent)(input, init) : cellFetch(input, init),

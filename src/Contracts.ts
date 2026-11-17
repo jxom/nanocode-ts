@@ -518,6 +518,7 @@ export type ChildHost = {
 }
 
 export type RuntimeOptions = {
+  instructions?: string
   children?: ChildHost
   childSubagent?(session_id: string): Promise<Subagent | null>
   childTool?(name: string, input: unknown, context: unknown, signal: AbortSignal): Promise<unknown>

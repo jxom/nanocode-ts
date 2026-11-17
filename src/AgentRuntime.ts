@@ -1225,12 +1225,16 @@ async function create(
         config.workspace && options.workspace && !config.environment?.project_instructions
           ? await projectInstructions(options.workspace, config.workspace)
           : undefined
-      if (project)
+      const host = options.instructions?.trim() ? options.instructions : undefined
+      const combined = [config.environment?.project_instructions ?? project, host]
+        .filter((text): text is string => !!text?.trim())
+        .join('\n\n')
+      if (combined && combined !== config.environment?.project_instructions)
         config = {
           ...config,
           environment: {
             ...(config.environment ?? { cwd: config.workspace }),
-            project_instructions: project,
+            project_instructions: combined,
           },
         }
       state.hands = config.hands ?? false
