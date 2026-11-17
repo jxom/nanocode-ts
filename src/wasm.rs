@@ -1298,7 +1298,8 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
     })?;
     let mut environment = config.environment.take();
     let claude_direct = matches!(config.claude_orchestration, ClaudeOrchestration::Direct);
-    if placement {
+    let single_hand = config.headless && config.attached_hands.len() <= 1;
+    if placement && !single_hand {
         let environment = environment.get_or_insert_with(Environment::default);
         if !claude_direct {
             environment.project_instructions =
@@ -1438,8 +1439,9 @@ async fn open(mut config: Configuration) -> Result<Session, Opening> {
         config.hand_tools.unwrap_or_default(),
         matches!(config.codex_orchestration, CodexOrchestration::Jobs),
         claude_direct,
+        config.headless,
     ));
-    let hands = placement.then(|| Arc::new(executors.tool()) as Arc<dyn Tool>);
+    let hands = (placement && !single_hand).then(|| Arc::new(executors.tool()) as Arc<dyn Tool>);
     let mut shared: Vec<Arc<dyn Tool>> = Vec::new();
     let mcp = mcp::tools(config.mcp_servers)
         .await

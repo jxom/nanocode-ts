@@ -57,12 +57,26 @@ pub struct ToolSelection {
 
 pub struct ToolSelections(HashMap<String, ToolSelection>);
 
+const CODEX_SHELL_TOOLS: [&str; 3] = ["exec_command", "write_stdin", "apply_patch"];
+
 impl ToolSelections {
     pub fn new(
         mut selections: HashMap<String, ToolSelection>,
         jobs: bool,
         claude_direct: bool,
+        headless: bool,
     ) -> Self {
+        if headless && !claude_direct {
+            selections
+                .entry("claude".to_owned())
+                .or_insert_with(|| ToolSelection {
+                    include: None,
+                    exclude: CODEX_SHELL_TOOLS
+                        .iter()
+                        .map(|name| (*name).to_owned())
+                        .collect(),
+                });
+        }
         if claude_direct {
             selections
                 .entry("claude".to_owned())
