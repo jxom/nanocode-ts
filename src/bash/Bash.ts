@@ -163,12 +163,17 @@ export async function create(options: create.Options = {}): Promise<Bash> {
         ...options.env,
       }
   const limits = { ...defaultLimits, ...options.limits }
-  const commands = new Map(
+  const commands: Map<string, Command.Handler> = new Map(
     Object.entries({
       ...builtinCommands,
       ...(options.github ? gitCommands(options.github) : {}),
       ...(options.wasm ? wasmCommands(options.wasm) : {}),
-      ...(options.python ? pythonCommands(options.python, options.psh) : {}),
+      ...(options.python
+        ? pythonCommands(options.python, options.psh, {
+            has: (name): boolean => commands.has(name) || Object.hasOwn(Shell.BUILTINS, name),
+            run: (request) => spawned(request),
+          })
+        : {}),
       ...options.commands,
     }),
   )
@@ -176,6 +181,81 @@ export async function create(options: create.Options = {}): Promise<Bash> {
     for (const name of ['python', 'python3', 'pip', 'pip3'])
       if (!options.commands?.[name]) commands.delete(name)
   let calls = 0
+
+  const spawned = async (request: {
+    cwd: string
+    env: Record<string, string>
+    fs: FileSystem.FileSystem
+    script: string
+    signal: AbortSignal
+    stdin: Uint8Array
+  }): Promise<{ status: number; stderr: Uint8Array; stdout: Uint8Array }> => {
+    const engine = await options.psh
+    if (engine) {
+      const ran = await Psh.run(engine, {
+        commandFs: request.fs,
+        commands,
+        cwd: request.cwd,
+        env: request.env,
+        fetch: options.fetch,
+        fs: request.fs,
+        identity: Psh.identity(request.env),
+        kept: undefined,
+        limits: {
+          depth: limits.maxCallDepth,
+          file: limits.maxMemoryBytes,
+          fuel: limits.maxCommands,
+          memory: limits.maxMemoryBytes,
+          operations: limits.maxFileOperations,
+          output: limits.maxOutputLength,
+        },
+        machine,
+        script: request.script,
+        shellLimits: limits,
+        signal: request.signal,
+        stdin: request.stdin,
+        strict: options.fallback === true || machine !== undefined,
+        without: ['curl', 'wget', ...Object.keys(options.commands ?? {})],
+      })
+      return {
+        status: ran.ended === 'exited' ? ran.status : 126,
+        stderr: ran.stderr,
+        stdout: ran.stdout,
+      }
+    }
+    const state = new Shell.State()
+    state.cwd = request.cwd
+    for (const [name, value] of Object.entries({ ...request.env, PWD: request.cwd })) {
+      state.vars.set(name, [value])
+      state.exported.add(name)
+    }
+    const runner = new Shell.Runner(
+      {
+        fs: request.fs,
+        commands,
+        fetch: options.fetch,
+        fallback: options.fallback || machine !== undefined,
+        limits,
+        ...(machine ? { machine } : {}),
+      },
+      state,
+      request.signal,
+    )
+    const stdout = new Shell.Output(limits.maxOutputLength, false)
+    const stderr = new Shell.Output(limits.maxOutputLength, false)
+    let status: number
+    try {
+      status = await Shell.run(runner, request.script, {
+        stdin: new Shell.Input(decode(request.stdin)),
+        stdout,
+        stderr,
+      })
+    } catch (error) {
+      stderr.write('bash: ' + (error instanceof Error ? error.message : String(error)) + '\n')
+      status = 1
+    }
+    return { status, stderr: encode(stderr.text()), stdout: encode(stdout.text()) }
+  }
 
   const emit = (event: Event) => {
     if (!options.observe) return

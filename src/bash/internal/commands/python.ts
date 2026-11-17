@@ -1,8 +1,9 @@
 import { CommandError, type CommandContext, type CommandHandler } from '../Shell.ts'
 import { FsError, type FileSystem } from '../../FileSystem.ts'
-import { breathe, encode, parentOf } from '../Fs.ts'
+import { breathe, decode, encode, parentOf } from '../Fs.ts'
 import * as Psh from '../Psh.ts'
 import { mkdirs } from './files.ts'
+import * as Journal from './journal.ts'
 import { pip, shippedModules, sitePackages } from './pip.ts'
 import * as RustPython from './rustpython.ts'
 import type { Options as PythonOptions } from '../../Python.ts'
@@ -12,6 +13,18 @@ type Mode = {
   target: string
   argv: string[]
   filename: string
+}
+
+export type Host = {
+  has(name: string): boolean
+  run(request: {
+    cwd: string
+    env: Record<string, string>
+    fs: FileSystem
+    script: string
+    signal: AbortSignal
+    stdin: Uint8Array
+  }): Promise<{ status: number; stderr: Uint8Array; stdout: Uint8Array }>
 }
 
 const NO_IMAGE =
@@ -85,6 +98,7 @@ function parse(ctx: CommandContext, args: string[]): Mode | 'help' | 'version' {
 export function pythonCommands(
   options: PythonOptions = {},
   psh?: WebAssembly.Module | Promise<WebAssembly.Module>,
+  host?: Host,
 ): Record<string, CommandHandler> {
   const maxBytes = options.maxBytes ?? 64 * 1024 * 1024
   const handler: CommandHandler = async (ctx) => {
@@ -111,6 +125,7 @@ export function pythonCommands(
     }
     return executeRust(ctx, compiled, {
       engine: psh === undefined ? undefined : await Psh.load(await psh),
+      host,
       maxBytes,
       stdin: ctx.stdin.read(),
       cpuMs: options.cpuMs,
@@ -250,6 +265,37 @@ function rustModule(options: PythonOptions): Promise<WebAssembly.Module | undefi
 
 const notFound = 127
 
+type Known = {
+  effects: Journal.Effects
+  exited: RustPython.Exited
+  key: string
+  replaced: boolean
+}
+
+function changing(child: RustPython.Child): RustPython.Exited {
+  return {
+    status: refusedStatus,
+    stderr: encode(
+      program(child.argv[0] ?? '') +
+        ': python3 runs this command by running the script again up to it, and the script asked for a different command each time; make the command depend only on the files and earlier commands, not on the time or random numbers\n',
+    ),
+    stdout: new Uint8Array(),
+  }
+}
+
+function words(argv: readonly string[]): string {
+  return [program(argv[0] ?? ''), ...argv.slice(1)]
+    .map((word) => "'" + word.replaceAll("'", "'\\''") + "'")
+    .join(' ')
+}
+
+function shellScript(argv: readonly string[]): string | undefined {
+  const name = program(argv[0] ?? '')
+  return (name === 'sh' || name === 'bash') && argv[1] === '-c' && argv.length === 3
+    ? argv[2]
+    : undefined
+}
+
 const refusedStatus = 126
 
 const programs = ['/usr/bin/', '/bin/']
@@ -266,6 +312,7 @@ async function executeRust(
   options: {
     cpuMs: number | undefined
     engine: Psh.Instance | undefined
+    host: Host | undefined
     maxBytes: number
     stdin: string
     stepsPerMs: number | undefined
@@ -275,65 +322,145 @@ async function executeRust(
   const cpuMs = Math.min(ctx.limits.timeoutMs, options.cpuMs ?? ctx.limits.timeoutMs)
   const deadline = Date.now() + ctx.limits.timeoutMs
   const cache = ctx.fs.sync ? undefined : RustPython.layered(ctx.fs, { limits: ctx.limits })
-  const files = ctx.fs.sync ?? cache!.files
+  const journal = Journal.create(ctx.fs.sync ?? cache!.files, {
+    bytes: ctx.limits.maxMemoryBytes,
+  })
+  const files = journal.files
   const engine = options.engine
-  const spawn: RustPython.Spawn | undefined =
-    engine &&
-    ((child) => {
-      const fs: FileSystem = {
-        list: async (path) => files.list(path),
-        mkdir: async (path) => files.mkdir(path),
-        read: async (path) => files.read(path),
-        remove: async (path) => files.remove(path),
-        rename: async (from, to) => files.rename(from, to),
-        stat: async (path) => files.stat(path),
-        sync: files,
-        write: async (path, data, append) => files.write(path, data, append),
+  const host = options.host
+  const known: Known[] = []
+  let spawned = 0
+  let replaced = false
+  const tape: RustPython.Tape = {
+    clock: [],
+    clockAt: 0,
+    random: [],
+    randomAt: 0,
+    time: [],
+    timeAt: 0,
+  }
+  let pending:
+    | {
+        at: number
+        child: RustPython.Child
+        clock: number
+        key: string
+        mark: Journal.Mark
+        random: number
+        time: number
       }
-      const name = program(child.argv[0] ?? '')
-      const ran = Psh.runNow(engine, {
-        commandFs: fs,
-        commands: new Map(),
-        cwd: child.cwd,
-        env: child.env,
-        fetch: undefined,
-        fs,
-        identity: Psh.identity(child.env),
-        kept: undefined,
-        limits: {
-          depth: ctx.limits.maxCallDepth,
-          file: ctx.limits.maxMemoryBytes,
-          fuel: ctx.limits.maxCommands,
-          memory: ctx.limits.maxMemoryBytes,
-          operations: ctx.limits.maxFileOperations,
-          output: ctx.limits.maxOutputLength,
-        },
-        machine: undefined,
-        script:
-          [name, ...child.argv.slice(1)]
-            .map((word) => "'" + word.replaceAll("'", "'\\''") + "'")
-            .join(' ') + (child.merged ? ' 2>&1' : ''),
-        shellLimits: ctx.limits,
-        signal: ctx.signal,
-        stdin: child.stdin,
-        strict: false,
-        without: ['curl', 'wget'],
-      })
-      if (!ran) return 'EAGAIN'
-      if (ran.ended === 'cancelled') return 'EINTR'
-      if (ran.ended === 'exited' && ran.status === notFound && ran.missing.includes(name))
-        return 'ENOENT'
-      if (ran.ended === 'exited')
-        return { status: ran.status, stderr: ran.stderr, stdout: ran.stdout }
-      return {
-        status: refusedStatus,
-        stderr: encode(name + ': it ran more than this shell allows\n'),
-        stdout: ran.stdout,
+    | undefined
+  const now = (child: RustPython.Child): RustPython.Exited | 'host' | FsError['code'] => {
+    const name = program(child.argv[0] ?? '')
+    if (!engine) return 'host'
+    const fs: FileSystem = {
+      list: async (path) => files.list(path),
+      mkdir: async (path) => files.mkdir(path),
+      read: async (path) => files.read(path),
+      remove: async (path) => files.remove(path),
+      rename: async (from, to) => files.rename(from, to),
+      stat: async (path) => files.stat(path),
+      sync: files,
+      write: async (path, data, append) => files.write(path, data, append),
+    }
+    const ran = Psh.runNow(engine, {
+      commandFs: fs,
+      commands: new Map(),
+      cwd: child.cwd,
+      env: child.env,
+      fetch: undefined,
+      fs,
+      identity: Psh.identity(child.env),
+      kept: undefined,
+      limits: {
+        depth: ctx.limits.maxCallDepth,
+        file: ctx.limits.maxMemoryBytes,
+        fuel: ctx.limits.maxCommands,
+        memory: ctx.limits.maxMemoryBytes,
+        operations: ctx.limits.maxFileOperations,
+        output: ctx.limits.maxOutputLength,
+      },
+      machine: undefined,
+      script: words(child.argv) + (child.merged ? ' 2>&1' : ''),
+      shellLimits: ctx.limits,
+      signal: ctx.signal,
+      stdin: child.stdin,
+      strict: false,
+      without: ['curl', 'wget'],
+    })
+    if (!ran) return host ? 'host' : 'EAGAIN'
+    if (ran.ended === 'cancelled') return 'EINTR'
+    if (host && ran.missing.some((missing) => host.has(missing))) return 'host'
+    if (ran.ended === 'exited' && ran.status === notFound && ran.missing.includes(name))
+      return 'ENOENT'
+    if (ran.ended === 'exited')
+      return { status: ran.status, stderr: ran.stderr, stdout: ran.stdout }
+    return {
+      status: refusedStatus,
+      stderr: encode(name + ': it ran more than this shell allows\n'),
+      stdout: ran.stdout,
+    }
+  }
+  const spawn: RustPython.Spawn | undefined =
+    (engine || host) &&
+    ((child) => {
+      if (pending) return 'EAGAIN'
+      try {
+        return start(child)
+      } catch (error) {
+        if (error instanceof FsError) return error.code
+        throw error
       }
     })
+  const start = (child: RustPython.Child): ReturnType<RustPython.Spawn> => {
+    const at = spawned++
+    const key = JSON.stringify([
+      child.argv,
+      child.cwd,
+      child.env,
+      child.merged,
+      decode(child.stdin),
+    ])
+    const before = known[at]
+    if (before?.key === key) {
+      journal.replay(before.effects)
+      return before.exited
+    }
+    if (before?.replaced) return changing(child)
+    if (before) known.length = at
+    const mark = journal.mark()
+    const ran = now(child)
+    if (typeof ran === 'object') {
+      if (!cache?.missed())
+        known.push({
+          effects: journal.capture(journal.touched(mark)),
+          exited: ran,
+          key,
+          replaced: false,
+        })
+      return ran
+    }
+    if (ran !== 'host') return ran
+    replaced = before !== undefined
+    journal.rollback(mark)
+    const name = program(child.argv[0] ?? '')
+    if (shellScript(child.argv) === undefined && !host!.has(name)) return 'ENOENT'
+    if (journal.overflowed()) return 'ENOMEM'
+    pending = {
+      at,
+      child,
+      clock: tape.clockAt,
+      key,
+      mark,
+      random: tape.randomAt,
+      time: tape.timeAt,
+    }
+    return 'EAGAIN'
+  }
   const attempt = () =>
     RustPython.run(module, {
       files,
+      fresh: known.length > 0,
       request: {
         argv: ctx.args,
         cwd: ctx.cwd,
@@ -350,18 +477,70 @@ async function executeRust(
         timeMs: deadline - Date.now(),
       },
       spawn,
-      stopped: () => ctx.signal.aborted || (cache?.missed() ?? false),
+      stopped: () => ctx.signal.aborted || pending !== undefined || (cache?.missed() ?? false),
+      tape,
     })
+  const retry = cache
+    ? async () => {
+        if (!cache.missed()) return false
+        await cache.fetch()
+        cache.settle()
+        return true
+      }
+    : undefined
+  const again = () => {
+    if (cache) cache.reset()
+    else journal.rollback({ first: 0, changes: 0 })
+    journal.clear()
+    spawned = 0
+    pending = undefined
+    tape.clockAt = 0
+    tape.randomAt = 0
+    tape.timeAt = 0
+    return attempt()
+  }
   await cache?.probe([ctx.cwd, sitePackages])
   let ran = attempt()
-  while (cache?.missed()) {
-    await cache.fetch()
-    cache.reset()
-    ran = attempt()
+  for (;;) {
+    if (cache?.missed()) {
+      await cache.fetch()
+      ran = again()
+      continue
+    }
+    if (!pending || !host || ctx.signal.aborted) break
+    const { at, child, key, mark } = pending
+    tape.clock.length = pending.clock
+    tape.random.length = pending.random
+    tape.time.length = pending.time
+    journal.rollback(mark)
+    const started = journal.mark()
+    const script = shellScript(child.argv) ?? words(child.argv)
+    const exited = await host.run({
+      cwd: child.cwd,
+      env: child.env,
+      fs: Journal.view(files, { retry }),
+      script: child.merged ? '{ ' + script + '\n} 2>&1' : script,
+      signal: ctx.signal,
+      stdin: child.stdin,
+    })
+    const touched = journal.touched(started)
+    let effects: Journal.Effects | undefined
+    while (!effects)
+      try {
+        effects = journal.capture(touched)
+      } catch (error) {
+        if (!retry || !(await retry())) throw error
+      }
+    known.length = at
+    known.push({ effects, exited, key, replaced })
+    ran = again()
   }
   if (cache) await apply(ctx.fs, cache.changes())
   if (ran.kind !== 'needs')
-    return RustPython.report(ctx, ran, { cpuMs, stepsPerMs: options.stepsPerMs })
+    return RustPython.report(ctx, ran, {
+      cpuMs,
+      stepsPerMs: options.stepsPerMs,
+    })
   for (const missing of ran.missing) ctx.stderr.write(absent(missing) + '\n')
   return 127
 }

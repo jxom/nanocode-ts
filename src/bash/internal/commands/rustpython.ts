@@ -18,6 +18,7 @@ type Instance = {
   running: boolean
   spawn: Spawn | undefined
   stopped: () => boolean
+  tape: Tape | undefined
 }
 
 export type Changes = { deleted: string[]; dirs: string[]; files: Map<string, Uint8Array> }
@@ -30,9 +31,18 @@ export type Child = {
   stdin: Uint8Array
 }
 
-export type Spawn = (
-  child: Child,
-) => { status: number; stderr: Uint8Array; stdout: Uint8Array } | FsError['code']
+export type Exited = { status: number; stderr: Uint8Array; stdout: Uint8Array }
+
+export type Tape = {
+  clock: number[]
+  clockAt: number
+  random: Uint8Array[]
+  randomAt: number
+  time: number[]
+  timeAt: number
+}
+
+export type Spawn = (child: Child) => Exited | FsError['code']
 
 export type Missing = { module: string; package: boolean; text: string }
 
@@ -146,6 +156,7 @@ function instantiate(module: WebAssembly.Module): Instance {
     panic: undefined,
     running: false,
     spawn: undefined,
+    tape: undefined,
     stopped: () => false,
   }
   const view = (ptr: number, len: number) =>
@@ -224,13 +235,35 @@ function instantiate(module: WebAssembly.Module): Instance {
           return -BigInt(code)
         }
       },
-      host_now: () => performance.now(),
+      host_now() {
+        const tape = state.tape
+        if (!tape) return performance.now()
+        const taped = tape.clock[tape.clockAt]
+        if (taped !== undefined) {
+          tape.clockAt++
+          return taped
+        }
+        const now = performance.now()
+        tape.clock.length = tape.clockAt++
+        tape.clock.push(now)
+        return now
+      },
       host_panic(ptr: number, len: number) {
         state.panic = decode(view(ptr, len))
       },
       host_random(ptr: number, len: number) {
+        const tape = state.tape
+        const taped = tape?.random[tape.randomAt]
+        if (tape && taped?.length === len) {
+          tape.randomAt++
+          view(ptr, len).set(taped)
+          return
+        }
         for (let at = 0; at < len; at += randomBytes)
           crypto.getRandomValues(view(ptr + at, Math.min(randomBytes, len - at)))
+        if (!tape) return
+        tape.random.length = tape.randomAt++
+        tape.random.push(view(ptr, len).slice())
       },
       host_spawn(ptr: number, len: number) {
         const spawn = state.spawn
@@ -267,7 +300,19 @@ function instantiate(module: WebAssembly.Module): Instance {
         return reply(out)
       },
       host_stopped: () => (state.stopped() ? 1 : 0),
-      host_time: () => Date.now(),
+      host_time() {
+        const tape = state.tape
+        if (!tape) return Date.now()
+        const taped = tape.time[tape.timeAt]
+        if (taped !== undefined) {
+          tape.timeAt++
+          return taped
+        }
+        const now = Date.now()
+        tape.time.length = tape.timeAt++
+        tape.time.push(now)
+        return now
+      },
     },
   }
   const image = images.get(module)
@@ -290,6 +335,7 @@ export function layered(
   missed(): boolean
   probe(dirs: readonly string[]): Promise<void>
   reset(): void
+  settle(): void
 } {
   const stats = new Map<string, FileStat | null>()
   const names = new Map<string, string[]>()
@@ -573,6 +619,9 @@ export function layered(
     },
     missed: () => missing,
     probe: listing,
+    settle() {
+      missing = false
+    },
     reset() {
       missing = false
       files = new Map()
@@ -685,14 +734,22 @@ export function prepare(module: WebAssembly.Module): void {
 
 export function run(
   module: WebAssembly.Module,
-  options: { files: SyncFileSystem; request: Request; spawn?: Spawn; stopped: () => boolean },
+  options: {
+    files: SyncFileSystem
+    fresh?: boolean
+    request: Request
+    spawn?: Spawn
+    stopped: () => boolean
+    tape?: Tape
+  },
 ): Ran {
-  if (instances.get(module)?.running) instances.delete(module)
+  if (options.fresh || instances.get(module)?.running) instances.delete(module)
   prepare(module)
   const instance = instances.get(module)!
   instance.files = options.files
   instance.stopped = options.stopped
   instance.spawn = options.spawn
+  instance.tape = options.tape
   try {
     const input = encodeRequest(options.request, options.spawn !== undefined)
     const ptr = instance.exports.python_input(input.length)
@@ -715,6 +772,7 @@ export function run(
   } finally {
     instance.files = undefined
     instance.spawn = undefined
+    instance.tape = undefined
     instance.stopped = () => false
   }
 }
