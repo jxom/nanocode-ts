@@ -22,7 +22,22 @@ const probes: readonly (readonly [string, string, RegExp])[] = [
   [
     'matplotlib',
     'import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt; plt.plot([1, 2, 3]); plt.savefig("p.png"); import os; print(os.path.getsize("p.png") > 0)',
-    /^True$|No module named/,
+    /^True$/,
+  ],
+  [
+    'mpl_sine',
+    'import numpy as np, matplotlib.pyplot as plt; x = np.linspace(0, 2 * np.pi, 200); plt.plot(x, np.sin(x)); plt.title("sine"); plt.savefig("sine.png"); d = open("sine.png", "rb").read(); print(d[:8] == bytes([137, 80, 78, 71, 13, 10, 26, 10]), len(d) > 10000)',
+    /^True True$/,
+  ],
+  [
+    'mpl_show',
+    'import os, matplotlib.pyplot as plt; plt.plot([1, 4, 9]); plt.show(); print(os.path.getsize("Figure_1.png") > 5000, plt.get_fignums(), plt.get_backend())',
+    /^True \[\] module:\/\/nanocode_matplotlib\nSaved figure to Figure_1\.png$/,
+  ],
+  [
+    'mpl_bar_sizes',
+    'import os, matplotlib.pyplot as plt; [open("f%d.txt" % i, "w").write("x" * (i * 100)) for i in range(1, 6)]; names = sorted(f for f in os.listdir() if f.endswith(".txt")); sizes = [os.path.getsize(n) for n in names]; plt.bar(names, sizes); plt.ylabel("bytes"); plt.savefig("sizes.png"); print(sizes, os.path.getsize("sizes.png") > 5000)',
+    /^\[100, 200, 300, 400, 500\] True$/,
   ],
   ['scipy', 'import scipy; print(scipy.__name__)', /^scipy$|No module named/],
   ['missing', 'import nosuchmodule_xyz', /No module named 'nosuchmodule_xyz'/],
