@@ -243,7 +243,7 @@ export function layered(
   const names = new Map<string, string[]>()
   const bytes = new Map<string, Uint8Array>()
   const trees = new Set<string>()
-  const batched = new Set<string>()
+  const asked = new Set<string>()
   const wanted = {
     list: new Set<string>(),
     read: new Set<string>(),
@@ -371,21 +371,34 @@ export function layered(
     [...stats]
       .filter((entry) => entry[1]?.kind === 'file' && within(entry[0], root))
       .map((entry) => entry[0])
+  const sizeOf = (files: readonly string[]) =>
+    files.reduce((total, file) => total + (stats.get(file)?.size ?? 0), 0)
+  const likely = (root: string, path: string) => {
+    const like = filesUnder(root)
+      .filter((file) => file !== path && !bytes.has(file) && asked.has(suffixOf(file)))
+      .sort()
+    const after = like.findIndex((file) => file > path)
+    const from = after < 0 ? like.length : after
+    const taken: string[] = []
+    let total = 0
+    for (const file of [path, ...like.slice(from), ...like.slice(0, from)]) {
+      const size = stats.get(file)?.size ?? 0
+      if (!fits(2 * (total + size))) continue
+      taken.push(file)
+      total += size
+    }
+    return taken
+  }
   const batch = (path: string): string[] => {
     const dir = parentOf(path)
-    const root = batched.size > 1 ? [...trees].find((tree) => within(path, tree)) : undefined
+    const tree = [...trees].find((tree) => within(path, tree))
+    const root = tree && [...bytes.keys()].some((file) => within(file, tree)) ? tree : undefined
     const pools = [
-      root ? filesUnder(root) : [],
+      root ? likely(root, path) : [],
       filesIn(dir).some((sibling) => bytes.has(sibling)) ? filesIn(dir) : [],
     ].map((pool) => pool.filter((file) => !bytes.has(file)))
-    const pool = pools.find(
-      (files) =>
-        files.includes(path) &&
-        fits(files.reduce((total, file) => total + (stats.get(file)?.size ?? 0), 0)),
-    )
-    if (!pool) return [path]
-    batched.add(dir)
-    return pool
+    const pool = pools.find((files) => files.includes(path) && fits(sizeOf(files)))
+    return pool ?? [path]
   }
   const fetchTree = async (path: string): Promise<void> => {
     const stat = stats.has(path) ? stats.get(path) : await fs.stat(path)
@@ -433,6 +446,7 @@ export function layered(
           if (!stats.has(child)) keepStat(child, await fs.stat(child))
         }
       }
+      for (const path of wanted.read) asked.add(suffixOf(path))
       await fetchAll([...new Set([...wanted.read].flatMap(batch))])
       for (const path of wanted.tree) {
         await prefetch(path)
@@ -500,6 +514,12 @@ export function layered(
 
 function join(base: string, name: string): string {
   return base === '/' ? '/' + name : base + '/' + name
+}
+
+function suffixOf(path: string): string {
+  const name = path.slice(path.lastIndexOf('/') + 1)
+  const dot = name.lastIndexOf('.')
+  return dot > 0 ? name.slice(dot) : ''
 }
 
 function within(path: string, dir: string): boolean {
