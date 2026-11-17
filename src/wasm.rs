@@ -753,6 +753,8 @@ enum Command {
     Catalog {
         frame: String,
         max_frame_bytes: usize,
+        #[serde(default)]
+        definitions: bool,
     },
     Admit {
         request_id: String,
@@ -2501,7 +2503,8 @@ fn execute(command: Command) -> Executed {
         Command::Catalog {
             frame,
             max_frame_bytes,
-        } => executed(async move { remote::catalog(&frame, max_frame_bytes) }),
+            definitions,
+        } => executed(async move { remote::catalog(&frame, max_frame_bytes, definitions) }),
         Command::Admit {
             request_id,
             recorded,

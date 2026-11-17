@@ -34,15 +34,40 @@ export const brainReplaced = 4002
 
 export const handAccepted = JSON.stringify({ type: 'ack', ids: [] })
 
+export const catalogHeader = 'nanocode-catalog'
+
+export type HeldCatalog = {
+  catalog_hash: string
+  definitions: string
+}
+
 export function toolsOnly(catalog: string): boolean {
   return (JSON.parse(catalog) as { tools_only?: unknown }).tools_only === true
 }
 
 const encoder = new TextEncoder()
 
-export function accept<S extends Contracts.MessageSocket>(socket: S, policy: Policy): Executor<S> {
+export function accept<S extends Contracts.MessageSocket>(
+  socket: S,
+  policy: Policy,
+  held?: HeldCatalog,
+): Executor<S> {
   validate(policy)
-  return create(socket, { listen: false, policy })
+  return create(socket, { held, listen: false, policy })
+}
+
+function hydrate(frame: string, held: HeldCatalog): string {
+  let fields: Record<string, unknown> | null
+  try {
+    fields = JSON.parse(frame)
+  } catch {
+    return frame
+  }
+  if (!fields || fields.definitions !== undefined || fields.catalog_hash !== held.catalog_hash)
+    return frame
+  delete fields.catalog_hash
+  const rest = JSON.stringify(fields)
+  return '{"definitions":' + held.definitions + (rest === '{}' ? '}' : ',' + rest.slice(1))
 }
 
 export function bearerProtocols(token: string): string[] {
@@ -112,7 +137,12 @@ export declare namespace restore {
 
 function create<S extends Contracts.MessageSocket>(
   socket: S,
-  options: { catalog?: string | undefined; listen: boolean; policy: Policy },
+  options: {
+    catalog?: string | undefined
+    held?: HeldCatalog | undefined
+    listen: boolean
+    policy: Policy
+  },
 ): Executor<S> {
   const policy = options.policy
   let catalog = options.catalog
@@ -314,7 +344,7 @@ function create<S extends Contracts.MessageSocket>(
         return fail('remote code mode frame exceeds caller max_frame_bytes policy', 1009)
 
       if (catalog === undefined) {
-        catalog = data
+        catalog = options.held ? hydrate(data, options.held) : data
         catalogWaiter?.resolve()
         catalogWaiter = undefined
         return

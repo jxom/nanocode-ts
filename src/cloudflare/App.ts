@@ -698,6 +698,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
     >()
     private readonly connections = new Map<string, Connection>()
     private readonly handSockets = new Map<WebSocket, HandExecutor>()
+    private readonly heldCatalogs = new Map<string, { definitions: string; holders: number }>()
     private readonly handAuthority = new Map<string, SessionDescriptor>()
     private readonly handChecks = new Map<string, HandCheck>()
     private readonly rechecks = new Set<WebSocket>()
@@ -3074,13 +3075,29 @@ ${input.request_id}`
         return json({ error: 'invalid hand' }, 400)
       if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket')
         return json({ error: 'hands attach over WebSocket' }, 426)
-      const accepted = Remote.bearerAccepted(request)
+      const accepted: Record<string, string> = Remote.bearerAccepted(request)
+      const offered = request.headers.get(Remote.catalogHeader) ?? undefined
+      const held = offered === undefined ? undefined : this.heldCatalogs.get(offered)
+      if (held) accepted[Remote.catalogHeader] = offered!
       const [client, server] = Object.values(new WebSocketPair())
       this.ctx.acceptWebSocket(server, [handTag])
       server.send(Remote.handAccepted)
-      const executor = Remote.accept(server, this.handLimits())
+      const executor = Remote.accept(
+        server,
+        this.handLimits(),
+        held && { catalog_hash: offered!, definitions: held.definitions },
+      )
       this.handSockets.set(server, executor)
-      this.ctx.waitUntil(this.registerHand(scope, requested, executor, descriptor))
+      this.ctx.waitUntil(
+        this.registerHand(
+          scope,
+          requested,
+          executor,
+          descriptor,
+          offered,
+          held && this.holdCatalog(offered!),
+        ),
+      )
       return new Response(null, { status: 101, webSocket: client, headers: accepted })
     }
 
@@ -3092,27 +3109,53 @@ ${input.request_id}`
       }
     }
 
+    private holdCatalog(catalog_hash: string, definitions?: string): (() => void) | undefined {
+      let held = this.heldCatalogs.get(catalog_hash)
+      if (!held) {
+        if (definitions === undefined) return
+        this.heldCatalogs.set(catalog_hash, (held = { definitions, holders: 0 }))
+      }
+      const kept = held
+      kept.holders++
+      let released = false
+      return () => {
+        if (released) return
+        released = true
+        if (--kept.holders === 0 && this.heldCatalogs.get(catalog_hash) === kept)
+          this.heldCatalogs.delete(catalog_hash)
+      }
+    }
+
     private async registerHand(
       scope: string,
       requested: string | undefined,
       executor: HandExecutor,
       descriptor: SessionDescriptor,
+      offered?: string,
+      release?: () => void,
     ): Promise<void> {
+      void executor.closed.then(() => release?.())
       try {
         await executor.ready()
       } catch {
         this.handSockets.delete(executor.socket)
         return
       }
-      let advertised: { name: string | null; runtime_id: string | null }
+      let advertised: Awaited<ReturnType<AgentRuntime.AgentRuntime['identity']>>
       try {
         advertised = await (
           await this.instance(scope)
-        ).identity(executor.catalog!, this.handLimits().max_frame_bytes)
+        ).identity(
+          executor.catalog!,
+          this.handLimits().max_frame_bytes,
+          offered !== undefined && !release && !this.heldCatalogs.has(offered),
+        )
       } catch (error) {
         this.handSockets.delete(executor.socket)
         return executor.reject(error instanceof Error ? error.message : String(error))
       }
+      if (!release && offered !== undefined && advertised.catalog_hash === offered)
+        release = this.holdCatalog(offered, advertised.definitions)
       const hand = requested ?? advertised.name
       if (!handName(hand)) {
         this.handSockets.delete(executor.socket)
@@ -3133,6 +3176,7 @@ ${input.request_id}`
       ) {
         const earlier = resumed.executor.socket
         if (resumed.executor.rebind(executor.socket, executor.catalog!)) {
+          if (release) void resumed.executor.closed.then(release)
           this.handSockets.delete(earlier)
           this.handSockets.set(executor.socket, resumed.executor)
           executor.socket.serializeAttachment({ connection: resumed.connection })

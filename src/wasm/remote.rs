@@ -10,18 +10,28 @@ use nanocode_code_mode::{
     Tool,
     embedded::{CodeModeExecution, CodeModeHostError, CodeModeObserver, HandCalls, HostFuture},
     remote::{
-        HandToolSelection, NOT_RECEIVED, REQUEST_IN_USE, RemoteActivity, RemoteCatalog,
-        RemoteClient, RemoteCodeModeHost, RemoteContext, RemoteDelivery, RemoteFrame as Frame,
-        RemoteLink, RemoteOperation, RemoteTransport,
+        CatalogLease, HandToolSelection, NOT_RECEIVED, REQUEST_IN_USE, RemoteActivity,
+        RemoteCatalog, RemoteCatalogs, RemoteClient, RemoteCodeModeHost, RemoteContext,
+        RemoteDelivery, RemoteFrame as Frame, RemoteLink, RemoteOperation, RemoteTransport,
     },
 };
-use serde_json::{Value, json};
+use serde_json::{Value, json, value::RawValue};
 
 use super::bridge::{call, spawn};
 
 thread_local! {
     static ACTIVITY: RefCell<Vec<RemoteActivity>> = const { RefCell::new(Vec::new()) };
     static ANSWERED: RefCell<BTreeSet<String>> = const { RefCell::new(BTreeSet::new()) };
+    static CATALOGS: RemoteCatalogs = RemoteCatalogs::default();
+}
+
+fn decode_catalog(
+    text: &str,
+    max_frame_bytes: usize,
+) -> Result<(RemoteCatalog, CatalogLease), String> {
+    CATALOGS
+        .with(|catalogs| catalogs.decode(text, max_frame_bytes, None))
+        .map_err(|e| e.to_string())
 }
 
 fn error(value: impl std::fmt::Display) -> CodeModeHostError {
@@ -322,6 +332,7 @@ struct Recovering {
     client: RemoteClient,
     connection: Option<String>,
     max_frame_bytes: usize,
+    _catalog: CatalogLease,
 }
 
 impl RemoteTransport for Recovering {
@@ -397,9 +408,16 @@ impl RemoteTransport for Recovering {
     }
 }
 
-pub fn catalog(frame: &str, max_frame_bytes: usize) -> Result<Value, String> {
-    let catalog = RemoteCatalog::decode(frame, max_frame_bytes).map_err(|e| e.to_string())?;
-    Ok(json!({"name": catalog.name, "runtime_id": catalog.runtime_id}))
+pub fn catalog(frame: &str, max_frame_bytes: usize, definitions: bool) -> Result<Value, String> {
+    let (catalog, lease) = decode_catalog(frame, max_frame_bytes)?;
+    let mut identity = json!({"name": catalog.name, "runtime_id": catalog.runtime_id, "catalog_hash": lease.catalog_hash()});
+    if definitions {
+        let fields = serde_json::from_str::<HashMap<String, &RawValue>>(frame).map_err(|e| e.to_string())?;
+        if let Some(raw) = fields.get("definitions") {
+            identity["definitions"] = Value::String(raw.get().to_owned());
+        }
+    }
+    Ok(identity)
 }
 
 pub async fn host(connection: Option<String>, scope: &str) -> Result<RemoteCodeModeHost, String> {
@@ -417,7 +435,7 @@ pub async fn host(connection: Option<String>, scope: &str) -> Result<RemoteCodeM
     let text = catalog["frame"]
         .as_str()
         .ok_or("remote catalog frame must be text")?;
-    let catalog = RemoteCatalog::decode(text, max_frame_bytes).map_err(|e| e.to_string())?;
+    let (catalog, lease) = decode_catalog(text, max_frame_bytes)?;
     let max_frame_bytes = catalog
         .max_frame_bytes
         .map_or(max_frame_bytes, |peer| peer.min(max_frame_bytes));
@@ -444,6 +462,7 @@ pub async fn host(connection: Option<String>, scope: &str) -> Result<RemoteCodeM
             client,
             connection,
             max_frame_bytes,
+            _catalog: lease,
         },
         catalog.definitions.clone(),
     )
