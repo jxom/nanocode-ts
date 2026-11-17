@@ -123,3 +123,35 @@ Built with `sh bench/python/data/dist.sh <release dist> output/dist-2d10d99` (ma
 SCORE master-2d10d99 pass48=6/9 passUnl=9/9 warm48=512ms cold48=1864ms warmUnl=613ms coldUnl=2257ms peakLin48=119MiB peakLinUnl=376.1MiB rss48=507.4MiB big48=5MB bigUnl=50MB
 
 The full run reads slower than the baseline (warmUnl 613 against 452 ms), but an interleaved A/B of W1, W4, W5a, W7 and W8 at 1 GiB, two rounds each, gives warmUnl 196 and 200 ms for build-89d6d85 against 233 and 182 ms for master, coldUnl 1,126 and 1,211 against 1,200 and 1,059 ms: no regression, the gap is the Hand's load. The change only moves compiling python.wasm out of Worker boot under the new module registry, which this Node bench (it hands the runtime a compiled module) cannot see. Memory is unchanged (peakLinUnl 376 MiB, pass48 6/9). Compare interleaved runs, not runs taken at different times.
+
+### 2026-11-17 nocopy: master 86d0a18 with python.wasm/python.data built from nanocode 586c8be2d (not yet pinned), Node
+
+The nocopy lane's local build (frozen stdlib and site data read per entry from the `nanocode.python.data` section through `python.host_data`, minimal image), with master's TypeScript (`sh bench/python/data/dist.sh ~/w/nocopy/nanocode-ts/dist output/dist-86d0a18`). Load average about 4.
+
+| id | workload | limit | status | mode | cold ms | warm ms | peak linear MiB | live linear MiB | max RSS MiB | note |
+| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| W1 | sine chart | 48 | pass | - | 1288 | 959 | 52.6 | 0 | 348.6 |  |
+| W1 | sine chart | unl | pass | - | 1470 | 186.2 | 62.9 | 62.9 | 322.4 |  |
+| W2 | repo files chart | 48 | pass | - | 2290 | 1428.2 | 58.9 | 0 | 418.6 |  |
+| W2 | repo files chart | unl | pass | - | 2024 | 743.2 | 82.4 | 82.4 | 390 |  |
+| W3 | csv 10 MB groupby chart | 48 | fail | - | 960 | - | 62.6 | 0 | 410.6 | ta in chunks (a file line by line, a batch of rows at a time) and write results out as you go instead of holding it all  |
+| W3 | csv 10 MB groupby chart | unl | pass | numpy | 4078 | 4025.5 | 361.2 | 361.2 | 728.1 |  |
+| W4 | json 10k records table | 48 | pass | - | 238 | 43.4 | 28.7 | 28.7 | 278.1 |  |
+| W4 | json 10k records table | unl | pass | - | 207 | 44 | 28.7 | 28.7 | 283.8 |  |
+| W5a | bootstrap 90x4000 | 48 | pass | - | 518 | 77.6 | 28.9 | 28.9 | 264.9 |  |
+| W5a | bootstrap 90x4000 | unl | pass | - | 474 | 83.8 | 28.9 | 28.9 | 265.5 |  |
+| W5b | bootstrap 90x100000 | 48 | fail | - | 471 | - | 82.6 | 0 | 311.8 | ta in chunks (a file line by line, a batch of rows at a time) and write results out as you go instead of holding it all  |
+| W5b | bootstrap 90x100000 | unl | pass | - | 1719 | 1332.2 | 119.2 | 119.2 | 347.2 |  |
+| W6 | time series daily rolling chart | 48 | fail | - | 1119 | - | 63.5 | 0 | 349.4 | ta in chunks (a file line by line, a batch of rows at a time) and write results out as you go instead of holding it all  |
+| W6 | time series daily rolling chart | unl | pass | numpy | 3187 | 1999.2 | 239 | 239 | 544.3 |  |
+| W7 | five python3 calls numpy+mpl | 48 | pass | - | 4318 | 4090 | 53.1 | 0 | 359.8 |  |
+| W7 | five python3 calls numpy+mpl | unl | pass | - | 1625 | 722.3 | 91.8 | 91.8 | 356.4 |  |
+| W8 | git subprocess heavy | 48 | pass | - | 201 | 47.1 | 10.3 | 9.5 | 276.5 |  |
+| W8 | git subprocess heavy | unl | pass | - | 195 | 45.2 | 10.3 | 9.5 | 272.7 |  |
+| W9 | polars csv groupby chart | 48 | skip | - | 72 | - | 8.8 | 8.8 | 340.1 |  |
+| W9 | polars csv groupby chart | unl | skip | - | 81 | - | 8.8 | 8.8 | 331.6 |  |
+| W10 | big csv probe | 48 | pass | - | 1404 | - | 96.3 | 0 | 1137.3 | largest 5 MB |
+| W10 | big csv probe | unl | pass | - | 11906 | - | 623.7 | 409.1 | 1569.8 | largest 50 MB |
+SCORE nocopy-86d0a18 pass48=6/9 passUnl=9/9 warm48=310ms cold48=825ms warmUnl=383ms coldUnl=1084ms peakLin48=82.6MiB peakLinUnl=361.2MiB rss48=418.6MiB big48=5MB bigUnl=50MB
+
+Interleaved A/B over W1, W2, W4, W5a, W7 and W8 (two rounds, build-89d6d85 then this build): cold48 1,105 and 923 ms against 748 and 749 ms (-25%), coldUnl 811 and 814 against 658 and 639 ms (-20%), warm unchanged (warm48 325/300 against 302/306, warmUnl 156/150 against 156/158), peak linear 76.1 to 58.9 MiB at 48 MiB and 109.2 to 91.8 MiB at 1 GiB (-17 MiB, the frozen data no longer in linear memory), peak RSS 442-464 to 390-410 MiB. Every run starts 17-26 MiB lower (W8 34.2 to 10.3 MiB, W4 52.3 to 28.7). pass48 is still 6/9: W3, W5b and W6 now peak at 62.6, 82.6 and 63.5 MiB and still exceed 48 MiB above the image. Waits on the pin and a release to reach master's dist.
