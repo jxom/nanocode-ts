@@ -14,11 +14,10 @@ const maxDataSegments = 100_000
 const pageBytes = 65536
 const segmentHeader = 1 + 1 + 5 + 1 + 5
 
-export const warm = String.raw`import sys, os, io, json, re, collections, itertools, functools, math, string, pathlib, datetime, textwrap, csv, base64, struct, dataclasses, enum, typing, argparse, hashlib, shutil, glob, fnmatch, heapq, bisect, copy, operator, decimal, fractions, urllib.parse, html, difflib, pprint, time, contextlib, abc, traceback, zlib, gzip, binascii, unicodedata, codecs, locale, ast, tokenize, inspect, types, weakref, numbers
-assert not {'random', '_random', 'tempfile', 'uuid', 'secrets'} & set(sys.modules), sorted(sys.modules)
-json.loads(json.dumps({"a": [1, 2.5, "x", None]}))
-re.compile(r"\w+").findall("a b c")
-`
+// The image holds only the started interpreter: modules load from the data blob when a program imports
+// them, so a module the image imported ahead of time would only add its objects to every instance's
+// memory (17.4 MB image with the common stdlib modules, 8.0 MB without).
+export const warm = 'import sys\n'
 
 function run(command, cwd) {
   const result = spawnSync(command[0], command.slice(1), { cwd, stdio: 'inherit' })
@@ -158,7 +157,7 @@ function segments(memory) {
   return merged
 }
 
-function warmed(module) {
+function warmed(module, data) {
   let exports
   const view = (ptr, len) => new Uint8Array(exports.memory.buffer, ptr >>> 0, len >>> 0)
   const reply = (data) => {
@@ -171,6 +170,11 @@ function warmed(module) {
   const imports = {
     python: {
       host_fs: (op, path, len) => (op === 0 && len === 1 && view(path, 1)[0] === 0x2f ? reply(root) : op === 0 || op === 1 || op === 3 ? -2n : -30n),
+      host_data(offset, ptr, len) {
+        if (!data || offset + len > data.length) return 1
+        view(ptr, len).set(data.subarray(offset, offset + len))
+        return 0
+      },
       host_now: () => performance.now(),
       host_panic(ptr, len) {
         throw new Error('python.wasm panicked: ' + new TextDecoder().decode(view(ptr, len)))
@@ -205,24 +209,48 @@ function warmed(module) {
   view(exports.python_input(request.length), request.length).set(request)
   const len = exports.python_run()
   const out = view(exports.python_output(), len).slice()
-  const data = new DataView(out.buffer)
-  if (data.getUint32(0, true) !== 0 || data.getUint32(4, true) !== 0) {
-    const stdout = data.getUint32(8, true)
-    throw new Error('the warm-up run ended with ' + data.getUint32(0, true) + '/' + data.getUint32(4, true) + ': ' + new TextDecoder().decode(out.subarray(12 + stdout)))
+  const fields = new DataView(out.buffer)
+  if (fields.getUint32(0, true) !== 0 || fields.getUint32(4, true) !== 0) {
+    const stdout = fields.getUint32(8, true)
+    throw new Error('the warm-up run ended with ' + fields.getUint32(0, true) + '/' + fields.getUint32(4, true) + ': ' + new TextDecoder().decode(out.subarray(12 + stdout)))
   }
   return new Uint8Array(exports.memory.buffer)
 }
 
-// With `image: true` the warmed memory leaves the module as python.data, which the host writes into each new
-// instance's memory before its first call (src/bash/internal/commands/rustpython.ts), so that a host with a
-// cap on code size (a Cloudflare Worker) can serve it as a static asset. python.data is gzip of imageMagic,
-// the SHA-256 of the bytes, their base address and length (u32 little endian), then the bytes; the module's
-// imageSection custom section holds the same 40 bytes after the magic.
-export const imageMagic = 'NCPYMEM1'
+// python.wasm keeps its read-only data (each frozen module's compressed code and each compressed site
+// data file) in the dataSection custom section, outside linear memory; the interpreter reads one entry
+// through the python.host_data import when it imports the module or opens the file. The bake lifts that
+// section out of the module.
+//
+// With `image: true` the warmed memory and the data leave the module as python.data, which the host loads once
+// per isolate (src/bash/internal/commands/rustpython.ts): it writes the memory into each new instance
+// before its first call and serves data entries from the blob, so that a host with a cap on code size (a
+// Cloudflare Worker) can serve both as a static asset. python.data is imageMagic, then the SHA-256 of the
+// memory and the data, the memory's base address, its length, the length of its gzip and the data's length
+// (u32 little endian), then the gzip of the memory and then the data, kept as it is: its entries are
+// compressed one by one, so the host holds it without decompressing it. The module's imageSection custom
+// section holds the same 48 bytes after the magic. Without it the data stays in the module's section
+// and the host reads it from there.
+export const imageMagic = 'NCPYDAT2'
 export const imageSection = 'nanocode.python.image'
+export const dataSection = 'nanocode.python.data'
+
+function customSection(bytes, wanted) {
+  let at = 8
+  while (at < bytes.length) {
+    const id = bytes[at]
+    const [size, start] = leb(bytes, at + 1)
+    at = start + size
+    if (id !== 0) continue
+    const [length, name] = leb(bytes, start)
+    if (new TextDecoder().decode(bytes.subarray(name, name + length)) === wanted) return bytes.subarray(name + length, at)
+  }
+  return undefined
+}
 
 export function bake(bytes, options = {}) {
-  const memory = warmed(new WebAssembly.Module(bytes))
+  const data = customSection(bytes, dataSection)
+  const memory = warmed(new WebAssembly.Module(bytes), data)
   const runs = segments(memory)
   const split = options.image === true
   let image
@@ -230,12 +258,17 @@ export function bake(bytes, options = {}) {
   if (split) {
     const base = runs[0][0]
     const body = memory.subarray(base, runs[runs.length - 1][1])
-    const header = new Uint8Array(48)
+    const packed = gzipSync(body, { level: 9 })
+    const blob = data ?? new Uint8Array(0)
+    const header = new Uint8Array(56)
     header.set(new TextEncoder().encode(imageMagic), 0)
-    header.set(createHash('sha256').update(body).digest(), 8)
-    new DataView(header.buffer).setUint32(40, base, true)
-    new DataView(header.buffer).setUint32(44, body.length, true)
-    image = gzipSync(join8([header, body]), { level: 9 })
+    header.set(createHash('sha256').update(body).update(blob).digest(), 8)
+    const fields = new DataView(header.buffer)
+    fields.setUint32(40, base, true)
+    fields.setUint32(44, body.length, true)
+    fields.setUint32(48, packed.length, true)
+    fields.setUint32(52, blob.length, true)
+    image = join8([header, packed, blob])
     const name = new TextEncoder().encode(imageSection)
     const payload = join8([Uint8Array.from(uleb(name.length)), name, header.subarray(8)])
     section = join8([Uint8Array.from([0, ...uleb(payload.length)]), payload])
@@ -249,6 +282,10 @@ export function bake(bytes, options = {}) {
     const body = bytes.subarray(start, start + size)
     at = start + size
     if (id === 8) throw new Error('python.wasm has a start function')
+    if (split && id === 0 && body.length > 0) {
+      const [length, name] = leb(body, 0)
+      if (new TextDecoder().decode(body.subarray(name, name + length)) === dataSection) continue
+    }
     if (id === 5) {
       const [count, limits] = leb(body, 0)
       if (count !== 1 || body[limits] > 1) throw new Error('python.wasm has an unexpected memory section')

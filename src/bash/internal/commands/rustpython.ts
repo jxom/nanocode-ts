@@ -113,19 +113,39 @@ const errno: Record<string, number> = {
 const instances = new WeakMap<WebAssembly.Module, Instance>()
 
 // python.wasm's warmed memory ships beside it as python.data rather than as data segments, so that hosts
-// with a cap on code size (Cloudflare Workers) can fetch it as a static asset. The module's custom section
-// names the image it needs: its SHA-256, base address and length.
-export type Image = { base: number; bytes: Uint8Array }
+// with a cap on code size (Cloudflare Workers) can fetch it as a static asset. python.data also carries
+// the read-only data blob: each frozen module's compressed code and each compressed site data file, which
+// the interpreter reads entry by entry through the host_data import when it imports a module or opens a
+// file, so the blob stays here, compressed, once per isolate and outside every instance's memory. The
+// module's custom section names the python.data it needs: its SHA-256 and layout (scripts/python.mjs).
+// A module baked without an image keeps the blob in its own data custom section instead.
+export type Image = { base: number; bytes: Uint8Array; data: Uint8Array }
 
 const imageSection = 'nanocode.python.image'
 
-const imageMagic = 'NCPYMEM1'
+const dataSection = 'nanocode.python.data'
+
+const imageMagic = 'NCPYDAT2'
 
 const images = new WeakMap<WebAssembly.Module, Image>()
+
+const sectionData = new WeakMap<WebAssembly.Module, Uint8Array>()
 
 function descriptor(module: WebAssembly.Module): Uint8Array | undefined {
   const [section] = WebAssembly.Module.customSections(module, imageSection)
   return section && new Uint8Array(section)
+}
+
+function blob(module: WebAssembly.Module): Uint8Array {
+  const image = images.get(module)
+  if (image) return image.data
+  let data = sectionData.get(module)
+  if (!data) {
+    const [section] = WebAssembly.Module.customSections(module, dataSection)
+    data = section ? new Uint8Array(section) : new Uint8Array(0)
+    sectionData.set(module, data)
+  }
+  return data
 }
 
 export function needsImage(module: WebAssembly.Module): boolean {
@@ -145,17 +165,26 @@ export async function provide(
 ): Promise<void> {
   const wanted = descriptor(module)
   if (!wanted || images.has(module)) return
-  let bytes = data instanceof Uint8Array ? data : new Uint8Array(data)
-  if (bytes[0] === 0x1f && bytes[1] === 0x8b) bytes = await gunzip(bytes)
+  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data)
   const header = bytes.subarray(0, 8 + wanted.length)
-  if (text.decode(header.subarray(0, 8)) !== imageMagic)
-    throw new Error('it is not a python.data image')
+  if (header.length !== 56 || text.decode(header.subarray(0, 8)) !== imageMagic)
+    throw new Error('it is not a python.data image of this format')
   if (!header.subarray(8).every((byte, index) => byte === wanted[index]))
     throw new Error('it belongs to another build of python.wasm')
   const view = new DataView(header.buffer, header.byteOffset, header.length)
   const length = view.getUint32(44, true)
-  if (bytes.length - header.length !== length) throw new Error('it is truncated')
-  images.set(module, { base: view.getUint32(40, true), bytes: bytes.subarray(header.length) })
+  const packed = view.getUint32(48, true)
+  const blobLength = view.getUint32(52, true)
+  if (bytes.length !== header.length + packed + blobLength) throw new Error('it is truncated')
+  const memory = await gunzip(bytes.subarray(header.length, header.length + packed))
+  if (memory.length !== length) throw new Error('its memory image is corrupt')
+  // The blob is copied out so that the bytes it came in, with the image's gzip, can be collected.
+  const start = header.length + packed
+  images.set(module, {
+    base: view.getUint32(40, true),
+    bytes: memory,
+    data: bytes.slice(start, start + blobLength),
+  })
 }
 
 const randomBytes = 65536
@@ -323,6 +352,16 @@ function instantiate(module: WebAssembly.Module): Instance {
         }
         const exited = spawn({ argv, cwd, env, merged, stdin })
         return exited instanceof Promise ? exited.then(answer) : answer(exited)
+      },
+      host_data(offset: number, ptr: number, len: number) {
+        const data = blob(module)
+        offset >>>= 0
+        len >>>= 0
+        if (offset + len > data.length) return 1
+        new Uint8Array(state.exports.memory.buffer, ptr >>> 0, len).set(
+          data.subarray(offset, offset + len),
+        )
+        return 0
       },
       host_stopped: () => (state.stopped() ? 1 : 0),
       host_time() {
