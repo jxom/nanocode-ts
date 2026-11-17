@@ -247,3 +247,7 @@ The warm lane's build at the pinned revision, with master's TypeScript. This mat
 SCORE pin-9cf130e pass48=6/9 passUnl=9/9 warm48=176ms cold48=740ms warmUnl=277ms coldUnl=1014ms peakLin48=99.8MiB peakLinUnl=204.2MiB rss48=451.9MiB big48=none bigUnl=50MB
 
 Against the BASELINE: warm48 382 to 176 ms (-54%), cold48 1,166 to 740 ms (-37%), warmUnl 452 to 277 ms (-39%), coldUnl 1,485 to 1,014 ms (-32%), peakLinUnl 376 to 204 MiB (-46%). pass48 is unchanged at 6/9, and big48 regressed from 5 MB to none: W10 takes the pandas path once pandas imports and peaks at 68.5 MiB.
+
+### 2026-11-17 W9 polars (reported by the polars lane, not rerun here)
+
+`node scripts/polars.mjs <out>` builds a separate python.wasm and python.data with polars 1.33.1. Benchmark it with `sh bench/python/data/dist.sh <wasm dist> <dir>` and `--only W9`. The polars lane's run: W9 passes at 1 GiB, 2,023 ms cold and 615 ms warm, peak linear 136.9 MiB; it fails at 48 MiB (83.6 MiB). Score only W9 with that build: it crashes W3 (pandas) through a layout-dependent heap corruption (DECISIONS.md, f2546f7 and 8175b78). The default build still skips W9. This Hand holds no polars build and it is too small to make one, so these numbers are the lane's.
