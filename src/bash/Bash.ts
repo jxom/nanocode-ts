@@ -181,6 +181,31 @@ export async function create(options: create.Options = {}): Promise<Bash> {
     for (const name of ['python', 'python3', 'pip', 'pip3'])
       if (!options.commands?.[name]) commands.delete(name)
   let calls = 0
+  const shellDefaults: [string, string[]][] = Object.entries({
+    BASH: '/bin/bash',
+    BASH_VERSION: '5.2.21(1)-release',
+    BASH_EXECUTION_STRING: '',
+    OPTERR: '1',
+    PS4: '+ ',
+    IFS: ' \t\n',
+    OPTIND: '1',
+    OSTYPE: 'linux-gnu',
+    ...(machine
+      ? {}
+      : {
+          HOSTNAME: 'localhost',
+          HOSTTYPE: 'x86_64',
+          MACHTYPE: 'x86_64-pc-linux-gnu',
+          BASH_LOADABLES_PATH:
+            '/usr/local/lib/bash:/usr/lib/bash:/opt/local/lib/bash:/usr/pkg/lib/bash:/opt/pkg/lib/bash:.',
+          SHLVL: '1',
+          PPID: '1',
+          UID: '1000',
+          EUID: '1000',
+        }),
+  }).map(([name, value]): [string, string[]] => [name, [value]])
+  if (!machine)
+    shellDefaults.push(['BASH_VERSINFO', ['5', '2', '21', '1', 'release', 'x86_64-pc-linux-gnu']])
 
   const spawned = async (request: {
     cwd: string
@@ -290,8 +315,9 @@ export async function create(options: create.Options = {}): Promise<Bash> {
       const onAbort = () => controller.abort('execution aborted')
       if (execOptions.signal?.aborted) onAbort()
       execOptions.signal?.addEventListener('abort', onAbort, { once: true })
-      const directory = FileSystem.resolvePath(cwd, execOptions.cwd ?? cwd)
-      const engine = await options.psh
+      const directory =
+        execOptions.cwd === undefined ? cwd : FileSystem.resolvePath(cwd, execOptions.cwd)
+      const engine = options.psh === undefined ? undefined : await options.psh
       if (engine) {
         const outcome = await engineRun(engine, {
           controller,
@@ -335,37 +361,22 @@ export async function create(options: create.Options = {}): Promise<Bash> {
 
       const state = new Shell.State()
       state.cwd = directory
-      for (const [name, value] of Object.entries({ ...env, ...execOptions.env, PWD: directory })) {
-        state.vars.set(name, [value])
+      const vars = state.vars
+      for (const [name, value] of Object.entries(env)) {
+        vars.set(name, [value])
         state.exported.add(name)
       }
-      for (const [name, value] of Object.entries({
-        BASH: '/bin/bash',
-        BASH_VERSION: '5.2.21(1)-release',
-        BASH_EXECUTION_STRING: script,
-        OPTERR: '1',
-        PS4: '+ ',
-        IFS: ' \t\n',
-        OPTIND: '1',
-        OSTYPE: 'linux-gnu',
-        ...(machine
-          ? {}
-          : {
-              HOSTNAME: 'localhost',
-              HOSTTYPE: 'x86_64',
-              MACHTYPE: 'x86_64-pc-linux-gnu',
-              BASH_LOADABLES_PATH:
-                '/usr/local/lib/bash:/usr/lib/bash:/opt/local/lib/bash:/usr/pkg/lib/bash:/opt/pkg/lib/bash:.',
-              SHLVL: '1',
-              PPID: '1',
-              UID: '1000',
-              EUID: '1000',
-            }),
-      }))
-        if (!state.vars.has(name)) state.vars.set(name, [value])
-      if (!machine && !state.vars.has('BASH_VERSINFO'))
-        state.vars.set('BASH_VERSINFO', ['5', '2', '21', '1', 'release', 'x86_64-pc-linux-gnu'])
-      if (machine) state.vars.known = new Set(state.vars.keys())
+      if (execOptions.env)
+        for (const [name, value] of Object.entries(execOptions.env)) {
+          vars.set(name, [value])
+          state.exported.add(name)
+        }
+      vars.set('PWD', [directory])
+      state.exported.add('PWD')
+      for (const [name, value] of shellDefaults)
+        if (!vars.has(name))
+          vars.set(name, name === 'BASH_EXECUTION_STRING' ? [script] : value.slice())
+      if (machine) vars.known = new Set(vars.keys())
       const budget = { used: 0, refused: false }
       const runner = new Shell.Runner(
         {

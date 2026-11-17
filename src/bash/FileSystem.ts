@@ -88,7 +88,29 @@ export class FsError extends Error {
   }
 }
 
+function normalized(path: string): boolean {
+  const length = path.length
+  if (length === 0 || path.charCodeAt(0) !== 47) return false
+  if (length === 1) return true
+  if (path.charCodeAt(length - 1) === 47) return false
+  for (let i = 0; i < length; i++) {
+    if (path.charCodeAt(i) !== 47) continue
+    const next = path.charCodeAt(i + 1)
+    if (next === 47) return false
+    if (next === 46) {
+      const after = path.charCodeAt(i + 2)
+      if (after !== after || after === 47) return false
+      if (after === 46) {
+        const third = path.charCodeAt(i + 3)
+        if (third !== third || third === 47) return false
+      }
+    }
+  }
+  return true
+}
+
 export function normalize(path: string): string {
+  if (normalized(path)) return path
   const parts: string[] = []
   for (const part of path.split('/')) {
     if (part === '' || part === '.') continue

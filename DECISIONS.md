@@ -859,3 +859,24 @@ Before this change the TypeScript engine looped without end on a `[[ ]]` word it
 ## 2026-11-17: a headless session with one hand leaves out hands, placement and the Codex shell tools on Claude
 
 When `headless` is set and at most one hand is attached, the session registers no `hands` tool and adds no placement instructions: nothing routes between hands. A headless Claude Code Mode session (`claude_orchestration` other than `direct`, without a caller's own `claude` tool selection) also leaves out the hand's Codex `exec_command`, `write_stdin` and `apply_patch`, which Bash, Edit and Write already cover. Interactive sessions and multi-hand sessions are unchanged. Why: Claude cost per pass on traps was 1.13x pi's (run dd6ab7c8), almost all cached input from the request prefix. Measured with a mock dispatch capturing the first `/v1/messages` body of a headless hands session with one attached hand (nanoeval's options; Anthropic `count_tokens`): 12,974 input tokens before, 10,737 with this, 10,042 with the nanocode Claude headless prompt trims of the same day (pi's first request: 2,569). A Code Mode probe on the hand still runs `tools.Bash`; `ALL_TOOLS` goes from 18 names to 14. Interactive first requests are byte-identical.
+
+## 2026-11-17: psh pipelines borrow state, skip per-exec rebuilds and lex words in runs
+
+Measured with `node bench/psh-conformance/speed.ts 300` on dev-georgios (32 cores, load 15 to 23, Node 24.11.1, `taskset -c 4-7`), master and this change interleaved over three rounds; each cell is the middle of the three run medians in µs, then bash's median and the ratio:
+
+| command | before | after | after 95% CI ± | bash | ratio |
+|---|---|---|---|---|---|
+| echo hi | 10.4 | 10.0 | 3.2 | 1311 | 131x |
+| x=$((3*4)); echo $x | 16.0 | 16.9 | 8.5 | 1358 | 80x |
+| echo hi \| tr a-z A-Z | 100.2 | 28.4 | 5.8 | 2030 | 71x |
+| cat a.txt \| grep an \| wc -l | 55.4 | 37.8 | 8.5 | 2183 | 58x |
+| for … done \| sort -n \| tail -1 | 78.5 | 88.3 | 14.9 | 2258 | 26x |
+| awk -F, … data.csv | 34.4 | 31.6 | 6.8 | 2132 | 68x |
+| sed 's/a/A/g' a.txt | 17.6 | 14.1 | 0.6 | 1891 | 134x |
+| jq -r .c.d j.json | 22.3 | 22.5 | 1.1 | 2556 | 114x |
+| find dir -type f \| sort | 48.7 | 32.2 | 2.2 | 2149 | 67x |
+| f() { local v=$1; echo ${v^^}; }; f abc | 32.7 | 20.1 | 1.9 | 1437 | 71x |
+
+speed.ts warms each row with only 20 calls after 300 `Bash.create` calls, so its rows move by 20 to 40% between runs (the loop row ranged 76 to 99 µs on master). In fresh processes that run only the loop, tr and grep rows (300 creates, 20 warm, 300 timed, six interleaved rounds) master gives 72 to 99, 78 to 102 and 39 to 51 µs and this change 62 to 73, 19 to 24 and 28 to 44 µs.
+
+Changes: (1) a pipeline stage that is a simple command naming a host command, with literal words and no assignments, redirects, functions, aliases, DEBUG trap or lastpipe, runs on the parent's State instead of a clone, and takes its own copy before anything runs through `ctx.run` (`xargs`, `timeout`, `env`), which can run builtins that write. (2) `Bash.exec` builds the default variables once per shell, not per call, and skips resolving an unchanged cwd. (3) The parser recognizes reserved words without slicing the rest of the source for a regex, appends runs of plain characters to a word in one slice, tries the assignment regex only when a word starts with a name character, and stores each word's source on a symbol property instead of a WeakMap. (4) `normalize` returns an already normal absolute path as is. (5) `tr` keeps its translation and squeeze caches in Maps until it has seen 16,384 code units and fills the two 65,536-entry tables only then; filling them cost about 70 µs per call. A CPU profile of the loop row now has the parser at 20%, the for-loop stage's State clone at 5% and GC most of the rest. Checks: `node bench/psh-conformance/run.ts` passes the same 1,063 of 1,084 cases as master, with the same failures; `npm run check:types` and `npm run build:ts` pass (`npm run build` needs a nanocodex checkout for the WebAssembly, which this change does not touch).

@@ -896,6 +896,7 @@ export class Runner {
   loops = 0
   #substitution: number | undefined
   #trapping = false
+  #borrowed = false
 
   constructor(host: ShellHost, state: State, signal: AbortSignal, shared?: Shared) {
     this.host = host
@@ -935,6 +936,36 @@ export class Runner {
     runner.loops = this.loops
     runner.#condition = this.#condition
     return runner
+  }
+
+  #borrow(): Runner {
+    const runner = this.fork(this.state)
+    runner.#borrowed = true
+    return runner
+  }
+
+  #own() {
+    if (!this.#borrowed) return
+    this.state = this.state.clone()
+    this.#borrowed = false
+  }
+
+  #readonly(command: Command): boolean {
+    if (command.type !== 'simple' || command.assigns.length || command.redirects.length)
+      return false
+    const state = this.state
+    if (state.shopt.has('lastpipe') || (state.traps.size && state.traps.has('DEBUG'))) return false
+    if (state.aliases.size && state.shopt.has('expand_aliases')) return false
+    const head = command.words[0]
+    if (!Array.isArray(head) || head.length !== 1 || head[0].type !== 'text' || head[0].quoted)
+      return false
+    const name = head[0].value
+    if (BUILTINS[name] || state.functions.has(name) || !this.host.commands.has(name)) return false
+    for (const word of command.words) {
+      if (!Array.isArray(word)) return false
+      for (const part of word) if (part.type !== 'text') return false
+    }
+    return true
   }
 
   async isolated(run: () => Promise<number>, io?: IO): Promise<number> {
@@ -1278,7 +1309,11 @@ export class Runner {
       const settled = await Promise.allSettled(
         pipeline.commands.map((command, i) => {
           const last = i === count - 1 && this.state.shopt.has('lastpipe')
-          const runner = last ? this : this.fork(this.state.clone())
+          const runner = last
+            ? this
+            : this.#readonly(command)
+              ? this.#borrow()
+              : this.fork(this.state.clone())
           const stage: IO = {
             stdin: i ? Input.pipe(pipes[i - 1]) : io.stdin,
             stdout: i < count - 1 ? Output.pipe(pipes[i]) : io.stdout,
@@ -1637,7 +1672,7 @@ export class Runner {
 
   async simple(command: Command & { type: 'simple' }, io: IO): Promise<number> {
     this.#substitution = undefined
-    if (command.line !== undefined) {
+    if (command.line !== undefined && !this.#borrowed) {
       const line = (LINES[command.line] ??= String(command.line))
       if (this.state.vars.get('LINENO')?.[0] !== line) this.state.vars.set('LINENO', [line])
     }
@@ -2072,6 +2107,7 @@ export class Runner {
       resolve: (path) => resolvePath(cwd, path),
       run: async (argv, stdin) => {
         this.check()
+        this.#own()
         return this.dispatch(argv, {
           stdin: stdin === undefined ? io.stdin : new Input(stdin),
           stdout: io.stdout,

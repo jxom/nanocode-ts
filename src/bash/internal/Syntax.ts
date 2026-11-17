@@ -97,7 +97,20 @@ export type Source = { text: string; start: number; edits: Edit[] }
 
 export type Heredoc = { delimiter: string; quoted: boolean; strip: boolean; body: string }
 
-export const sources = new WeakMap<Word, Source>()
+const SOURCE = Symbol('source')
+
+type Sourced = Word & { [SOURCE]?: Source }
+
+const NO_EDITS: Edit[] = []
+
+export const sources = {
+  get(word: Word): Source | undefined {
+    return (word as Sourced)[SOURCE]
+  },
+  set(word: Word, source: Source) {
+    ;(word as Sourced)[SOURCE] = source
+  },
+}
 
 export const texts = new WeakMap<object, string | string[]>()
 
@@ -248,8 +261,19 @@ class Parser {
   }
 
   reserved(): string | undefined {
-    const match = this.src.slice(this.pos).match(/^(\[\[|\]\]|[{}!]|[a-z]+)(?=[\s;&|()<>]|$)/)
-    return match?.[1]
+    const src = this.src
+    const pos = this.pos
+    const c = src.charCodeAt(pos)
+    let end: number
+    if ((c === 91 || c === 93) && src.charCodeAt(pos + 1) === c) end = pos + 2
+    else if (c === 123 || c === 125 || c === 33) end = pos + 1
+    else if (c >= 97 && c <= 122) {
+      end = pos + 1
+      for (let code = src.charCodeAt(end); code >= 97 && code <= 122; code = src.charCodeAt(end))
+        end++
+    } else return undefined
+    if (end < src.length && !boundary(src.charCodeAt(end))) return undefined
+    return src.slice(pos, end)
   }
 
   eat(word: string) {
@@ -597,7 +621,7 @@ class Parser {
       if (this.redirect(command.redirects)) continue
       if (c === '\n' || c === ';' || c === '|' || c === '&' || c === ')' || c === '(') break
       const declaring = command.words.length > 0 && isDeclaration(command.words[0])
-      if (!command.words.length || declaring) {
+      if ((!command.words.length || declaring) && nameStart(this.src.charCodeAt(this.pos))) {
         const assign = this.src
           .slice(this.pos)
           .match(/^([A-Za-z_][A-Za-z0-9_]*)(\[[^\]]*\])?(\+?)=/)
@@ -686,7 +710,7 @@ class Parser {
   word(regex = false): Word {
     const start = this.pos
     const outer = this.edits
-    this.edits = []
+    this.edits = NO_EDITS
     const parts = this.wordParts(regex)
     sources.set(parts, { edits: this.edits, start, text: this.src.slice(start, this.pos) })
     this.edits = outer
@@ -751,6 +775,7 @@ class Parser {
         }
         if (this.done()) this.fail()
         this.pos++
+        if (this.edits === NO_EDITS) this.edits = []
         this.edits.push({ end: this.pos, start, value })
         push(parts, value, true)
       } else if (c === '$' || c === '`') parts.push(this.dollar(false))
@@ -759,8 +784,10 @@ class Parser {
         push(parts, this.src.slice(this.pos, end), false)
         this.pos = end
       } else {
-        push(parts, c, false)
-        this.pos++
+        const start = this.pos++
+        const src = this.src
+        while (this.pos < src.length && plain(src.charCodeAt(this.pos))) this.pos++
+        push(parts, start + 1 === this.pos ? c : src.slice(start, this.pos), false)
       }
     }
     return parts
@@ -840,6 +867,7 @@ class Parser {
       if (this.done()) this.unmatched(')', this.end())
       if (!this.starts(')')) this.fail()
       this.pos++
+      if (this.edits === NO_EDITS) this.edits = []
       this.edits.push({ body, end: this.pos, start })
       return { type: 'command', body, quoted }
     }
@@ -1017,6 +1045,27 @@ function isDeclaration(word: Word | Assign): boolean {
     !word[0].quoted &&
     DECLARATIONS.has(word[0].value)
   )
+}
+
+const SPECIAL_CODES = new Uint8Array(128)
+for (const c of META + '\\\'"$`?*+@!') SPECIAL_CODES[c.charCodeAt(0)] = 1
+
+function plain(code: number): boolean {
+  return code >= 128 || SPECIAL_CODES[code] === 0
+}
+
+function nameStart(code: number): boolean {
+  return (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === 95
+}
+
+const WHITESPACE = /\s/
+
+function boundary(code: number): boolean {
+  if (code === 59 || code === 38 || code === 124 || code === 40 || code === 41) return true
+  if (code === 60 || code === 62) return true
+  if (code === 32 || (code >= 9 && code <= 13)) return true
+  if (code < 128) return false
+  return WHITESPACE.test(String.fromCharCode(code))
 }
 
 function push(parts: Part[], value: string, quoted: boolean) {

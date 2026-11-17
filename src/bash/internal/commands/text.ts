@@ -1989,6 +1989,8 @@ const TR_ESCAPES: Record<string, string> = {
   v: '\v',
 }
 
+const TR_DENSE = 1 << 14
+
 function trSet(spec: string): string[] {
   const out: string[] = []
   const text = bytewise(
@@ -2039,6 +2041,9 @@ const tr: CommandHandler = streaming(async (ctx) => {
   let last = -1
   let map: Int32Array | undefined
   let squeezable: Int8Array | undefined
+  const sparse = new Map<number, number>()
+  const sparseSqueeze = new Map<number, number>()
+  let seen = 0
   const squeeze = f.has('s')
     ? new Set(f.has('d') || second === undefined ? (second === undefined ? [...set1] : set2) : set2)
     : undefined
@@ -2055,22 +2060,33 @@ const tr: CommandHandler = streaming(async (ctx) => {
   const simple = [...list1, ...set2].every((c) => c.length === 1 && !/[\uD800-\uDFFF]/.test(c))
   const convert = (input: string): string => {
     if (simple && (!complement || !/[\uD800-\uDFFF]/.test(input))) {
-      map ??= new Int32Array(65536).fill(-2)
-      squeezable ??= new Int8Array(65536).fill(-1)
+      seen += input.length
+      if (map === undefined && seen > TR_DENSE) {
+        map = new Int32Array(65536).fill(-2)
+        squeezable = new Int8Array(65536).fill(-1)
+        for (const [code, value] of sparse) map[code] = value
+        for (const [code, value] of sparseSqueeze) squeezable[code] = value
+      }
       const codes = new Uint16Array(input.length)
       let n = 0
       for (let i = 0; i < input.length; i++) {
         const code = input.charCodeAt(i)
-        let value = map[code]
+        let value = map !== undefined ? map[code] : (sparse.get(code) ?? -2)
         if (value === -2) {
           const translated = translate(String.fromCharCode(code))
-          value = map[code] = translated === undefined ? -1 : translated.charCodeAt(0)
+          value = translated === undefined ? -1 : translated.charCodeAt(0)
+          if (map !== undefined) map[code] = value
+          else sparse.set(code, value)
         }
         if (value < 0) continue
         if (value === last) {
-          if (squeezable[value] < 0)
-            squeezable[value] = squeezes(String.fromCharCode(value)) ? 1 : 0
-          if (squeezable[value]) continue
+          let can = squeezable !== undefined ? squeezable[value] : (sparseSqueeze.get(value) ?? -1)
+          if (can < 0) {
+            can = squeezes(String.fromCharCode(value)) ? 1 : 0
+            if (squeezable !== undefined) squeezable[value] = can
+            else sparseSqueeze.set(value, can)
+          }
+          if (can) continue
         }
         codes[n++] = value
         last = value
