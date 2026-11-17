@@ -497,6 +497,17 @@ name = "djs-libm"
 version = "0.0.0"
 
 [[package]]
+name = "dlmalloc"
+version = "0.2.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad5208a115eaba24916f7456929832e310a81518c641f93fee4f89aa93aa3675"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
 name = "dyn-clone"
 version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3031,6 +3042,7 @@ dependencies = [
 name = "rustpython-vm"
 version = "0.6.0"
 dependencies = [
+ "dlmalloc",
  "indexmap",
  "itoa",
  "memchr",

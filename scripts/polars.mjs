@@ -175,6 +175,11 @@ const { module, image } = bake(readFileSync(optimized), { image: true })
 mkdirSync(out, { recursive: true })
 writeFileSync(join(out, 'python.wasm'), module)
 writeFileSync(join(out, 'python.data'), image)
+// examples/python-sci serves python.data as two static assets, since one can't pass 25 MiB.
+mkdirSync(join(out, 'assets'), { recursive: true })
+const half = Math.ceil(image.length / 2)
+writeFileSync(join(out, 'assets', 'python.data.0'), image.subarray(0, half))
+writeFileSync(join(out, 'assets', 'python.data.1'), image.subarray(half))
 console.log(
   'python.wasm ' + module.length + ' bytes, python.data ' + image.length + ' bytes in ' + out,
 )
