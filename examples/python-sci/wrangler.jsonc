@@ -1,0 +1,9 @@
+{
+  // python-sci: python3 with polars on its own Worker, for a main Worker to reach over a service
+  // binding. Build its files first: npm run build, then node scripts/polars.mjs (writes dist/polars).
+  "name": "python-sci",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-16",
+  "assets": { "directory": "../../dist/polars/assets", "binding": "ASSETS" },
+  "rules": [{ "type": "CompiledWasm", "globs": ["**/*.wasm"], "fallthrough": false }],
+}

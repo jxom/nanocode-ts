@@ -55,6 +55,11 @@ const probes: readonly (readonly [string, string, RegExp])[] = [
     'import os, subprocess\nimport matplotlib\nmatplotlib.use("Agg")\nimport matplotlib.pyplot as plt\nfiles = subprocess.run(["git", "ls-files"], capture_output=True, text=True, check=True).stdout.split()\nsizes = sorted(((os.path.getsize(f), f) for f in files), reverse=True)\nplt.barh([f for _, f in sizes], [s for s, _ in sizes])\nplt.savefig("sizes.png")\nprint(sizes[0], os.path.getsize("sizes.png") > 5000)',
     /^\(3000, 'src\/big\.ts'\) True$/,
   ],
+  [
+    'nested_python',
+    'import os, subprocess, sys\nr = subprocess.run([sys.executable, "-c", "import sys, os; print(sys.argv[1:], os.getcwd(), os.environ.get(\'K\')); print(sys.stdin.read().upper()); sys.exit(3)", "a"], input="in", cwd="src", env={**os.environ, "K": "v"}, capture_output=True, text=True)\nprint(r.returncode, r.stdout.split())\nopen("child.py", "w").write("import sys\\nprint(\'child\', __name__, sys.argv)\\nraise ValueError(\'boom\')\\n")\nr = subprocess.run(["python3", "child.py", "x"], capture_output=True, text=True)\nprint(r.returncode, r.stdout.strip(), r.stderr.strip().splitlines()[-1])\nprint(sys.argv, __name__, os.getcwd(), os.environ.get("K"))',
+    /^3 \["\['a'\]", '\/workspace\/repo\/src', 'v', 'IN'\]\n1 child __main__ \['child\.py', 'x'\] ValueError: boom\n\['probe\.py'\] __main__ \/workspace\/repo None$/,
+  ],
 ]
 
 function hidden(fs: ReturnType<typeof MemoryFileSystem.create>) {

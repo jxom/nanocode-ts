@@ -1088,13 +1088,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           return await this.cancel(decodeURIComponent(parts[3]), scope)
         if (parts[2] === 'warm') {
           if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405)
-          const input = (await request.json().catch(() => null)) as {
-            provider?: unknown
-            model?: unknown
-            payer?: unknown
-            web_search?: unknown
-            project_instructions?: unknown
-          } | null
+          const input = (await request.json().catch(() => null)) as any
           const provider =
             this.metadata.get(`model_provider:${scope}`) ?? input?.provider ?? 'claude'
           if (provider !== 'claude' && provider !== 'codex')
@@ -1112,6 +1106,15 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           if (payer !== undefined && !offered.includes(payer as Contracts.Payer))
             return json({ error: `payer must be one of ${offered.join(', ')}` }, 400)
           descriptor.payer = payer as Contracts.Payer | undefined
+          if (input) {
+            const invalid = this.invalidTurn(input)
+            if (invalid) return invalid
+            descriptor.hand = input.hand
+            descriptor.codex_orchestration = input.codex_orchestration
+            descriptor.claude_orchestration = input.claude_orchestration
+            descriptor.subagents = input.subagents
+            this.shapeTurn(descriptor, input)
+          }
           const instance = this.instance(scope)
           void instance.catch(() => {})
           if (this.metadata.get(`model_provider:${scope}`) === undefined)
@@ -1221,155 +1224,8 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           !input.prompt.trim()
         )
           return json({ error: 'request_id and prompt must be nonempty strings' }, 400)
-        if (
-          input.provider !== undefined &&
-          input.provider !== 'claude' &&
-          input.provider !== 'codex'
-        )
-          return json({ error: 'provider must be claude or codex' }, 400)
-        if (input.model !== undefined && (typeof input.model !== 'string' || !input.model))
-          return json({ error: 'model must be a nonempty model ID' }, 400)
-        if (input.thinking !== undefined && !thinkingLevels.includes(input.thinking))
-          return json({ error: `thinking must be one of ${thinkingLevels.join(', ')}` }, 400)
-        if (
-          input.executor !== undefined &&
-          (typeof input.executor !== 'string' || !Executor.idPattern.test(input.executor))
-        )
-          return json({ error: 'invalid executor' }, 400)
-        if (input.hand !== undefined && !handName(input.hand))
-          return json({ error: 'hand must be the name of an attached hand' }, 400)
-        if (input.steer !== undefined && typeof input.steer !== 'boolean')
-          return json({ error: 'steer must be a boolean' }, 400)
-        if (input.web_search !== undefined && typeof input.web_search !== 'boolean')
-          return json({ error: 'web_search must be a boolean' }, 400)
-        if (
-          input.project_instructions !== undefined &&
-          !instructionsText(input.project_instructions)
-        )
-          return json({ error: instructionsError }, 400)
-        if (
-          input.claude_orchestration !== undefined &&
-          !claudeOrchestrations.includes(input.claude_orchestration)
-        )
-          return json(
-            { error: `claude_orchestration must be one of ${claudeOrchestrations.join(', ')}` },
-            400,
-          )
-        if (
-          input.codex_orchestration !== undefined &&
-          !codexOrchestrations.includes(input.codex_orchestration)
-        )
-          return json(
-            { error: `codex_orchestration must be one of ${codexOrchestrations.join(', ')}` },
-            400,
-          )
-        if (input.subagents !== undefined && typeof input.subagents !== 'boolean')
-          return json({ error: 'subagents must be a boolean' }, 400)
-        if (
-          input.deadline !== undefined &&
-          !(
-            Number.isSafeInteger(input.deadline?.at_ms) &&
-            Number.isSafeInteger(input.deadline?.limit_ms) &&
-            input.deadline.at_ms > 0 &&
-            input.deadline.limit_ms > 0 &&
-            Object.keys(input.deadline).length === 2
-          )
-        )
-          return json(
-            { error: 'deadline must be { at_ms, limit_ms } with positive whole milliseconds' },
-            400,
-          )
-        if (
-          input.refusal_fallback !== undefined &&
-          !refusalFallbacks.includes(input.refusal_fallback)
-        )
-          return json(
-            { error: `refusal_fallback must be one of ${refusalFallbacks.join(', ')}` },
-            400,
-          )
-        for (const lever of [...finishLevers, ...codexSwitches])
-          if (input[lever] !== undefined && typeof input[lever] !== 'boolean')
-            return json({ error: `${lever} must be a boolean` }, 400)
-        if (
-          input.tool_result_tokens !== undefined &&
-          !(Number.isSafeInteger(input.tool_result_tokens) && input.tool_result_tokens > 0)
-        )
-          return json({ error: 'tool_result_tokens must be a positive whole number' }, 400)
-        if (
-          input.tool_result_clearing !== undefined &&
-          !(
-            typeof input.tool_result_clearing === 'object' &&
-            input.tool_result_clearing !== null &&
-            Object.keys(input.tool_result_clearing).every(
-              (key) => key === 'at_least_tokens' || key === 'keep',
-            ) &&
-            [input.tool_result_clearing.at_least_tokens, input.tool_result_clearing.keep].every(
-              (value) => Number.isSafeInteger(value) && value >= 0,
-            )
-          )
-        )
-          return json(
-            { error: 'tool_result_clearing must be { at_least_tokens, keep } of whole numbers' },
-            400,
-          )
-        if (input.result_effort !== undefined && !resultEfforts.includes(input.result_effort))
-          return json({ error: `result_effort must be one of ${resultEfforts.join(', ')}` }, 400)
-        for (const limit of [
-          'finish_check_min_requests',
-          'finish_retries',
-          'late_finish_check_ms',
-          'yield_floor_ms',
-          'stall_nudge_ms',
-          ...codexLimits,
-        ] as const)
-          if (
-            input[limit] !== undefined &&
-            !(Number.isSafeInteger(input[limit]) && input[limit] > 0)
-          )
-            return json({ error: `${limit} must be a positive whole number` }, 400)
-        if (
-          input.yield_share !== undefined &&
-          !(
-            Number.isSafeInteger(input.yield_share) &&
-            input.yield_share > 0 &&
-            input.yield_share <= 100
-          )
-        )
-          return json({ error: 'yield_share must be a whole percent from 1 to 100' }, 400)
-        if (
-          input.escalate !== undefined &&
-          !(
-            typeof input.escalate?.model === 'string' &&
-            input.escalate.model.length > 0 &&
-            (input.escalate.context_tokens !== undefined ||
-              input.escalate.tool_errors !== undefined) &&
-            [input.escalate.context_tokens, input.escalate.tool_errors].every(
-              (value: unknown) =>
-                value === undefined || (Number.isSafeInteger(value) && (value as number) > 0),
-            ) &&
-            Object.keys(input.escalate).every((key) =>
-              ['context_tokens', 'model', 'tool_errors'].includes(key),
-            )
-          )
-        )
-          return json(
-            {
-              error:
-                'escalate must be { model, context_tokens?, tool_errors? } with a model and at least one positive whole trigger',
-            },
-            400,
-          )
-        if (input.subagents === true && options.subagents === false)
-          return json({ error: 'subagents are disabled for this app' }, 400)
-        if (input.payer !== undefined && !offered.includes(input.payer))
-          return json({ error: `payer must be one of ${offered.join(', ')}` }, 400)
-        if (
-          input.images !== undefined &&
-          (!Array.isArray(input.images) ||
-            input.images.length > 8 ||
-            input.images.some((path: unknown) => typeof path !== 'string'))
-        )
-          return json({ error: 'images must be at most 8 workspace paths' }, 400)
+        const invalid = this.invalidTurn(input)
+        if (invalid) return invalid
         if (input.steer) {
           const resident = this.opened(scope)?.resident
           if (
@@ -1502,21 +1358,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           )
             return json({ error: 'session subagents is immutable; create a new session' }, 409)
           descriptor.subagents = input.subagents ?? sessionSubagents
-          descriptor.deadline = input.deadline
-          descriptor.escalate = input.escalate
-          descriptor.tool_result_clearing = input.tool_result_clearing
-          descriptor.tool_result_tokens = input.tool_result_tokens
-          descriptor.finish_check_min_requests = input.finish_check_min_requests
-          descriptor.finish_retries = input.finish_retries
-          descriptor.late_finish_check_ms = input.late_finish_check_ms
-          descriptor.result_effort = input.result_effort
-          descriptor.yield_floor_ms = input.yield_floor_ms
-          descriptor.stall_nudge_ms = input.stall_nudge_ms
-          descriptor.yield_share = input.yield_share
-          descriptor.refusal_fallback = input.refusal_fallback
-          for (const lever of finishLevers) descriptor[lever] = input[lever]
-          for (const name of codexSwitches) descriptor[name] = input[name]
-          for (const name of codexLimits) descriptor[name] = input[name]
+          this.shapeTurn(descriptor, input)
           descriptor.thinking = input.thinking
           descriptor.web_search = input.web_search
           descriptor.project_instructions = input.project_instructions || undefined
@@ -4116,7 +3958,7 @@ ${input.request_id}`
     private async warm(scope: string, base: SessionDescriptor): Promise<boolean> {
       const sessionId = this.metadata.get(this.sessionKey(scope))
       if (!sessionId) return false
-      const descriptor = this.bound(scope, base)
+      const descriptor = { ...this.bound(scope, base), hand: base.hand }
       const resident = this.opened(scope)?.runtime
       const busy = this.pumping || !this.queueKnownEmpty() || !!this.metadata.first('background:')
       const current = resident && busy ? await resident.catch(() => undefined) : undefined
@@ -4164,7 +4006,7 @@ ${input.request_id}`
       const descriptor: SessionDescriptor = {
         ...base,
         executor_id: executor || undefined,
-        hand: undefined,
+        hand: base.hand,
         provider,
         model,
         subscription: served(
@@ -4263,6 +4105,166 @@ ${input.request_id}`
       }
     }
 
+    private invalidTurn(input: any): Response | undefined {
+      if (input.provider !== undefined && input.provider !== 'claude' && input.provider !== 'codex')
+        return json({ error: 'provider must be claude or codex' }, 400)
+      if (input.model !== undefined && (typeof input.model !== 'string' || !input.model))
+        return json({ error: 'model must be a nonempty model ID' }, 400)
+      if (input.thinking !== undefined && !thinkingLevels.includes(input.thinking))
+        return json({ error: `thinking must be one of ${thinkingLevels.join(', ')}` }, 400)
+      if (
+        input.executor !== undefined &&
+        (typeof input.executor !== 'string' || !Executor.idPattern.test(input.executor))
+      )
+        return json({ error: 'invalid executor' }, 400)
+      if (input.hand !== undefined && !handName(input.hand))
+        return json({ error: 'hand must be the name of an attached hand' }, 400)
+      if (input.steer !== undefined && typeof input.steer !== 'boolean')
+        return json({ error: 'steer must be a boolean' }, 400)
+      if (input.web_search !== undefined && typeof input.web_search !== 'boolean')
+        return json({ error: 'web_search must be a boolean' }, 400)
+      if (input.project_instructions !== undefined && !instructionsText(input.project_instructions))
+        return json({ error: instructionsError }, 400)
+      if (
+        input.claude_orchestration !== undefined &&
+        !claudeOrchestrations.includes(input.claude_orchestration)
+      )
+        return json(
+          { error: `claude_orchestration must be one of ${claudeOrchestrations.join(', ')}` },
+          400,
+        )
+      if (
+        input.codex_orchestration !== undefined &&
+        !codexOrchestrations.includes(input.codex_orchestration)
+      )
+        return json(
+          { error: `codex_orchestration must be one of ${codexOrchestrations.join(', ')}` },
+          400,
+        )
+      if (input.subagents !== undefined && typeof input.subagents !== 'boolean')
+        return json({ error: 'subagents must be a boolean' }, 400)
+      if (
+        input.deadline !== undefined &&
+        !(
+          Number.isSafeInteger(input.deadline?.at_ms) &&
+          Number.isSafeInteger(input.deadline?.limit_ms) &&
+          input.deadline.at_ms > 0 &&
+          input.deadline.limit_ms > 0 &&
+          Object.keys(input.deadline).length === 2
+        )
+      )
+        return json(
+          { error: 'deadline must be { at_ms, limit_ms } with positive whole milliseconds' },
+          400,
+        )
+      if (
+        input.refusal_fallback !== undefined &&
+        !refusalFallbacks.includes(input.refusal_fallback)
+      )
+        return json(
+          { error: `refusal_fallback must be one of ${refusalFallbacks.join(', ')}` },
+          400,
+        )
+      for (const lever of [...finishLevers, ...codexSwitches])
+        if (input[lever] !== undefined && typeof input[lever] !== 'boolean')
+          return json({ error: `${lever} must be a boolean` }, 400)
+      if (
+        input.tool_result_tokens !== undefined &&
+        !(Number.isSafeInteger(input.tool_result_tokens) && input.tool_result_tokens > 0)
+      )
+        return json({ error: 'tool_result_tokens must be a positive whole number' }, 400)
+      if (
+        input.tool_result_clearing !== undefined &&
+        !(
+          typeof input.tool_result_clearing === 'object' &&
+          input.tool_result_clearing !== null &&
+          Object.keys(input.tool_result_clearing).every(
+            (key) => key === 'at_least_tokens' || key === 'keep',
+          ) &&
+          [input.tool_result_clearing.at_least_tokens, input.tool_result_clearing.keep].every(
+            (value) => Number.isSafeInteger(value) && value >= 0,
+          )
+        )
+      )
+        return json(
+          { error: 'tool_result_clearing must be { at_least_tokens, keep } of whole numbers' },
+          400,
+        )
+      if (input.result_effort !== undefined && !resultEfforts.includes(input.result_effort))
+        return json({ error: `result_effort must be one of ${resultEfforts.join(', ')}` }, 400)
+      for (const limit of [
+        'finish_check_min_requests',
+        'finish_retries',
+        'late_finish_check_ms',
+        'yield_floor_ms',
+        'stall_nudge_ms',
+        ...codexLimits,
+      ] as const)
+        if (input[limit] !== undefined && !(Number.isSafeInteger(input[limit]) && input[limit] > 0))
+          return json({ error: `${limit} must be a positive whole number` }, 400)
+      if (
+        input.yield_share !== undefined &&
+        !(
+          Number.isSafeInteger(input.yield_share) &&
+          input.yield_share > 0 &&
+          input.yield_share <= 100
+        )
+      )
+        return json({ error: 'yield_share must be a whole percent from 1 to 100' }, 400)
+      if (
+        input.escalate !== undefined &&
+        !(
+          typeof input.escalate?.model === 'string' &&
+          input.escalate.model.length > 0 &&
+          (input.escalate.context_tokens !== undefined ||
+            input.escalate.tool_errors !== undefined) &&
+          [input.escalate.context_tokens, input.escalate.tool_errors].every(
+            (value: unknown) =>
+              value === undefined || (Number.isSafeInteger(value) && (value as number) > 0),
+          ) &&
+          Object.keys(input.escalate).every((key) =>
+            ['context_tokens', 'model', 'tool_errors'].includes(key),
+          )
+        )
+      )
+        return json(
+          {
+            error:
+              'escalate must be { model, context_tokens?, tool_errors? } with a model and at least one positive whole trigger',
+          },
+          400,
+        )
+      if (input.subagents === true && options.subagents === false)
+        return json({ error: 'subagents are disabled for this app' }, 400)
+      if (input.payer !== undefined && !offered.includes(input.payer))
+        return json({ error: `payer must be one of ${offered.join(', ')}` }, 400)
+      if (
+        input.images !== undefined &&
+        (!Array.isArray(input.images) ||
+          input.images.length > 8 ||
+          input.images.some((path: unknown) => typeof path !== 'string'))
+      )
+        return json({ error: 'images must be at most 8 workspace paths' }, 400)
+      return undefined
+    }
+
+    private shapeTurn(descriptor: SessionDescriptor, input: any): void {
+      descriptor.deadline = input.deadline
+      descriptor.escalate = input.escalate
+      descriptor.tool_result_clearing = input.tool_result_clearing
+      descriptor.tool_result_tokens = input.tool_result_tokens
+      descriptor.finish_check_min_requests = input.finish_check_min_requests
+      descriptor.finish_retries = input.finish_retries
+      descriptor.late_finish_check_ms = input.late_finish_check_ms
+      descriptor.result_effort = input.result_effort
+      descriptor.yield_floor_ms = input.yield_floor_ms
+      descriptor.stall_nudge_ms = input.stall_nudge_ms
+      descriptor.yield_share = input.yield_share
+      descriptor.refusal_fallback = input.refusal_fallback
+      for (const lever of finishLevers) descriptor[lever] = input[lever]
+      for (const name of codexSwitches) descriptor[name] = input[name]
+      for (const name of codexLimits) descriptor[name] = input[name]
+    }
     private claimPrewarmed(scope: string, descriptor: SessionDescriptor): string | undefined {
       const found = this.lifecycles.get(scope)
       const entry = found?.prewarmed
