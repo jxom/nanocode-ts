@@ -46,7 +46,7 @@ if (!binaryen) {
     if (unpacked.status !== 0) process.exit(unpacked.status ?? 1);
   }
 }
-const wasmFeatures = ["--enable-bulk-memory", "--enable-bulk-memory-opt", "--enable-multivalue", "--enable-mutable-globals", "--enable-nontrapping-float-to-int", "--enable-reference-types", "--enable-sign-ext", "--enable-simd"];
+const wasmFeatures = ["--enable-bulk-memory", "--enable-bulk-memory-opt", "--enable-exception-handling", "--enable-multivalue", "--enable-mutable-globals", "--enable-nontrapping-float-to-int", "--enable-reference-types", "--enable-sign-ext", "--enable-simd"];
 const oneCallerInlineMaxSize = 100;
 function optimize(input, output, flags = ["-O1"]) {
   const result = spawnSync(join(binaryen, "bin", "wasm-opt"), [...flags, ...wasmFeatures, input, "-o", output], { stdio: "inherit" });
