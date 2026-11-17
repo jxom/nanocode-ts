@@ -327,6 +327,7 @@ Fs.writeFileSync(
       runtime,
       date: new Date().toISOString(),
       node: process.version,
+      load: Os.loadavg(),
       score: summary.line,
       rows,
     },
