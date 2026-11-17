@@ -645,14 +645,14 @@ export function run(
   try {
     const input = encodeRequest(options.request, options.spawn !== undefined)
     const ptr = instance.exports.python_input(input.length)
-    new Uint8Array(instance.exports.memory.buffer, ptr, input.length).set(input)
+    new Uint8Array(instance.exports.memory.buffer, ptr >>> 0, input.length).set(input)
     instance.running = true
     const len = instance.exports.python_run()
     instance.running = false
     if (instance.exports.memory.buffer.byteLength - instance.initial > options.request.memory / 2)
       instances.delete(module)
     return decodeRan(
-      new Uint8Array(instance.exports.memory.buffer, instance.exports.python_output(), len).slice(),
+      new Uint8Array(instance.exports.memory.buffer, instance.exports.python_output() >>> 0, len >>> 0).slice(),
     )
   } catch (error) {
     instances.delete(module)
