@@ -1091,6 +1091,31 @@ function scoped(ctx: CommandContext, root: string, specs: string[]): (path: stri
     )
 }
 
+function pathspecs(ctx: CommandContext, root: string, specs: string[]): (path: string) => boolean {
+  if (!specs.length) return () => true
+  const tests = specs.map((spec): ((path: string) => boolean) => {
+    const absolute = ctx.resolve(spec)
+    const relative =
+      absolute === root
+        ? ''
+        : absolute.startsWith(root + '/')
+          ? absolute.slice(root.length + 1)
+          : null
+    if (relative === null) return () => false
+    if (!/[*?[]/.test(relative))
+      return (path) => relative === '' || path === relative || path.startsWith(relative + '/')
+    const pattern = new RegExp(
+      '^' +
+        relative.replace(/\[[^\]]*\]|[*?]|[.+^$(){}|\\]/g, (part) =>
+          part === '*' ? '.*' : part === '?' ? '.' : part.startsWith('[') ? part : '\\' + part,
+        ) +
+        '(/|$)',
+    )
+    return (path) => pattern.test(path)
+  })
+  return (path) => tests.some((test) => test(path))
+}
+
 function splitPaths(args: string[]): { flags: string[]; rest: string[]; paths: string[] | null } {
   const separator = args.indexOf('--')
   const own = separator < 0 ? args : args.slice(0, separator)
@@ -2033,8 +2058,14 @@ async function gitRevParse(ctx: CommandContext, args: string[]): Promise<number>
   return 0
 }
 
-async function gitLsFiles(ctx: CommandContext): Promise<number> {
+async function gitLsFiles(ctx: CommandContext, args: string[]): Promise<number> {
   const repo = await open(ctx)
+  const separator = args.indexOf('--')
+  const specs = [
+    ...(separator < 0 ? args : args.slice(0, separator)).filter((arg) => !arg.startsWith('-')),
+    ...(separator < 0 ? [] : args.slice(separator + 1)),
+  ]
+  const inScope = pathspecs(ctx, repo.root, specs)
   const tree = indexTree(repo, treeAt(repo, repo.local.head))
   const base =
     ctx.cwd === repo.root
@@ -2043,7 +2074,7 @@ async function gitLsFiles(ctx: CommandContext): Promise<number> {
         ? ctx.cwd.slice(repo.root.length + 1) + '/'
         : null
   for (const path of [...tree.keys()].sort())
-    if (base === null || path.startsWith(base))
+    if ((base === null || path.startsWith(base)) && inScope(path))
       ctx.stdout.write(relativeTo(ctx, repo.root, path) + '\n')
   return 0
 }
@@ -2166,7 +2197,7 @@ async function git(ctx: CommandContext, github: GitHub.Options, args: string[]):
       return 0
     }
     case 'ls-files':
-      return gitLsFiles(ctx)
+      return gitLsFiles(ctx, rest)
     case undefined:
     case 'help':
     case '--help':
