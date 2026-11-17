@@ -1,10 +1,20 @@
 export {
   AttachmentList,
+  type AttachmentFailure,
   type Attachments,
+  accepts,
+  defaultAccept,
   maxAttachments,
   type PendingAttachment,
   useAttachments,
 } from './Attachments.tsx'
+export {
+  Composer,
+  type ComposerItem,
+  type ComposerMenu,
+  type ComposerModel,
+  useComposer,
+} from './Composer.tsx'
 export {
   Chat,
   type Command,

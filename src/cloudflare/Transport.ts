@@ -262,11 +262,19 @@ export function create(options: create.Options): create.ReturnType {
       },
       maxBytes: 5 * 1024 * 1024,
       scope: () => state.id,
-      async upload(file, name, signal) {
+      async upload(file, name, signal, progress) {
         if (!state.id) {
           state.id = warmed ?? identifier('web')
           save()
         }
+        if (progress && uploader())
+          return sendWithProgress(
+            path(`files?name=${encodeURIComponent(name)}`),
+            headers({ 'content-type': 'application/octet-stream' }),
+            file,
+            progress,
+            signal,
+          )
         const response = await fetch(path(`files?name=${encodeURIComponent(name)}`), {
           method: 'POST',
           headers: headers({ 'content-type': 'application/octet-stream' }),
@@ -455,4 +463,60 @@ export declare namespace create {
       hands(): Promise<string[]>
       listing(): Promise<Relay.Listing>
     }
+}
+
+type UploadRequest = {
+  open(method: string, url: string): void
+  setRequestHeader(key: string, value: string): void
+  upload: {
+    onprogress:
+      | ((event: { loaded: number; total: number; lengthComputable: boolean }) => void)
+      | null
+  }
+  onload: (() => void) | null
+  onerror: (() => void) | null
+  onabort: (() => void) | null
+  status: number
+  responseText: string
+  abort(): void
+  send(body: Blob): void
+}
+
+function uploader(): (new () => UploadRequest) | undefined {
+  return (globalThis as { XMLHttpRequest?: new () => UploadRequest }).XMLHttpRequest
+}
+
+function sendWithProgress(
+  url: string,
+  headers: Record<string, string>,
+  body: Blob,
+  progress: (loaded: number, total: number) => void,
+  signal: AbortSignal | undefined,
+): Promise<ClientTransport.Attachment> {
+  return new Promise((resolve, reject) => {
+    const Request = uploader()
+    if (!Request) return reject(new Error('upload progress is unavailable'))
+    const request = new Request()
+    request.open('POST', url)
+    for (const [key, value] of Object.entries(headers)) request.setRequestHeader(key, value)
+    request.upload.onprogress = (event) =>
+      progress(event.loaded, event.lengthComputable ? event.total : body.size)
+    request.onload = () => {
+      if (request.status >= 200 && request.status < 300) {
+        progress(body.size, body.size)
+        resolve(JSON.parse(request.responseText) as ClientTransport.Attachment)
+        return
+      }
+      const text = request.responseText
+      let message = text || String(request.status)
+      try {
+        message = (JSON.parse(text) as { error?: string }).error ?? message
+      } catch {}
+      reject(new Error(message))
+    }
+    request.onerror = () => reject(new Error('upload failed'))
+    request.onabort = () => reject(new DOMException('aborted', 'AbortError'))
+    signal?.addEventListener('abort', () => request.abort(), { once: true })
+    request.send(body)
+  })
 }

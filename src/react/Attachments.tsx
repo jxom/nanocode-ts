@@ -5,6 +5,7 @@ import {
   type ClipboardEvent,
   type DragEvent,
   useCallback,
+  useContext,
   useMemo,
   useRef,
   useState,
@@ -12,7 +13,7 @@ import {
 import * as Format from '../client/internal/Format.ts'
 import type * as Transport from '../client/Transport.ts'
 import { Image } from './Image.tsx'
-import { useConfig, usePart } from './Provider.tsx'
+import { ConfigContext, usePart } from './Provider.tsx'
 
 export type PendingAttachment = {
   id: string
@@ -21,12 +22,19 @@ export type PendingAttachment = {
   type: string
   preview?: string
   status: 'uploading' | 'ready' | 'failed'
+  progress?: number
+  reason?: AttachmentFailure
   error?: string
   attachment?: Transport.Attachment
 }
 
+export type AttachmentFailure = 'too-many' | 'too-large' | 'unsupported' | 'upload'
+
 export type Attachments = {
   enabled: boolean
+  max: number
+  maxBytes: number | undefined
+  accept: readonly string[]
   items: readonly PendingAttachment[]
   ready: Transport.Attachment[]
   uploading: boolean
@@ -40,6 +48,7 @@ export type Attachments = {
     type: 'file'
     multiple: true
     hidden: true
+    accept: string
     tabIndex: -1
     onChange(event: ChangeEvent<HTMLInputElement>): void
   }
@@ -53,16 +62,44 @@ export type Attachments = {
 
 export const maxAttachments = 8
 
+export const defaultAccept: readonly string[] = [
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'application/pdf',
+  'application/json',
+  'text/*',
+  '.md',
+  '.csv',
+  '.txt',
+  '.json',
+]
+
+export function accepts(file: { name: string; type: string }, accept: readonly string[]): boolean {
+  const type = file.type.toLowerCase()
+  const name = file.name.toLowerCase()
+  return accept.some((rule) => {
+    const lower = rule.toLowerCase()
+    if (lower.startsWith('.')) return name.endsWith(lower)
+    if (lower.endsWith('/*')) return type.startsWith(lower.slice(0, -1))
+    return type === lower
+  })
+}
+
 function pastedName(file: File): string {
   if (file.name && file.name !== 'image.png' && file.name !== 'image.jpeg') return file.name
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15)
   return `pasted-${stamp}.${(file.type.split('/')[1] ?? 'png').replace('jpeg', 'jpg')}`
 }
 
-export function useAttachments(options: { max?: number } = {}): Attachments {
-  const config = useConfig()
-  const files = config.files
+export function useAttachments(
+  options: { max?: number; accept?: readonly string[]; files?: Transport.Files | undefined } = {},
+): Attachments {
+  const config = useContext(ConfigContext)
+  const files = options.files ?? config?.files
   const max = Math.min(options.max ?? files?.maxFiles ?? maxAttachments, maxAttachments)
+  const accept = options.accept ?? defaultAccept
   const [items, setItems] = useState<PendingAttachment[]>([])
   const [dragging, setDragging] = useState(false)
   const input = useRef<HTMLInputElement | null>(null)
@@ -90,36 +127,63 @@ export function useAttachments(options: { max?: number } = {}): Attachments {
         if (count.current >= max) {
           setItems((current) => [
             ...current,
-            { ...base, status: 'failed', error: `at most ${max} attachments per message` },
+            {
+              ...base,
+              status: 'failed',
+              reason: 'too-many',
+              error: `at most ${max} attachments per message`,
+            },
           ])
           continue
         }
         if (files.maxBytes !== undefined && file.size > files.maxBytes) {
           setItems((current) => [
             ...current,
-            { ...base, status: 'failed', error: `larger than ${Format.bytes(files.maxBytes!)}` },
+            {
+              ...base,
+              status: 'failed',
+              reason: 'too-large',
+              error: `larger than ${Format.bytes(files.maxBytes!)}`,
+            },
+          ])
+          continue
+        }
+        if (!accepts({ name, type: file.type }, accept)) {
+          setItems((current) => [
+            ...current,
+            {
+              ...base,
+              status: 'failed',
+              reason: 'unsupported',
+              error: `${file.type || 'this file type'} is not supported`,
+            },
           ])
           continue
         }
         count.current++
         setItems((current) => [...current, base])
-        files.upload(file, name).then(
-          (attachment) =>
-            update(id, {
-              status: 'ready',
-              attachment,
-              name: attachment.name,
-              type: attachment.type,
-            }),
-          (error: unknown) =>
-            update(id, {
-              status: 'failed',
-              error: error instanceof Error ? error.message : String(error),
-            }),
-        )
+        files
+          .upload(file, name, undefined, (loaded, total) =>
+            update(id, { progress: total > 0 ? Math.min(1, loaded / total) : 0 }),
+          )
+          .then(
+            (attachment) =>
+              update(id, {
+                status: 'ready',
+                attachment,
+                name: attachment.name,
+                type: attachment.type,
+              }),
+            (error: unknown) =>
+              update(id, {
+                status: 'failed',
+                reason: 'upload',
+                error: error instanceof Error ? error.message : String(error),
+              }),
+          )
       }
     },
-    [files, max],
+    [files, max, accept],
   )
 
   const remove = useCallback(
@@ -144,6 +208,9 @@ export function useAttachments(options: { max?: number } = {}): Attachments {
 
   return {
     enabled: Boolean(files),
+    max,
+    maxBytes: files?.maxBytes,
+    accept,
     items,
     ready,
     uploading: items.some((item) => item.status === 'uploading'),
@@ -157,6 +224,7 @@ export function useAttachments(options: { max?: number } = {}): Attachments {
       type: 'file',
       multiple: true,
       hidden: true,
+      accept: accept.join(','),
       tabIndex: -1,
       onChange: (event) => {
         if (event.target.files) add(event.target.files)
@@ -200,7 +268,7 @@ export function AttachmentList(props: AttachmentList.Props) {
           <span
             key={pending?.id ?? path ?? index}
             title={pending?.error ?? path ?? item.name}
-            {...part('attachment', { image, status })}
+            {...part('attachment', { image, status, reason: pending?.reason })}
           >
             {image &&
               (pending?.preview ? (
@@ -212,8 +280,25 @@ export function AttachmentList(props: AttachmentList.Props) {
               ) : null)}
             <span {...part('attachmentName')}>{item.name}</span>
             <span {...part('attachmentSize')}>
-              {pending?.error ?? (status === 'uploading' ? 'uploading' : Format.bytes(item.size))}
+              {pending?.error ??
+                (status === 'uploading'
+                  ? pending?.progress !== undefined
+                    ? `uploading ${Math.round(pending.progress * 100)}%`
+                    : 'uploading'
+                  : Format.bytes(item.size))}
             </span>
+            {status === 'uploading' && (
+              <span
+                aria-label={`Uploading ${item.name}`}
+                aria-valuemax={100}
+                aria-valuemin={0}
+                aria-valuenow={
+                  pending?.progress !== undefined ? Math.round(pending.progress * 100) : undefined
+                }
+                role="progressbar"
+                {...part('attachmentProgress', { value: pending?.progress })}
+              />
+            )}
             {props.onRemove && pending && (
               <button
                 aria-label={`Remove ${item.name}`}

@@ -12,7 +12,12 @@ export type Files = {
   maxFiles?: number
   read(path: string, signal?: AbortSignal): Promise<Blob>
   scope?(): string | undefined
-  upload(file: Blob, name: string, signal?: AbortSignal): Promise<Attachment>
+  upload(
+    file: Blob,
+    name: string,
+    signal?: AbortSignal,
+    progress?: (loaded: number, total: number) => void,
+  ): Promise<Attachment>
 }
 
 export type Parameters = {
