@@ -19,6 +19,7 @@ import * as Wasm from './Wasm.ts'
 import * as Bash from '../bash/Bash.ts'
 import type * as FileSystem from '../bash/FileSystem.ts'
 import * as GitHub from '../bash/GitHub.ts'
+import type * as Python from '../bash/Python.ts'
 import * as Sources from '../bash/Sources.ts'
 import * as SqlFileSystem from '../bash/SqlFileSystem.ts'
 import * as Files from '../internal/Files.ts'
@@ -241,7 +242,7 @@ export function create(options: create.Options = {}): Harness {
         : await Bash.create({
             fs: files,
             cwd: options.workspace?.cwd ?? '/workspace',
-            python: {},
+            python: options.workspace?.python ?? {},
             ...(options.workspace?.files ? { files: options.workspace.files } : {}),
             ...(options.workspace?.github ? { github: options.workspace.github } : {}),
             ...(options.workspace?.psh ? { psh: options.workspace.psh } : {}),
@@ -602,6 +603,8 @@ export declare namespace create {
           files?: Record<string, string>
           github?: GitHub.Options
           psh?: WebAssembly.Module | Promise<WebAssembly.Module>
+          // python3's options: sci: PythonSci.local() runs scripts that import polars in this process.
+          python?: Python.Options
         }
     workspaceTools?: Contracts.AgentConfiguration['workspace_tools']
     webSearch?: false

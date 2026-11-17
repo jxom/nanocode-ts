@@ -6,6 +6,8 @@ import * as Bash from '../bash/Bash.ts'
 import type * as FileSystem from '../bash/FileSystem.ts'
 import * as GitHub from '../bash/GitHub.ts'
 import * as Mount from '../bash/Mount.ts'
+import type * as Python from '../bash/Python.ts'
+import * as PythonSci from '../bash/PythonSci.ts'
 import * as SqlFileSystem from '../bash/SqlFileSystem.ts'
 import * as Contracts from '../Contracts.ts'
 import * as EventHub from '../EventHub.ts'
@@ -232,6 +234,13 @@ const workspaceMemoryBytes = 48 * 1024 * 1024
 const workspaceFileBytes = 32 * 1024 * 1024
 const pythonStepsPerMs = 42_000
 const pythonCpuMs = 5_000
+
+function sciOption(
+  sci: Python.Sci | { fetch(input: string, init?: RequestInit): Promise<Response> } | undefined,
+): { sci?: Python.Sci } {
+  if (!sci) return {}
+  return { sci: 'run' in sci || 'module' in sci ? sci : PythonSci.remote(sci) }
+}
 
 // Where the default python.data loader finds the image in the Worker's static assets (env.ASSETS).
 const pythonDataPath = '/nanocode-ts/python.data'
@@ -2505,6 +2514,9 @@ ${input.request_id}`
                             ? pythonCpuMs
                             : policy(this.env.PYTHON_CPU_MS, 'PYTHON_CPU_MS')),
                         stepsPerMs: pythonStepsPerMs,
+                        ...sciOption(
+                          options.workspace ? options.workspace.pythonSci?.(this.env) : undefined,
+                        ),
                       },
                     }
                   : {}),
@@ -5479,6 +5491,15 @@ export declare namespace create {
           pythonData?(
             env: E,
           ): Uint8Array | ArrayBuffer | Promise<Uint8Array | ArrayBuffer | undefined>
+          // Where python3 runs scripts that import polars, which python.wasm leaves out: the service
+          // binding of a python-sci Worker (PythonSci.serve, examples/python-sci), or any Python sci
+          // runner. Without it such a script fails with an error naming polars.
+          pythonSci?(
+            env: E,
+          ):
+            | Python.Sci
+            | { fetch(input: string, init?: RequestInit): Promise<Response> }
+            | undefined
         }
     workspaceTools?: Contracts.AgentConfiguration['workspace_tools']
   }

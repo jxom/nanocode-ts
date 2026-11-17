@@ -6,7 +6,7 @@ import { mkdirs } from './files.ts'
 import * as Journal from './journal.ts'
 import { pip, shippedModules, sitePackages } from './pip.ts'
 import * as RustPython from './rustpython.ts'
-import type { Options as PythonOptions } from '../../Python.ts'
+import type { Options as PythonOptions, Sci } from '../../Python.ts'
 
 type Mode = {
   kind: 'code' | 'stdin' | 'file' | 'module' | 'pip'
@@ -113,6 +113,19 @@ export function pythonCommands(
       return 0
     }
     if (mode !== 'version' && mode.kind === 'pip') return pip(ctx, mode.argv)
+    const stdin = ctx.stdin.read()
+    const sci = options.sci
+    const modules = sci?.modules ?? sciModules
+    const run = {
+      engine: psh === undefined ? undefined : await Psh.load(await psh),
+      host,
+      maxBytes,
+      stdin,
+      cpuMs: options.cpuMs,
+      stepsPerMs: options.stepsPerMs,
+    }
+    if (sci && mode !== 'version' && (await importsAny(ctx, mode, stdin, modules)))
+      return runSci(ctx, sci, run)
     const compiled = await rustModule(options)
     if (!compiled) {
       ctx.stderr.write(NO_MODULE + '\n')
@@ -123,14 +136,8 @@ export function pythonCommands(
       ctx.stderr.write(missing + '\n')
       return 126
     }
-    return executeRust(ctx, compiled, {
-      engine: psh === undefined ? undefined : await Psh.load(await psh),
-      host,
-      maxBytes,
-      stdin: ctx.stdin.read(),
-      cpuMs: options.cpuMs,
-      stepsPerMs: options.stepsPerMs,
-    })
+    const status = await executeRust(ctx, compiled, { ...run, sci: sci && modules })
+    return status === 'sci' ? runSci(ctx, sci!, run) : status
   }
   return { pip: handler, pip3: handler, python: handler, python3: handler }
 }
@@ -157,8 +164,16 @@ async function apply(fs: FileSystem, changes: RustPython.Changes): Promise<void>
 }
 
 function absent(missing: RustPython.Missing): string {
-  if (!missing.package) return missing.text
   const top = missing.module.split('.')[0]
+  if (sciModules.includes(top))
+    return (
+      "python3: No module named '" +
+      top +
+      "': " +
+      top +
+      " runs on nanocode-ts's separate polars interpreter (python-polars.wasm), which this host doesn't offer; pass it as Python's sci option"
+    )
+  if (!missing.package) return missing.text
   return (
     "python3: No module named '" +
     top +
@@ -327,10 +342,11 @@ async function executeRust(
     engine: Psh.Instance | undefined
     host: Host | undefined
     maxBytes: number
+    sci?: readonly string[] | undefined
     stdin: string
     stepsPerMs: number | undefined
   },
-): Promise<number> {
+): Promise<number | 'sci'> {
   const limit = Math.min(options.maxBytes, Math.floor(ctx.limits.maxMemoryBytes / 2))
   const cpuMs = Math.min(ctx.limits.timeoutMs, options.cpuMs ?? ctx.limits.timeoutMs)
   const deadline = Date.now() + ctx.limits.timeoutMs
@@ -605,12 +621,187 @@ async function executeRust(
     await hosted(at, child, key)
     ran = await again()
   }
+  const notImported =
+    ran.kind === 'needs'
+      ? ran.missing.map((missing) => missing.module.split('.')[0]!)
+      : ran.kind === 'exited' && ran.status !== 0
+        ? uncaughtImport(decode(ran.stderr))
+        : []
+  if (options.sci && !ctx.signal.aborted && notImported.some((name) => options.sci!.includes(name))) {
+    if (!cache) journal.rollback({ first: 0, changes: 0 })
+    return 'sci'
+  }
   if (cache) await apply(ctx.fs, cache.changes())
-  if (ran.kind !== 'needs')
-    return RustPython.report(ctx, ran, {
+  if (ran.kind !== 'needs') {
+    const status = RustPython.report(ctx, ran, {
       cpuMs,
       stepsPerMs: options.stepsPerMs,
     })
+    for (const name of notImported)
+      if (sciModules.includes(name)) ctx.stderr.write(absent({ module: name, package: false, text: '' }) + '\n')
+    return status
+  }
   for (const missing of ran.missing) ctx.stderr.write(absent(missing) + '\n')
   return 127
+}
+
+const sciModules: readonly string[] = ['polars']
+
+function uncaughtImport(stderr: string): string[] {
+  const match = /ModuleNotFoundError: No module named '([A-Za-z_]\w*)[.']\S*\s*$/.exec(stderr)
+  return match ? [match[1]!] : []
+}
+
+const importLines =
+  /(?:^|;)[ \t]*(?:from[ \t]+([A-Za-z_]\w*)[\w.]*[ \t]+import\b|import[ \t]+([^\n#;]+))/gm
+
+export function importing(source: string, modules: readonly string[]): boolean {
+  for (const match of source.matchAll(importLines)) {
+    const names = match[1]
+      ? [match[1]]
+      : match[2]!.split(',').map((part) => part.trim().split(/[\s.]/)[0]!)
+    if (names.some((name) => modules.includes(name))) return true
+  }
+  return modules.some((name) =>
+    new RegExp('(?:__import__|import_module)\\(\\s*[\'"]' + name + '(?:[\'".])').test(source),
+  )
+}
+
+async function readText(fs: FileSystem, path: string): Promise<string | undefined> {
+  try {
+    const stat = await fs.stat(path)
+    if (stat?.kind !== 'file') return undefined
+    return decode(await fs.read(path))
+  } catch {
+    return undefined
+  }
+}
+
+async function importsAny(
+  ctx: CommandContext,
+  mode: Mode,
+  stdin: string,
+  modules: readonly string[],
+): Promise<boolean> {
+  if (mode.kind === 'code') return importing(mode.target, modules)
+  if (mode.kind === 'stdin') return importing(stdin, modules)
+  if (mode.kind === 'file')
+    return importing((await readText(ctx.fs, mode.filename)) ?? '', modules)
+  if (mode.kind !== 'module') return false
+  if (modules.includes(mode.target.split('.')[0]!)) return true
+  const base = join(ctx.cwd, mode.target.replaceAll('.', '/'))
+  const source = (await readText(ctx.fs, base + '.py')) ?? (await readText(ctx.fs, base + '/__main__.py'))
+  return importing(source ?? '', modules)
+}
+
+const skipped = new Set(['.git', 'node_modules'])
+
+async function gather(
+  ctx: CommandContext,
+  cap: number,
+): Promise<{ files: Map<string, Uint8Array>; left: number }> {
+  const files = new Map<string, Uint8Array>()
+  const seen = new Set<string>()
+  let bytes = 0
+  let left = 0
+  const visit = async (path: string): Promise<void> => {
+    if (seen.has(path)) return
+    seen.add(path)
+    const stat = await (ctx.fs.lstat ? ctx.fs.lstat(path) : ctx.fs.stat(path)).catch(() => null)
+    if (!stat) return
+    if (stat.kind === 'directory') {
+      const names = await ctx.fs.list(path).catch(() => [] as string[])
+      for (const name of names.sort()) if (!skipped.has(name)) await visit(join(path, name))
+      return
+    }
+    if (stat.kind !== 'file') return
+    if (bytes + stat.size > cap) {
+      left++
+      return
+    }
+    await breathe()
+    const data = await ctx.fs.read(path).catch(() => undefined)
+    if (!data) return
+    files.set(path, data)
+    bytes += data.length
+  }
+  const sources = [...ctx.args]
+  for (const arg of ctx.args)
+    if (!arg.startsWith('-') && arg !== '/') {
+      const path = ctx.resolve(arg)
+      const stat = await ctx.fs.stat(path).catch(() => null)
+      if (stat?.kind !== 'file') continue
+      await visit(path)
+      if (/\.py$/.test(path)) sources.push((await readText(ctx.fs, path)) ?? '')
+    }
+  for (const source of sources)
+    for (const match of source.matchAll(/["'](\/[^"'\n*?]+)["']/g))
+      if (match[1] !== '/' && !match[1]!.startsWith('/dev/') && !match[1]!.startsWith('/proc/'))
+        await visit(match[1]!.replace(/\/+$/, ''))
+  if (ctx.cwd !== '/') await visit(ctx.cwd)
+  await visit(sitePackages)
+  return { files, left }
+}
+
+async function runSci(
+  ctx: CommandContext,
+  sci: Sci,
+  run: Parameters<typeof executeRust>[2],
+): Promise<number> {
+  if (sci.module) {
+    const compiled =
+      sci.module instanceof WebAssembly.Module ? sci.module : await loadModule(sci.module)
+    const missing = await rustImage({ data: sci.data }, compiled)
+    if (missing) {
+      ctx.stderr.write(missing.replace('python.data', 'python-polars.data') + '\n')
+      return 126
+    }
+    const status = await executeRust(ctx, compiled, { ...run, sci: undefined })
+    return status === 'sci' ? 127 : status
+  }
+  const cap = sci.sendBytes ?? ctx.limits.maxMemoryBytes
+  const { files, left } = await gather(ctx, cap)
+  let result
+  try {
+    result = await sci.run(
+      {
+        argv: ctx.args,
+        cwd: ctx.cwd,
+        env: { ...ctx.env, PWD: ctx.cwd },
+        files: [...files],
+        memory: ctx.limits.maxMemoryBytes,
+        stdin: encode(run.stdin),
+        timeMs: ctx.limits.timeoutMs,
+      },
+      ctx.signal,
+    )
+  } catch (error) {
+    if (ctx.signal.aborted) return 130
+    ctx.stderr.write(
+      'python3: the polars interpreter failed: ' +
+        (error instanceof Error ? error.message : String(error)) +
+        '\n',
+    )
+    return 1
+  }
+  for (const path of [...(result.deleted ?? [])].sort((a, b) => b.length - a.length))
+    await erase(ctx.fs, path).catch((error) => {
+      if (!(error instanceof FsError)) throw error
+    })
+  for (const [path, data] of result.files) {
+    await breathe()
+    await mkdirs(ctx.fs, parentOf(path))
+    await ctx.fs.write(path, data)
+  }
+  ctx.stdout.write(result.stdout)
+  ctx.stderr.write(result.stderr)
+  if (left)
+    ctx.stderr.write(
+      'python3: the polars interpreter ran without ' +
+        left +
+        ' files past the ' +
+        Math.round(cap / 1048576) +
+        ' MiB of files it is sent\n',
+    )
+  return result.status
 }
