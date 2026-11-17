@@ -8,6 +8,7 @@ type Exports = {
   python_output(): number
   python_reply(len: number): number
   python_run(): number
+  python_held?(): number
 }
 
 type Instance = {
@@ -15,6 +16,7 @@ type Instance = {
   exports: Exports
   files: SyncFileSystem | undefined
   initial: number
+  held: number
   panic: string | undefined
   retry: (() => Promise<boolean>) | undefined
   spare: boolean
@@ -199,6 +201,7 @@ function instantiate(module: WebAssembly.Module): Instance {
     exports: undefined as unknown as Exports,
     files: undefined,
     initial: 0,
+    held: 0,
     panic: undefined,
     retry: undefined,
     spare: false,
@@ -392,6 +395,7 @@ function instantiate(module: WebAssembly.Module): Instance {
   if (image)
     new Uint8Array(state.exports.memory.buffer, image.base, image.bytes.length).set(image.bytes)
   state.initial = state.exports.memory.buffer.byteLength
+  state.held = state.exports.python_held?.() ?? 0
   return state
 }
 
@@ -824,7 +828,7 @@ export function fits(module: WebAssembly.Module, memory: number): boolean {
 
 function take(module: WebAssembly.Module, fresh: boolean | undefined): Instance {
   const idle = instances.get(module)
-  instances.delete(module)
+  if (!fresh) instances.delete(module)
   const running = busy.get(module) ?? new Set<Instance>()
   busy.set(module, running)
   const taken = idle && !fresh ? idle : instantiate(module)
@@ -843,12 +847,20 @@ function begin(instance: Instance, options: RunOptions & { spawn?: Spawn | Suspe
   new Uint8Array(instance.exports.memory.buffer, ptr >>> 0, input.length).set(input)
 }
 
+function warmer(instance: Instance, kept: Instance | undefined): boolean {
+  if (kept === undefined) return true
+  return (instance.exports.python_held?.() ?? 0) > (kept.exports.python_held?.() ?? 0)
+}
+
+function keeps(instance: Pick<Instance, 'exports' | 'held' | 'initial'>, memory: number): boolean {
+  const grown = instance.exports.memory.buffer.byteLength - instance.initial
+  const held = instance.exports.python_held?.()
+  if (held === undefined) return grown <= memory / 2
+  return held - instance.held <= memory && grown <= memory + memory / 2
+}
+
 function end(module: WebAssembly.Module, instance: Instance, len: number, request: Request): Ran {
-  if (
-    instance.exports.memory.buffer.byteLength - instance.initial <= request.memory / 2 &&
-    !instance.spare &&
-    !instances.has(module)
-  )
+  if (!instance.spare && keeps(instance, request.memory) && warmer(instance, instances.get(module)))
     instances.set(module, instance)
   return decodeRan(
     new Uint8Array(
