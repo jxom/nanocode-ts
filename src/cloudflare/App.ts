@@ -646,6 +646,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
     private readonly handUpdates = new Map<string, { bytes: number; frames: string[] }>()
     private linger?: ReturnType<typeof setTimeout>
     private pumping = false
+    private handReady = false
     private modelAt?: number
     private compiled?: Promise<void>
     private readonly steps = new WeakMap<Request, string[]>()
@@ -2090,6 +2091,7 @@ ${input.request_id}`
         }
         const hand = next && !next.cancel_requested ? descriptor.hand : undefined
         if (hand !== undefined && !this.hands.get(scope)?.get(hand)?.ready) {
+          this.ctx.waitUntil(this.preopen(scope, sessionId, descriptor))
           retryAt = await this.unavailable(
             scope,
             next,
@@ -2235,7 +2237,9 @@ ${input.request_id}`
         if (retryAt !== null && (unfinished || background))
           await this.ctx.storage.setAlarm(retryAt ?? Date.now() + delay)
         else if (retryAt === null) await this.ctx.storage.deleteAlarm()
-        if (immediate && unfinished) this.ctx.waitUntil(this.pump(true))
+        const handReady = this.handReady
+        this.handReady = false
+        if ((immediate || handReady) && unfinished) this.ctx.waitUntil(this.pump(true))
       }
     }
 
@@ -3255,6 +3259,7 @@ ${input.request_id}`
       const entry = hands.get(hand)
       if (entry?.connection !== connection) return
       entry.ready = true
+      if (this.pumping) this.handReady = true
       if (this.pumping || this.queue === 'empty') return
       const next = (await (await this.instance(scope)).pending(scope))[0]
       if ((next?.metadata as SessionDescriptor | null | undefined)?.hand === hand && !this.pumping)
@@ -3952,6 +3957,16 @@ ${input.request_id}`
       this.ctx.waitUntil(
         Promise.all(primed.map((entry) => primeModel(this.env, entry[0], entry[1]))),
       )
+    }
+
+    private async preopen(
+      scope: string,
+      sessionId: string,
+      descriptor: SessionDescriptor,
+    ): Promise<void> {
+      try {
+        await (await this.runtime(scope, sessionId, descriptor)).preconnect()
+      } catch {}
     }
 
     private async warm(scope: string, base: SessionDescriptor): Promise<boolean> {
