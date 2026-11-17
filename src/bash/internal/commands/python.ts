@@ -238,9 +238,22 @@ function rustImage(
   return loading
 }
 
+const moduleLoads = new WeakMap<() => Promise<WebAssembly.Module>, Promise<WebAssembly.Module>>()
+
+function loadModule(load: () => Promise<WebAssembly.Module>): Promise<WebAssembly.Module> {
+  let loading = moduleLoads.get(load)
+  if (!loading) {
+    loading = load()
+    moduleLoads.set(load, loading)
+    loading.catch(() => moduleLoads.delete(load))
+  }
+  return loading
+}
+
 function rustModule(options: PythonOptions): Promise<WebAssembly.Module | undefined> {
   if (options.module === false) return Promise.resolve(undefined)
-  if (options.module) return Promise.resolve(options.module)
+  if (options.module instanceof WebAssembly.Module) return Promise.resolve(options.module)
+  if (options.module) return loadModule(options.module)
   packagedRust.module ??= (async () => {
     const process = (globalThis as { process?: { getBuiltinModule?: (id: string) => unknown } })
       .process

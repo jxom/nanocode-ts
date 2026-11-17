@@ -1,6 +1,5 @@
 import { DurableObject } from 'cloudflare:workers'
 import interpreter from 'nanocode-ts/interpreter.wasm'
-import python from 'nanocode-ts/python.wasm'
 import wasm from 'nanocode-ts/nanocode_wasm.wasm'
 import * as AgentRuntime from '../AgentRuntime.ts'
 import * as Bash from '../bash/Bash.ts'
@@ -236,6 +235,11 @@ const pythonCpuMs = 5_000
 
 // Where the default python.data loader finds the image in the Worker's static assets (env.ASSETS).
 const pythonDataPath = '/nanocode-ts/python.data'
+
+const loadPython = (): Promise<WebAssembly.Module> =>
+  import('nanocode-ts/python.wasm').then(
+    (loaded: { default: WebAssembly.Module }) => loaded.default,
+  )
 
 async function assetData(env: unknown): Promise<ArrayBuffer | undefined> {
   const assets = (env as { ASSETS?: { fetch(input: string): Promise<Response> } } | undefined)
@@ -2578,7 +2582,7 @@ ${input.request_id}`
         const pythonModule =
           workspaceOptions?.pythonModule === false
             ? undefined
-            : ((await workspaceOptions?.pythonModule) ?? python)
+            : ((await workspaceOptions?.pythonModule) ?? loadPython)
         const mcpServers =
           typeof options.mcp?.servers === 'function'
             ? options.mcp.servers(authority, this.env)
@@ -5248,7 +5252,11 @@ export declare namespace create {
           psh?: WebAssembly.Module | Promise<WebAssembly.Module>
           pythonCpuMs?: number
           // python.wasm for the workspace's python3: nanocode-ts/python.wasm by default, false for none.
-          pythonModule?: WebAssembly.Module | Promise<WebAssembly.Module> | false
+          pythonModule?:
+            | WebAssembly.Module
+            | Promise<WebAssembly.Module>
+            | (() => Promise<WebAssembly.Module>)
+            | false
           // Loads python.data, the image python.wasm starts from, once per isolate. Workers can't hold it in
           // the bundle, so by default it is fetched from the static assets binding (env.ASSETS) at
           // /nanocode-ts/python.data: copy node_modules/nanocode-ts/dist/python.data there.

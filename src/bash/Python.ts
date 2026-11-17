@@ -1,6 +1,6 @@
 export type Options = {
   maxBytes?: number
-  module?: false | WebAssembly.Module
+  module?: false | WebAssembly.Module | (() => Promise<WebAssembly.Module>)
   // python.data, the memory image python.wasm starts from (gzip or not), or a function that loads it once
   // per isolate; by default Node reads nanocode-ts/python.data beside python.wasm.
   data?:
