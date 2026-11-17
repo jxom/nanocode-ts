@@ -3,8 +3,25 @@
 version = 4
 
 [[package]]
+name = "cfg-if"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
+
+[[package]]
 name = "djs-libm"
 version = "0.0.0"
+
+[[package]]
+name = "dlmalloc"
+version = "0.2.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad5208a115eaba24916f7456929832e310a81518c641f93fee4f89aa93aa3675"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "windows-sys",
+]
 
 [[package]]
 name = "equivalent"
@@ -33,6 +50,12 @@ name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
+
+[[package]]
+name = "libc"
+version = "0.2.191"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
 
 [[package]]
 name = "memchr"
@@ -110,10 +133,10 @@ dependencies = [
  "nanocode-compression",
  "nanocode-platform",
  "nanocode-python-capi",
+ "nanocode-python-data",
  "nanocode-shell",
  "nanocode-sync",
  "psh-engine",
- "rustpython-pylib",
  "rustpython-ruff_python_ast",
  "rustpython-ruff_python_parser",
  "rustpython-stdlib",
@@ -128,6 +151,16 @@ dependencies = [
  "nanocode-numeric",
  "nanocode-platform",
  "rustpython-vm",
+]
+
+[[package]]
+name = "nanocode-python-data"
+version = "0.7.0"
+dependencies = [
+ "nanocode-compression",
+ "rustpython-compiler",
+ "rustpython-compiler-core",
+ "rustpython-pylib",
 ]
 
 [[package]]
@@ -368,10 +401,6 @@ dependencies = [
 [[package]]
 name = "rustpython-pylib"
 version = "0.6.0"
-dependencies = [
- "rustpython-compiler-core",
- "rustpython-derive",
-]
 
 [[package]]
 name = "rustpython-ruff_python_ast"
@@ -462,6 +491,7 @@ dependencies = [
 name = "rustpython-vm"
 version = "0.6.0"
 dependencies = [
+ "dlmalloc",
  "indexmap",
  "itoa",
  "memchr",
@@ -541,6 +571,21 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 [[package]]
 name = "unicode-normalization"
 version = "0.1.25"
+
+[[package]]
+name = "windows-link"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
+
+[[package]]
+name = "windows-sys"
+version = "0.61.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc"
+dependencies = [
+ "windows-link",
+]
 
 [[package]]
 name = "zeroize"

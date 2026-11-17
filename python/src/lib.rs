@@ -349,6 +349,11 @@ pub extern "C" fn python_reply(len: usize) -> *mut u8 {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn python_held() -> f64 {
+    nanocode_python::held().map_or(-1.0, |held| held as f64)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn python_output() -> *const u8 {
     OUTPUT.with_borrow(Vec::as_ptr)
 }
