@@ -1,0 +1,299 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 065daa0..b0d4280 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -1,9 +1,11 @@
+ [workspace]
+ resolver = "2"
++exclude = ["patches"]
+ members = [
+   "crates/*",
+   "docs/source/src/rust",
+   "py-polars",
++  "py-polars-nanocode",
+   "pyo3-polars/example/derive_expression/expression_lib",
+   "pyo3-polars/example/extend_polars_python_dispatch/extend_polars",
+   "pyo3-polars/example/io_plugin/io_plugin",
+@@ -153,6 +155,8 @@ collapsible_if = "allow"
+ # packed_simd_2 = { git = "https://github.com/rust-lang/packed_simd", rev = "e57c7ba11386147e6d2cbad7c88f376aab4bdc86" }
+ # simd-json = { git = "https://github.com/ritchie46/simd-json", branch = "alignment" }
+ tikv-jemallocator = { git = "https://github.com/pola-rs/jemallocator", rev = "c7991e5bb6b3e9f79db6b0f48dcda67c5c3d2936" }
++libc = { path = "patches/libc" }
++pyo3 = { path = "patches/pyo3" }
+ 
+ [profile.mindebug-dev]
+ inherits = "dev"
+diff --git a/crates/polars-arrow/Cargo.toml b/crates/polars-arrow/Cargo.toml
+index c231e66..a2302a1 100644
+--- a/crates/polars-arrow/Cargo.toml
++++ b/crates/polars-arrow/Cargo.toml
+@@ -69,8 +69,8 @@ tokio = { workspace = true, features = ["macros", "rt", "fs", "io-util"] }
+ version_check = { workspace = true }
+ 
+ [target.wasm32-unknown-unknown.dependencies]
+-getrandom = { version = "0.3", features = ["wasm_js"] }
+-old_getrandom = { version = "0.2", features = ["js"], package = "getrandom" }
++getrandom = { version = "0.3" }
++old_getrandom = { version = "0.2", features = ["custom"], package = "getrandom" }
+ 
+ [features]
+ default = []
+diff --git a/crates/polars-core/Cargo.toml b/crates/polars-core/Cargo.toml
+index 5a4059c..ccda87b 100644
+--- a/crates/polars-core/Cargo.toml
++++ b/crates/polars-core/Cargo.toml
+@@ -43,7 +43,8 @@ uuid = { workspace = true }
+ xxhash-rust = { workspace = true }
+ 
+ [target.'cfg(target_family = "wasm")'.dependencies]
+-uuid = { workspace = true, features = ["js"] }
++uuid = { workspace = true, features = ["rng-getrandom"] }
++getrandom = { version = "0.3" }
+ 
+ [dev-dependencies]
+ bincode = { workspace = true }
+@@ -75,7 +76,7 @@ strings = ["regex", "arrow/strings", "polars-error/regex"]
+ # support for ObjectChunked<T> (downcastable Series of any type)
+ object = ["serde_json", "algorithm_group_by"]
+ 
+-fmt = ["comfy-table/tty"]
++fmt = ["comfy-table"]
+ fmt_no_tty = ["comfy-table"]
+ 
+ # opt-in features
+diff --git a/crates/polars-core/src/fmt.rs b/crates/polars-core/src/fmt.rs
+index c32de93..86e2f93 100644
+--- a/crates/polars-core/src/fmt.rs
++++ b/crates/polars-core/src/fmt.rs
+@@ -768,11 +768,11 @@ impl Display for DataFrame {
+             } else {
+                 // if no tbl_width (it's not tty && width not explicitly set), apply
+                 // a default value; this is needed to support non-tty applications
+-                #[cfg(feature = "fmt")]
++                #[cfg(all(feature = "fmt", not(target_family = "wasm")))]
+                 if table.width().is_none() && !table.is_tty() {
+                     table.set_width(tbl_fallback_width);
+                 }
+-                #[cfg(feature = "fmt_no_tty")]
++                #[cfg(any(feature = "fmt_no_tty", target_family = "wasm"))]
+                 if table.width().is_none() {
+                     table.set_width(tbl_fallback_width);
+                 }
+diff --git a/crates/polars-core/src/lib.rs b/crates/polars-core/src/lib.rs
+index e667411..ac6e483 100644
+--- a/crates/polars-core/src/lib.rs
++++ b/crates/polars-core/src/lib.rs
+@@ -39,12 +39,19 @@ pub use datatypes::SchemaExtPl;
+ pub use hashing::IdBuildHasher;
+ use rayon::{ThreadPool, ThreadPoolBuilder};
+ 
++#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
+ pub static PROCESS_ID: LazyLock<u128> = LazyLock::new(|| {
+     SystemTime::now()
+         .duration_since(UNIX_EPOCH)
+         .unwrap()
+         .as_nanos()
+ });
++#[cfg(all(target_family = "wasm", target_os = "unknown"))]
++pub static PROCESS_ID: LazyLock<u128> = LazyLock::new(|| {
++    let mut bytes = [0u8; 16];
++    getrandom::fill(&mut bytes).unwrap();
++    u128::from_le_bytes(bytes)
++});
+ 
+ // this is re-exported in utils for polars child crates
+ #[cfg(not(target_family = "wasm"))] // only use this on non wasm targets
+diff --git a/crates/polars-dtype/Cargo.toml b/crates/polars-dtype/Cargo.toml
+index 76911a6..ffdf0c3 100644
+--- a/crates/polars-dtype/Cargo.toml
++++ b/crates/polars-dtype/Cargo.toml
+@@ -19,7 +19,7 @@ serde = { workspace = true, optional = true }
+ uuid = { workspace = true }
+ 
+ [target.'cfg(target_family = "wasm")'.dependencies]
+-uuid = { workspace = true, features = ["js"] }
++uuid = { workspace = true, features = ["rng-getrandom"] }
+ 
+ [features]
+ default = []
+diff --git a/crates/polars-python/Cargo.toml b/crates/polars-python/Cargo.toml
+index c464567..76a6f3b 100644
+--- a/crates/polars-python/Cargo.toml
++++ b/crates/polars-python/Cargo.toml
+@@ -48,9 +48,9 @@ parking_lot = { workspace = true }
+ pyo3 = { workspace = true, features = ["abi3-py39", "chrono", "chrono-tz", "multiple-pymethods"] }
+ rayon = { workspace = true }
+ recursive = { workspace = true }
+-serde_json = { workspace = true, optional = true }
++serde_json = { workspace = true }
+ 
+-[target.'cfg(any(not(target_family = "unix"), target_os = "emscripten"))'.dependencies]
++[target.'cfg(all(any(not(target_family = "unix"), target_os = "emscripten"), not(all(target_family = "wasm", not(target_os = "emscripten")))))'.dependencies]
+ mimalloc = { version = "0.1", default-features = false }
+ 
+ # Feature background_threads is unsupported on MacOS (https://github.com/jemalloc/jemalloc/issues/843).
+@@ -146,7 +146,7 @@ parquet = ["polars/parquet", "polars-parquet", "polars-mem-engine/parquet"]
+ ipc = ["polars/ipc", "polars-mem-engine/ipc"]
+ ipc_streaming = ["polars/ipc_streaming"]
+ is_in = ["polars/is_in"]
+-json = ["polars/serde", "serde_json", "polars/json", "polars-utils/serde", "polars-mem-engine/json"]
++json = ["polars/serde", "polars/json", "polars-utils/serde", "polars-mem-engine/json"]
+ trigonometry = ["polars/trigonometry"]
+ sign = ["polars/sign"]
+ asof_join = ["polars/asof_join"]
+diff --git a/crates/polars-python/src/file.rs b/crates/polars-python/src/file.rs
+index 76276f6..b0420b8 100644
+--- a/crates/polars-python/src/file.rs
++++ b/crates/polars-python/src/file.rs
+@@ -427,6 +427,17 @@ pub(crate) fn get_python_scan_source_input(
+                     file_path = PlPath::Local(resolve_homedir(&p).into());
+                 }
+             }
++            #[cfg(all(target_family = "wasm", target_os = "unknown"))]
++            if let Some(p) = file_path.as_ref().as_local_path() {
++                let f = open_with_python(py, p, false)?;
++                let data = f.call_method0("read")?;
++                f.call_method0("close")?;
++                let b = data.downcast::<PyBytes>()?;
++                return Ok(PythonScanSourceInput::Buffer(MemSlice::from_arc(
++                    b.as_bytes(),
++                    Arc::new(b.clone().unbind()),
++                )));
++            }
+             Ok(PythonScanSourceInput::Path(file_path))
+         } else {
+             Ok(try_get_pyfile(py, py_f, write)?.0.into_scan_source_input())
+@@ -434,6 +445,16 @@ pub(crate) fn get_python_scan_source_input(
+     })
+ }
+ 
++#[cfg(all(target_family = "wasm", target_os = "unknown"))]
++fn open_with_python<'py>(
++    py: Python<'py>,
++    path: &std::path::Path,
++    write: bool,
++) -> PyResult<Bound<'py, PyAny>> {
++    py.import("io")?
++        .call_method1("open", (path.to_string_lossy(), if write { "wb" } else { "rb" }))
++}
++
+ fn get_either_buffer_or_path(
+     py_f: PyObject,
+     write: bool,
+@@ -442,6 +463,12 @@ fn get_either_buffer_or_path(
+         let py_f = py_f.into_bound(py);
+         if let Ok(s) = py_f.extract::<Cow<str>>() {
+             let file_path = resolve_homedir(&&*s);
++            #[cfg(all(target_family = "wasm", target_os = "unknown"))]
++            {
++                let f = open_with_python(py, &file_path, write)?;
++                return Ok((try_get_pyfile(py, f, write)?.0, Some(file_path)));
++            }
++            #[allow(unreachable_code)]
+             let f = if write {
+                 create_file(&file_path).map_err(PyPolarsErr::from)?
+             } else {
+diff --git a/crates/polars/Cargo.toml b/crates/polars/Cargo.toml
+index 9d94228..d8def92 100644
+--- a/crates/polars/Cargo.toml
++++ b/crates/polars/Cargo.toml
+@@ -43,8 +43,8 @@ version_check = { workspace = true }
+ 
+ # enable js feature for getrandom to work in wasm
+ [target.'cfg(target_family = "wasm")'.dependencies]
+-getrandom = { version = "0.3", features = ["wasm_js"] }
+-old_getrandom = { version = "0.2", features = ["js"], package = "getrandom" }
++getrandom = { version = "0.3" }
++old_getrandom = { version = "0.2", features = ["custom"], package = "getrandom" }
+ 
+ [features]
+ sql = ["polars-sql"]
+@@ -100,10 +100,10 @@ strings = ["polars-core/strings", "polars-lazy?/strings", "polars-ops/strings"]
+ object = ["polars-core/object", "polars-lazy?/object", "polars-io/object"]
+ 
+ # support for arrows json parsing
+-json = ["polars-io", "polars-io/json", "polars-lazy?/json", "polars-sql?/json", "dtype-struct", "new_streaming"]
++json = ["polars-io", "polars-io/json", "polars-lazy?/json", "polars-sql?/json", "dtype-struct"]
+ 
+ # support for arrows ipc file parsing
+-ipc = ["polars-io", "polars-io/ipc", "polars-lazy?/ipc", "polars-sql?/ipc", "new_streaming"]
++ipc = ["polars-io", "polars-io/ipc", "polars-lazy?/ipc", "polars-sql?/ipc"]
+ 
+ # support for arrows streaming ipc file parsing
+ ipc_streaming = ["polars-io", "polars-io/ipc_streaming", "polars-lazy?/ipc"]
+@@ -112,7 +112,7 @@ ipc_streaming = ["polars-io", "polars-io/ipc_streaming", "polars-lazy?/ipc"]
+ avro = ["polars-io", "polars-io/avro"]
+ 
+ # support for arrows csv file parsing
+-csv = ["polars-io", "polars-io/csv", "polars-lazy?/csv", "polars-sql?/csv", "new_streaming"]
++csv = ["polars-io", "polars-io/csv", "polars-lazy?/csv", "polars-sql?/csv"]
+ 
+ # slower builds
+ performant = [
+diff --git a/py-polars-nanocode/Cargo.toml b/py-polars-nanocode/Cargo.toml
+new file mode 100644
+index 0000000..f20895d
+--- /dev/null
++++ b/py-polars-nanocode/Cargo.toml
+@@ -0,0 +1,25 @@
++[package]
++name = "py-polars-nanocode"
++version = "1.33.1"
++edition = "2021"
++
++[lib]
++name = "py_polars_nanocode"
++crate-type = ["staticlib", "rlib"]
++
++# py-polars' own "full" feature set minus what needs threads, sockets, files
++# or tokio on wasm32-unknown-unknown: cloud, parquet, json (ndjson scans go
++# through cloud options), extract_jsonpath, clipboard, decompress, sql,
++# new_streaming, polars_cloud_*, catalog.
++[dependencies]
++polars-python = { workspace = true, default-features = false, features = [
++  "c_api", "pymethods", "optimizations", "dtypes", "meta", "regex",
++  "binary_encoding", "csv",
++  "approx_unique", "array_any_all", "array_count", "bitwise", "is_in", "repeat_by",
++  "trigonometry", "sign", "performant", "list_gather", "list_filter", "list_count",
++  "list_sets", "list_any_all", "list_drop_nulls", "list_sample", "cutqcut", "rle",
++  "extract_groups", "pivot", "asof_join", "cross_join", "pct_change", "index_of",
++  "search_sorted", "merge_sorted", "top_k", "propagate_nans", "timezones", "peaks",
++  "hist", "find_many", "string_normalize",
++] }
++pyo3 = { workspace = true, features = ["abi3-py39", "chrono", "extension-module", "multiple-pymethods"] }
+diff --git a/py-polars-nanocode/src/lib.rs b/py-polars-nanocode/src/lib.rs
+new file mode 100644
+index 0000000..96ee85e
+--- /dev/null
++++ b/py-polars-nanocode/src/lib.rs
+@@ -0,0 +1 @@
++pub use polars_python::c_api::*;
+diff --git a/py-polars/polars/__init__.py b/py-polars/polars/__init__.py
+index 3bb06a0..5fd5d8f 100644
+--- a/py-polars/polars/__init__.py
++++ b/py-polars/polars/__init__.py
+@@ -33,24 +33,6 @@ Source Code: https://github.com/pola-rs/polars
+ import contextlib
+ 
+ with contextlib.suppress(ImportError):  # Module not available when building docs
+-    # This must be done before importing the Polars Rust bindings, otherwise we
+-    # might execute illegal instructions.
+-    import polars._cpu_check
+-
+-    polars._cpu_check.check_cpu_flags()
+-
+-    # We also configure the allocator before importing the Polars Rust bindings.
+-    # See https://github.com/pola-rs/polars/issues/18088,
+-    # https://github.com/pola-rs/polars/pull/21829.
+-    import os
+-
+-    jemalloc_conf = "dirty_decay_ms:500,muzzy_decay_ms:-1"
+-    if os.environ.get("POLARS_THP") == "1":
+-        jemalloc_conf += ",thp:always,metadata_thp:always"
+-    if override := os.environ.get("_RJEM_MALLOC_CONF"):
+-        jemalloc_conf += "," + override
+-    os.environ["_RJEM_MALLOC_CONF"] = jemalloc_conf
+-
+     # Initialize polars on the rust side. This function is highly
+     # unsafe and should only be called once.
+     from polars._plr import __register_startup_deps

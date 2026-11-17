@@ -25,7 +25,7 @@ function run(command, cwd) {
   if (result.status !== 0) process.exit(result.status ?? 1)
 }
 
-function source() {
+export function source() {
   if (process.env.NANOCODE_PYTHON_SOURCE) return process.env.NANOCODE_PYTHON_SOURCE
   const directory = join(root, 'target', 'python-source', pin.revision)
   if (existsSync(join(directory, 'crates', 'core', 'python', 'Cargo.toml'))) return directory
@@ -40,7 +40,7 @@ function source() {
   return directory
 }
 
-function link(target) {
+export function link(target) {
   const path = join(root, 'target', 'python-sdk')
   const current = (() => {
     try {

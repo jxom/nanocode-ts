@@ -1,0 +1,54 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -139,6 +139,14 @@
+         pub use crate::xous::*;
+ 
+         prelude!();
++    } else if #[cfg(all(target_family = "wasm", target_os = "unknown"))] {
++        mod primitives;
++        pub use crate::primitives::*;
++
++        mod wasm_unknown;
++        pub use crate::wasm_unknown::*;
++
++        prelude!();
+     } else {
+         // non-supported targets: empty...
+     }
+--- a/src/wasm_unknown.rs
++++ b/src/wasm_unknown.rs
+@@ -0,0 +1,34 @@
++//! wasm32-unknown-unknown hosts that supply a C library themselves (such as
++//! an embedded Python C API): the C types only, plus the few libc functions
++//! such hosts link in.
++
++pub type size_t = usize;
++pub type ssize_t = isize;
++pub type intptr_t = isize;
++pub type uintptr_t = usize;
++pub type ptrdiff_t = isize;
++pub type wchar_t = i32;
++pub type off_t = i64;
++pub type time_t = i64;
++
++#[cfg_attr(feature = "extra_traits", derive(Debug))]
++pub enum FILE {}
++impl Copy for FILE {}
++impl Clone for FILE {
++    fn clone(&self) -> FILE {
++        *self
++    }
++}
++
++extern "C" {
++    pub fn getenv(name: *const crate::c_char) -> *mut crate::c_char;
++    pub fn malloc(size: size_t) -> *mut crate::c_void;
++    pub fn calloc(nobj: size_t, size: size_t) -> *mut crate::c_void;
++    pub fn realloc(p: *mut crate::c_void, size: size_t) -> *mut crate::c_void;
++    pub fn free(p: *mut crate::c_void);
++    pub fn strlen(cs: *const crate::c_char) -> size_t;
++    pub fn memcpy(dest: *mut crate::c_void, src: *const crate::c_void, n: size_t) -> *mut crate::c_void;
++    pub fn memmove(dest: *mut crate::c_void, src: *const crate::c_void, n: size_t) -> *mut crate::c_void;
++    pub fn memset(dest: *mut crate::c_void, c: crate::c_int, n: size_t) -> *mut crate::c_void;
++    pub fn memcmp(cx: *const crate::c_void, ct: *const crate::c_void, n: size_t) -> crate::c_int;
++}

@@ -1,0 +1,147 @@
+[package]
+name = "nanocode-python-polars-wasm"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+autotests = false
+autobenches = false
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+test = false
+doctest = false
+bench = false
+
+[dependencies]
+getrandom = "0.3"
+nanocode-platform = { path = "../target/python-sdk/crates/core/platform" }
+nanocode-python = { path = "../target/python-sdk/crates/core/python" }
+old_getrandom = { package = "getrandom", version = "0.2", features = ["custom"] }
+py-polars-nanocode = { path = "../target/polars-source/py-polars-nanocode" }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
+[patch.crates-io]
+libc = { path = "../target/polars-source/patches/libc" }
+pyo3 = { path = "../target/polars-source/patches/pyo3" }
+pymath = { path = "../target/python-sdk/crates/patches/pymath" }
+rustpython-codegen = { path = "../target/python-sdk/crates/patches/rustpython-codegen" }
+rustpython-common = { path = "../target/python-sdk/crates/patches/rustpython-common" }
+rustpython-compiler = { path = "../target/python-sdk/crates/patches/rustpython-compiler" }
+rustpython-compiler-core = { path = "../target/python-sdk/crates/patches/rustpython-compiler-core" }
+rustpython-derive = { path = "../target/python-sdk/crates/patches/rustpython-derive" }
+rustpython-derive-impl = { path = "../target/python-sdk/crates/patches/rustpython-derive-impl" }
+rustpython-doc = { path = "../target/python-sdk/crates/patches/rustpython-doc" }
+rustpython-host_env = { path = "../target/python-sdk/crates/patches/rustpython-host_env" }
+rustpython-literal = { path = "../target/python-sdk/crates/patches/rustpython-literal" }
+rustpython-pylib = { path = "../target/python-sdk/crates/patches/rustpython-pylib" }
+rustpython-ruff_python_ast = { path = "../target/python-sdk/crates/patches/rustpython-ruff_python_ast" }
+rustpython-ruff_python_parser = { path = "../target/python-sdk/crates/patches/rustpython-ruff_python_parser" }
+rustpython-ruff_python_trivia = { path = "../target/python-sdk/crates/patches/rustpython-ruff_python_trivia" }
+rustpython-ruff_source_file = { path = "../target/python-sdk/crates/patches/rustpython-ruff_source_file" }
+rustpython-ruff_text_size = { path = "../target/python-sdk/crates/patches/rustpython-ruff_text_size" }
+rustpython-sre_engine = { path = "../target/python-sdk/crates/patches/rustpython-sre_engine" }
+rustpython-stdlib = { path = "../target/python-sdk/crates/patches/rustpython-stdlib" }
+rustpython-unicode = { path = "../target/python-sdk/crates/patches/rustpython-unicode" }
+rustpython-vm = { path = "../target/python-sdk/crates/patches/rustpython-vm" }
+rustpython-wtf8 = { path = "../target/python-sdk/crates/patches/rustpython-wtf8" }
+unicode-normalization = { path = "../target/python-sdk/crates/core/unicode-normalization" }
+
+[workspace]
+
+[profile.release.package.arrow-format]
+opt-level = "s"
+
+[profile.release.package.chrono-tz]
+opt-level = "s"
+
+[profile.release.package.polars]
+opt-level = "s"
+
+[profile.release.package.polars-arrow]
+opt-level = "s"
+
+[profile.release.package.polars-arrow-format]
+opt-level = "s"
+
+[profile.release.package.polars-compute]
+opt-level = "s"
+
+[profile.release.package.polars-core]
+opt-level = "s"
+
+[profile.release.package.polars-dtype]
+opt-level = "s"
+
+[profile.release.package.polars-error]
+opt-level = "s"
+
+[profile.release.package.polars-expr]
+opt-level = "s"
+
+[profile.release.package.polars-ffi]
+opt-level = "s"
+
+[profile.release.package.polars-io]
+opt-level = "s"
+
+[profile.release.package.polars-json]
+opt-level = "s"
+
+[profile.release.package.polars-lazy]
+opt-level = "s"
+
+[profile.release.package.polars-mem-engine]
+opt-level = "s"
+
+[profile.release.package.polars-ops]
+opt-level = "s"
+
+[profile.release.package.polars-parquet]
+opt-level = "s"
+
+[profile.release.package.polars-parquet-format]
+opt-level = "s"
+
+[profile.release.package.polars-plan]
+opt-level = "s"
+
+[profile.release.package.polars-python]
+opt-level = "s"
+
+[profile.release.package.polars-row]
+opt-level = "s"
+
+[profile.release.package.polars-schema]
+opt-level = "s"
+
+[profile.release.package.polars-sql]
+opt-level = "s"
+
+[profile.release.package.polars-stream]
+opt-level = "s"
+
+[profile.release.package.polars-testing]
+opt-level = "s"
+
+[profile.release.package.polars-time]
+opt-level = "s"
+
+[profile.release.package.polars-utils]
+opt-level = "s"
+
+[profile.release.package.py-polars-nanocode]
+opt-level = "s"
+
+[profile.release.package.regex-automata]
+opt-level = "s"
+
+[profile.release.package.sqlparser]
+opt-level = "s"

@@ -1,0 +1,29 @@
+--- a/src/conversions/std/osstr.rs
++++ b/src/conversions/std/osstr.rs
+@@ -25,8 +25,10 @@
+         {
+             #[cfg(target_os = "wasi")]
+             let bytes = std::os::wasi::ffi::OsStrExt::as_bytes(self);
+-            #[cfg(not(target_os = "wasi"))]
++            #[cfg(unix)]
+             let bytes = std::os::unix::ffi::OsStrExt::as_bytes(self);
++            #[cfg(not(any(unix, target_os = "wasi")))]
++            let bytes = self.as_encoded_bytes();
+ 
+             let ptr = bytes.as_ptr().cast();
+             let len = bytes.len() as ffi::Py_ssize_t;
+@@ -89,9 +91,13 @@
+             #[cfg(target_os = "wasi")]
+             let os_str: &OsStr =
+                 std::os::wasi::ffi::OsStrExt::from_bytes(fs_encoded_bytes.as_bytes(ob.py()));
+-            #[cfg(not(target_os = "wasi"))]
++            #[cfg(unix)]
+             let os_str: &OsStr =
+                 std::os::unix::ffi::OsStrExt::from_bytes(fs_encoded_bytes.as_bytes(ob.py()));
++            // SAFETY: targets without an OS store OsStr as plain bytes.
++            #[cfg(not(any(unix, target_os = "wasi")))]
++            let os_str: &OsStr =
++                unsafe { OsStr::from_encoded_bytes_unchecked(fs_encoded_bytes.as_bytes(ob.py())) };
+ 
+             Ok(os_str.to_os_string())
+         }
