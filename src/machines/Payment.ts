@@ -110,6 +110,8 @@ export function locked(servers: readonly Mcp.Server[], options: locked.Options =
     if (!result?.required) return response
     const paid = await options.sponsor?.pay(result.challenges)
     if (paid) return paid
+    const served = await options.fallback?.(input, init)
+    if (served) return served
     const id = await response
       .clone()
       .text()
@@ -137,6 +139,9 @@ export function locked(servers: readonly Mcp.Server[], options: locked.Options =
 
 export declare namespace locked {
   type Options = {
+    fallback?:
+      | ((input: RequestInfo | URL, init?: RequestInit) => Promise<Response | undefined>)
+      | undefined
     fetch?: typeof fetch | undefined
     scripts?: boolean | undefined
     sponsor?: Sponsoring | undefined

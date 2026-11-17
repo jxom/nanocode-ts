@@ -31,6 +31,7 @@ function kvStore(kv: SyncKvStorage): Store {
 
 export class Wallet extends DurableObject<Env.Env> {
   protected deposit: Payment.Deposit | undefined = undefined
+  protected kv = false
   protected servers: readonly Mcp.Server[] = Mcp.servers
   protected scripts = true
   protected sponsor: ((env: Env.Env) => Payment.Sponsor | undefined) | undefined = undefined
@@ -39,6 +40,7 @@ export class Wallet extends DurableObject<Env.Env> {
   private core(): Account {
     this.holder ??= createAccount({
       deposit: this.deposit,
+      kv: this.kv,
       store: kvStore(this.ctx.storage.kv),
       secret: this.env.KEY_SECRET,
       servers: this.servers,
@@ -104,6 +106,7 @@ export function subclass<E extends Env.Env>(options: subclass.Options<E>): typeo
   const sponsor = options.sponsor
   return class extends Wallet {
     protected override deposit = options.deposit
+    protected override kv = options.kv ?? false
     protected override servers = options.servers
     protected override scripts = scripts
     protected override sponsor = sponsor && ((env: Env.Env) => sponsor(env as E))
@@ -113,6 +116,7 @@ export function subclass<E extends Env.Env>(options: subclass.Options<E>): typeo
 export declare namespace subclass {
   type Options<E extends Env.Env = Env.Env> = {
     deposit?: Payment.Deposit | undefined
+    kv?: boolean | undefined
     scripts?: boolean | undefined
     servers: readonly Mcp.Server[]
     sponsor?: ((env: E) => Payment.Sponsor | undefined) | undefined
@@ -156,7 +160,7 @@ export function create<E extends Env.Env>(options: create.Options<E>) {
   }
 
   return {
-    Wallet: subclass<E>({ deposit, scripts, servers, sponsor: options.sponsor }),
+    Wallet: subclass<E>({ deposit, kv: options.kv, scripts, servers, sponsor: options.sponsor }),
     egress,
     fetch,
     nanocode,
@@ -168,6 +172,7 @@ export function create<E extends Env.Env>(options: create.Options<E>) {
 export declare namespace create {
   type Options<E extends Env.Env> = {
     account: Keys.Account<E>
+    kv?: boolean
     payment?: Payment.Config
     scripts?: boolean
     sponsor?: (env: E) => Payment.Sponsor | undefined

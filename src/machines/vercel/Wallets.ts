@@ -31,6 +31,7 @@ export function create(options: create.Options) {
     if (!found) {
       found = createAccount({
         deposit,
+        kv: options.kv,
         store: store({ sessionId, sessions: options.sessions }),
         secret: options.secret,
         servers,
@@ -98,6 +99,7 @@ export function create(options: create.Options) {
 export declare namespace create {
   type Options = {
     authorize?(request: Request, sessionId: string): Promise<void> | void
+    kv?: boolean | undefined
     payment?: Payment.Config
     rpc?: string
     scripts?: boolean

@@ -5,6 +5,7 @@ import { Account, Actions, createClient, http, KeyAuthorizationManager } from 'v
 import { tempo } from 'viem/tempo/chains'
 import * as Egress from '../../internal/Egress.ts'
 import * as AccessKey from '../AccessKey.ts'
+import * as Kv from '../Kv.ts'
 import * as Mcp from '../Mcp.ts'
 import * as Payment from '../Payment.ts'
 import {
@@ -140,6 +141,7 @@ export function create(options: Create.Options) {
   const network = Egress.guard(options.fetch ?? ((input, init) => globalThis.fetch(input, init)))
   const sealing = sealer(options.secret)
   const sponsor = options.sponsor
+  const kv = options.kv ? Kv.serve(store, { servers }) : undefined
   let payer: { sealed: string; payer: Payer } | undefined
   let sponsoring: Promise<Payer> | undefined
 
@@ -599,6 +601,7 @@ export function create(options: Create.Options) {
       init = { ...init, headers: [...new Headers(init.headers), ['user-agent', 'nanocode-ts']] }
     if (kind === 'pay' && !(await record()))
       return Payment.locked(servers, {
+        fallback: kv,
         fetch: network,
         scripts: options.scripts,
         sponsor: sponsor && {

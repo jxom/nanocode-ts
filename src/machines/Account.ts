@@ -138,6 +138,7 @@ export declare namespace create {
   type Options = {
     deposit?: Payment.Deposit | undefined
     fetch?: typeof fetch
+    kv?: boolean | undefined
     rpc?: string
     scripts?: boolean
     secret: string | undefined
