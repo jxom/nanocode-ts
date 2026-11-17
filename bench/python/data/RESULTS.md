@@ -155,3 +155,33 @@ The nocopy lane's local build (frozen stdlib and site data read per entry from t
 SCORE nocopy-86d0a18 pass48=6/9 passUnl=9/9 warm48=310ms cold48=825ms warmUnl=383ms coldUnl=1084ms peakLin48=82.6MiB peakLinUnl=361.2MiB rss48=418.6MiB big48=5MB bigUnl=50MB
 
 Interleaved A/B over W1, W2, W4, W5a, W7 and W8 (two rounds, build-89d6d85 then this build): cold48 1,105 and 923 ms against 748 and 749 ms (-25%), coldUnl 811 and 814 against 658 and 639 ms (-20%), warm unchanged (warm48 325/300 against 302/306, warmUnl 156/150 against 156/158), peak linear 76.1 to 58.9 MiB at 48 MiB and 109.2 to 91.8 MiB at 1 GiB (-17 MiB, the frozen data no longer in linear memory), peak RSS 442-464 to 390-410 MiB. Every run starts 17-26 MiB lower (W8 34.2 to 10.3 MiB, W4 52.3 to 28.7). pass48 is still 6/9: W3, W5b and W6 now peak at 62.6, 82.6 and 63.5 MiB and still exceed 48 MiB above the image. Waits on the pin and a release to reach master's dist.
+
+### 2026-11-17 nocopy build (master 86d0a18 + nanocode 586c8be2d) in workerd 2026-11-17
+
+| id | workload | limit | status | mode | cold ms | warm ms | peak linear MiB | live linear MiB | max RSS MiB | note |
+| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| W1 | sine chart | 48 | pass | - | 1381 | 887 | 52.6 | 210.1 | 566.2 |  |
+| W1 | sine chart | unl | pass | - | 1329 | 193 | 62.9 | 62.9 | 386.1 |  |
+| W2 | repo files chart | 48 | pass | - | 1891 | 1454 | 58.9 | 235.8 | 665.1 |  |
+| W2 | repo files chart | unl | pass | - | 1868 | 747 | 82.4 | 82.4 | 462.6 |  |
+| W3 | csv 10 MB groupby chart | 48 | fail | - | 1010 | - | 62.6 | 62.6 | 589.9 | ta in chunks (a file line by line, a batch of rows at a time) and write results out as you go instead of holding it all  |
+| W3 | csv 10 MB groupby chart | unl | pass | numpy | 3846 | 3952 | 361.2 | 361.2 | 766.8 |  |
+| W4 | json 10k records table | 48 | pass | - | 253 | 51 | 28.7 | 28.7 | 374.7 |  |
+| W4 | json 10k records table | unl | pass | - | 251 | 57 | 28.7 | 28.7 | 374.6 |  |
+| W5a | bootstrap 90x4000 | 48 | pass | - | 598 | 100 | 28.9 | 28.9 | 350.1 |  |
+| W5a | bootstrap 90x4000 | unl | pass | - | 606 | 97 | 28.9 | 28.9 | 350.5 |  |
+| W5b | bootstrap 90x100000 | 48 | fail | - | 459 | - | 82.6 | 82.6 | 390.3 | ta in chunks (a file line by line, a batch of rows at a time) and write results out as you go instead of holding it all  |
+| W5b | bootstrap 90x100000 | unl | pass | - | 2195 | 1666 | 119.2 | 119.2 | 426.9 |  |
+| W6 | time series daily rolling chart | 48 | fail | - | 1203 | - | 63.5 | 63.5 | 441 | ta in chunks (a file line by line, a batch of rows at a time) and write results out as you go instead of holding it all  |
+| W6 | time series daily rolling chart | unl | pass | numpy | 3296 | 2232 | 239 | 239 | 617.1 |  |
+| W7 | five python3 calls numpy+mpl | 48 | pass | - | 4760 | 4215 | 53.1 | 1058.3 | 1392.3 |  |
+| W7 | five python3 calls numpy+mpl | unl | pass | - | 1680 | 639 | 91.8 | 91.8 | 418.1 |  |
+| W8 | git subprocess heavy | 48 | pass | - | 161 | 41 | 10.3 | 50.8 | 379.2 |  |
+| W8 | git subprocess heavy | unl | pass | - | 157 | 42 | 10.3 | 50.8 | 380.3 |  |
+| W9 | polars csv groupby chart | 48 | skip | - | 66 | - | 8.8 | 8.8 | 590 |  |
+| W9 | polars csv groupby chart | unl | skip | - | 70 | - | 8.8 | 8.8 | 589.4 |  |
+| W10 | big csv probe | 48 | pass | - | 1423 | - | 96.3 | 164.4 | 1690.6 | largest 5 MB |
+| W10 | big csv probe | unl | pass | - | 10891 | - | 623.7 | 623.7 | 1617.8 | largest 50 MB |
+SCORE nocopy-86d0a18-workerd pass48=6/9 passUnl=9/9 warm48=323ms cold48=819ms warmUnl=408ms coldUnl=1120ms peakLin48=82.6MiB peakLinUnl=361.2MiB rss48=1392.3MiB big48=5MB bigUnl=50MB
+
+Against build-89d6d85 in workerd: cold48 1,090 to 819 ms, coldUnl 1,662 to 1,120 ms, warmUnl 607 to 408 ms, peak VmHWM at 48 MiB 1,721 to 1,392 MiB. Dropped instances still go uncollected: W7 at 48 MiB leaves 1,058 MiB of python.wasm memory alive (was 1,402), W8's nested python3 51 MiB (was 170). Only keeping one instance per isolate (the warm lane) removes this.
