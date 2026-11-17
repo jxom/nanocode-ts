@@ -215,3 +215,35 @@ Against build-89d6d85 in workerd: cold48 1,090 to 819 ms, coldUnl 1,662 to 1,120
 SCORE warm-1d3032f pass48=6/9 passUnl=9/9 warm48=181ms cold48=735ms warmUnl=279ms coldUnl=1017ms peakLin48=99.8MiB peakLinUnl=204.2MiB rss48=419.1MiB big48=none bigUnl=50MB
 
 Against the baseline: warm48 382 to 181 ms and cold48 1,166 to 735 ms. At 48 MiB the instance now survives runs, so warm W1 drops from 1,063 to 213 ms and W7's five calls from 4.1 to 0.74 s. warmUnl 452 to 279 ms; peakLinUnl 376 to 204 MiB. With pandas, W3 warm at 1 GiB is 3,941 to 887 ms and W6 2,047 to 257 ms. Regression: big48 goes from 5 MB to none. W10 now takes the pandas path (pandas imports) and peaks at 68.5 MiB for 5 MB, where the csv path passed; at 1 GiB, W10 goes from 10.9 s / 650 MiB to 1.5 s / 323 MiB. W3, W5b and W6 still fail at 48 MiB (71.3, 99.8 and 71.4 MiB).
+
+### 2026-11-17 PIN master 9cf130e (nanocode a779fa929: pandas, nocopy, heap, warm gc fix; warm keep rule 1d3032f), Node
+
+The warm lane's build at the pinned revision, with master's TypeScript. This matches the warm lane's own run (warm48 170 ms, cold48 670 ms) within noise.
+
+| id | workload | limit | status | mode | cold ms | warm ms | peak linear MiB | live linear MiB | max RSS MiB | note |
+| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| W1 | sine chart | 48 | pass | - | 1576 | 238.5 | 60.8 | 60.8 | 341.2 |  |
+| W1 | sine chart | unl | pass | - | 1388 | 193.4 | 60.8 | 60.8 | 336.1 |  |
+| W2 | repo files chart | 48 | pass | - | 2040 | 760.7 | 65.5 | 65.5 | 378.5 |  |
+| W2 | repo files chart | unl | pass | - | 1885 | 765.3 | 65.5 | 65.5 | 385.1 |  |
+| W3 | csv 10 MB groupby chart | 48 | fail | - | 1182 | - | 71.3 | 71.3 | 451.9 | ta in chunks (a file line by line, a batch of rows at a time) and write results out as you go instead of holding it all  |
+| W3 | csv 10 MB groupby chart | unl | pass | pandas | 2458 | 976.1 | 204.2 | 204.2 | 591.5 |  |
+| W4 | json 10k records table | 48 | pass | - | 258 | 49.1 | 28.5 | 28.5 | 292.9 |  |
+| W4 | json 10k records table | unl | pass | - | 271 | 55.4 | 28.5 | 28.5 | 291.7 |  |
+| W5a | bootstrap 90x4000 | 48 | pass | - | 562 | 95.5 | 30.1 | 30.1 | 287.2 |  |
+| W5a | bootstrap 90x4000 | unl | pass | - | 569 | 105.1 | 30.1 | 30.1 | 294.8 |  |
+| W5b | bootstrap 90x100000 | 48 | fail | - | 520 | - | 99.8 | 0 | 333.9 | ta in chunks (a file line by line, a batch of rows at a time) and write results out as you go instead of holding it all  |
+| W5b | bootstrap 90x100000 | unl | pass | - | 2033 | 1445.5 | 99.8 | 99.8 | 362.6 |  |
+| W6 | time series daily rolling chart | 48 | fail | - | 1202 | - | 71.4 | 71.4 | 380.3 | ta in chunks (a file line by line, a batch of rows at a time) and write results out as you go instead of holding it all  |
+| W6 | time series daily rolling chart | unl | pass | pandas | 1656 | 251.3 | 132 | 132 | 463.6 |  |
+| W7 | five python3 calls numpy+mpl | 48 | pass | - | 1885 | 805 | 61.9 | 61.9 | 347.8 |  |
+| W7 | five python3 calls numpy+mpl | unl | pass | - | 1818 | 745.3 | 60.9 | 60.9 | 344.8 |  |
+| W8 | git subprocess heavy | 48 | pass | - | 187 | 42.9 | 11.8 | 10.9 | 291.4 |  |
+| W8 | git subprocess heavy | unl | pass | - | 187 | 42.3 | 11.8 | 10.9 | 291.8 |  |
+| W9 | polars csv groupby chart | 48 | skip | - | 92 | - | 10.2 | 10.2 | 356.2 |  |
+| W9 | polars csv groupby chart | unl | skip | - | 91 | - | 10.2 | 10.2 | 354 |  |
+| W10 | big csv probe | 48 | fail | - | 718 | - | 68.5 | 68.5 | 1192.4 | largest none |
+| W10 | big csv probe | unl | pass | - | 1521 | - | 322.9 | 322.9 | 1392.7 | largest 50 MB |
+SCORE pin-9cf130e pass48=6/9 passUnl=9/9 warm48=176ms cold48=740ms warmUnl=277ms coldUnl=1014ms peakLin48=99.8MiB peakLinUnl=204.2MiB rss48=451.9MiB big48=none bigUnl=50MB
+
+Against the BASELINE: warm48 382 to 176 ms (-54%), cold48 1,166 to 740 ms (-37%), warmUnl 452 to 277 ms (-39%), coldUnl 1,485 to 1,014 ms (-32%), peakLinUnl 376 to 204 MiB (-46%). pass48 is unchanged at 6/9, and big48 regressed from 5 MB to none: W10 takes the pandas path once pandas imports and peaks at 68.5 MiB.
