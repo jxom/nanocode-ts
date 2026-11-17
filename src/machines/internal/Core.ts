@@ -104,7 +104,7 @@ async function land(
   )
   if (authorization.scopes?.length && !scope)
     throw new Error(
-      'the access key is not on Tempo yet and none of its call scopes can carry its authorization: connect Tempo Wallet again',
+      'the access key is not on Tempo yet and none of its call scopes can carry its authorization: sign in with Tempo ID again',
     )
   const reasons: string[] = []
   for (const feeToken of feeTokens) {
@@ -520,7 +520,7 @@ export function create(options: Create.Options) {
     const current = await record()
     if (!sealed || !current)
       throw new Error(
-        'no access key is registered for this account, or it expired: connect Tempo Wallet again',
+        'no access key is registered for this account, or it expired: sign in with Tempo ID again',
       )
     const created = await payerOf(current, { deposit })
     payer = { sealed, payer: created }

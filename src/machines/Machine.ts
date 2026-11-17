@@ -13,22 +13,22 @@ export type Runtime = {
 }
 
 export const commands = [
-  { detail: 'connect Tempo Wallet and approve a key that pays for this agent', label: '/login' },
+  { detail: 'sign in with Tempo ID and approve a key that pays for this agent', label: '/login' },
   { detail: 'show your MACH and what the key may still spend', label: '/wallet' },
-  { detail: 'buy MACH in Tempo Wallet', label: '/fund' },
+  { detail: 'buy MACH on Tempo ID', label: '/fund' },
   { detail: "run this session's code on your machine with nc", label: '/hand' },
   { detail: 'clear the conversation and start a new session', label: '/clear' },
-  { detail: 'revoke the key in Tempo Wallet and forget it here', label: '/logout' },
+  { detail: 'revoke the key with Tempo ID and forget it here', label: '/logout' },
   { detail: 'list the commands', label: '/help' },
 ] as const
 
 export const limits = `at most ${amount(Wallet.allowance)} MACH, plus ${amount(Wallet.feeAllowance)} ${Wallet.usdc.symbol} for fees, until it expires a day later`
 
 export const unlockCommands = [
-  { detail: 'connect Tempo Wallet to unlock paid tools', label: '/login' },
+  { detail: 'sign in with Tempo ID to unlock paid tools', label: '/login' },
   { detail: 'show your MACH and what the key may still spend', label: '/wallet' },
-  { detail: 'buy MACH in Tempo Wallet', label: '/fund' },
-  { detail: 'revoke the key in Tempo Wallet and forget it here', label: '/logout' },
+  { detail: 'buy MACH on Tempo ID', label: '/fund' },
+  { detail: 'revoke the key with Tempo ID and forget it here', label: '/logout' },
 ] as const
 
 export function amount(atomics: bigint) {

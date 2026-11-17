@@ -35,7 +35,7 @@ export async function routes<E extends Env.Env>(
 export function relay(request: Request, pathname: string): Promise<Response> | undefined {
   if (
     request.method !== 'POST' ||
-    (pathname !== '/api/device/register' && pathname !== '/api/device/token')
+    (pathname !== '/api/device/code' && pathname !== '/api/device/token')
   )
     return undefined
   return device(request, pathname.slice('/api/device/'.length))

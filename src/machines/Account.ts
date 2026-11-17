@@ -305,11 +305,24 @@ export function keys<E>(options: KeysOptions<E>) {
   return { caller, logout, me, principal, register }
 }
 
+const deviceSteps: Record<string, string> = {
+  code: 'https://id.tempo.xyz/device/code',
+  token: 'https://id.tempo.xyz/oauth2/token',
+}
+
 export async function device(request: Request, step: string): Promise<Response> {
-  const response = await fetch(`https://wallet.tempo.xyz/api/auth/device/${step}`, {
+  const target = deviceSteps[step]
+  if (!target) return json({ error: 'not_found', error_description: `no device step ${step}` }, 404)
+  const dpop = request.headers.get('dpop')
+  const response = await fetch(target, {
     body: await request.text(),
-    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    headers: {
+      accept: 'application/json',
+      'content-type': request.headers.get('content-type') ?? 'application/x-www-form-urlencoded',
+      ...(dpop ? { dpop } : {}),
+    },
     method: 'POST',
+    redirect: 'manual',
   })
   return new Response(response.body, {
     headers: {

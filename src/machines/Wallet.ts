@@ -6,7 +6,7 @@ import type * as Tempo from 'viem/tempo'
 const modules = () =>
   Promise.all([
     import('accounts'),
-    import('accounts/deviceCode'),
+    import('accounts/internal'),
     import('ox/tempo'),
     import('viem'),
     import('viem/accounts'),
@@ -50,6 +50,10 @@ export const lifetime = 86_400
 
 export const rpc = 'https://rpc.tempo.xyz'
 
+export const id = 'https://id.tempo.xyz'
+
+export const clientId = 'cli:nanocode'
+
 const escrow: Address = '0x4d50500000000000000000000000000000000000'
 
 const swapper: Address = '0xF72E5107c32C655ffA7539a3C8e97B7C3cE16A3F'
@@ -64,7 +68,15 @@ const selectors = {
   withdraw: '0x41e2c664',
 } as const
 
-const storageKey = 'nanocode.machines.wallet'
+const storageKey = 'nanocode.machines.tempo-id'
+
+const legacyStorageKey = 'nanocode.machines.wallet'
+
+export type Tokens = {
+  accessToken: string
+  expiresAt: number
+  refreshToken?: string | undefined
+}
 
 export type AccessKey = {
   address: Address
@@ -72,6 +84,7 @@ export type AccessKey = {
   expiry: number
   key: Hex
   keyAddress: Address
+  tokens?: Tokens | undefined
 }
 
 export type Prompt = {
@@ -94,10 +107,7 @@ let options: Options = {
 
 export function configure(next: Partial<Options>) {
   options = { ...options, ...next }
-  provider = undefined
 }
-
-let provider: Promise<{ request(request: never): Promise<unknown> }> | undefined
 
 let prompt: (prompt: Prompt) => void = () => {}
 
@@ -129,31 +139,30 @@ export function onPrompt(listener: (prompt: Prompt) => void) {
   }
 }
 
+const steps: Record<string, string> = { '/device/code': 'code', '/oauth2/token': 'token' }
+
 function relay(input: RequestInfo | URL, init?: RequestInit) {
-  const url = String(input instanceof Request ? input.url : input)
-  const device = 'https://wallet.tempo.xyz/api/auth/device/'
-  return fetch(
-    url.startsWith(device)
-      ? new URL(`${options.relay}${url.slice(device.length)}`, location.href)
-      : input,
-    init,
-  )
+  const url = new URL(input instanceof Request ? input.url : String(input))
+  const step = url.origin === id ? steps[url.pathname] : undefined
+  return fetch(step ? new URL(`${options.relay}${step}`, location.href) : input, init)
 }
 
-function wallet() {
-  return (provider ??= load().then(
-    ([{ Provider, tempoWallet }, { tempoWallet: deviceWallet }]) =>
-      Provider.create({
-        adapter: framed()
-          ? deviceWallet({
-              fetch: relay as typeof fetch,
-              meta: { name: options.name, websiteUrl: options.websiteUrl },
-              onPrompt: (next) => prompt(next),
-            })
-          : tempoWallet(),
-        mpp: false,
-      }) as never,
-  ))
+export function permissions(expiry: number) {
+  return {
+    expiry,
+    limits: [
+      { limit: allowance, token: mach.address },
+      { limit: feeAllowance, token: usdc.address },
+    ],
+    scopes: [
+      { address: mach.address, selector: selectors.transferWithMemo },
+      { address: mach.address, recipients: [swapper], selector: selectors.approve },
+      { address: swapper, selector: selectors.swapTo },
+      ...[selectors.open, selectors.topUp, selectors.requestClose, selectors.withdraw].map(
+        (selector) => ({ address: escrow, selector }),
+      ),
+    ],
+  }
 }
 
 export async function reader(): Promise<Client<Transport, typeof Chains.tempo>> {
@@ -162,6 +171,7 @@ export async function reader(): Promise<Client<Transport, typeof Chains.tempo>> 
 }
 
 export function restore(): AccessKey | undefined {
+  localStorage.removeItem(legacyStorageKey)
   const saved = localStorage.getItem(storageKey)
   if (!saved) return undefined
   const parsed = JSON.parse(saved) as AccessKey
@@ -190,88 +200,126 @@ export async function reusable(connected: AccessKey) {
   return remaining > 0n
 }
 
-export async function connect(): Promise<AccessKey> {
+export async function connect(parameters: connect.Parameters = {}): Promise<AccessKey> {
   const saved = restore()
   if (saved && (await reusable(saved))) return saved
-  const [, , , { toHex }, { generatePrivateKey }, , { Account }, { tempo }] = await load()
+  const [{ Accounts }, { Actions }, , , { generatePrivateKey }, , { Account }, { tempo }] =
+    await load()
   const key = generatePrivateKey()
   const access = Account.fromSecp256k1(key)
+  const config = Accounts.from({
+    chain: tempo.id,
+    clientId,
+    fetch: relay as typeof fetch,
+    url: id,
+  })
   const expiry = Math.floor(Date.now() / 1000) + lifetime
-  const request = {
-    address: access.address,
-    chainId: toHex(tempo.id),
-    expiry,
-    keyType: 'secp256k1',
-    limits: [
-      { limit: toHex(allowance), token: mach.address },
-      { limit: toHex(feeAllowance), token: usdc.address },
-    ],
-    publicKey: access.publicKey,
-    scopes: [
-      { address: mach.address, selector: selectors.transferWithMemo },
-      { address: mach.address, recipients: [swapper], selector: selectors.approve },
-      { address: swapper, selector: selectors.swapTo },
-      ...[selectors.open, selectors.topUp, selectors.requestClose, selectors.withdraw].map(
-        (selector) => ({ address: escrow, selector }),
-      ),
-    ],
-  }
-  const result = (await (
-    await wallet()
-  ).request({
-    method: 'wallet_connect',
-    params: [{ capabilities: { authorizeAccessKey: request }, chainId: tempo.id }],
-  } as never)) as {
-    accounts: readonly {
-      address: Address
-      capabilities?: { keyAuthorization?: KeyAuthorization.Rpc }
-    }[]
-  }
-  const account = result.accounts[0]
-  const authorization = account?.capabilities?.keyAuthorization
-  if (!account || !authorization) throw new Error('Tempo Wallet returned no approval.')
+  const grant = await Actions.device.authorize(config, {
+    accessKey: {
+      ...permissions(expiry),
+      chainId: tempo.id,
+      publicKey: access.publicKey,
+      type: 'secp256k1',
+    },
+    device: options.name,
+    funding: { amount: format(allowance), token: mach.address },
+  })
+  prompt({
+    userCode: grant.userCode,
+    verificationUri: grant.verificationUri,
+    verificationUriFull: grant.verificationUriComplete,
+  })
+  if (!framed()) window.open(grant.verificationUriComplete, '_blank', 'noopener')
+  const approved = await grant.wait(parameters.signal ? { signal: parameters.signal } : {})
+  const authorization = approved.accessKey?.keyAuthorization
+  if (!authorization) throw new Error('Tempo ID returned no access key.')
   const connected: AccessKey = {
-    address: account.address,
+    address: approved.accessKey.account,
     authorization,
-    expiry,
+    expiry: authorization.expiry == null ? expiry : Number(BigInt(authorization.expiry)),
     key,
     keyAddress: access.address,
+    tokens: {
+      accessToken: approved.accessToken,
+      expiresAt: approved.expiresAt,
+      ...(approved.refreshToken ? { refreshToken: approved.refreshToken } : {}),
+    },
   }
   localStorage.setItem(storageKey, JSON.stringify(connected))
   return connected
 }
 
+export declare namespace connect {
+  type Parameters = {
+    signal?: AbortSignal | undefined
+  }
+}
+
+export const connectionsUrl = `${id}/connections`
+
+async function accessToken(tokens: Tokens): Promise<string | undefined> {
+  if (tokens.expiresAt > Date.now()) return tokens.accessToken
+  if (!tokens.refreshToken) return undefined
+  const response = await fetch(`${id}/oauth2/token`, {
+    body: new URLSearchParams({
+      client_id: clientId,
+      grant_type: 'refresh_token',
+      refresh_token: tokens.refreshToken,
+    }),
+    method: 'POST',
+  }).catch(() => undefined)
+  if (!response?.ok) return undefined
+  return ((await response.json()) as { access_token?: string }).access_token
+}
+
 export async function revoke(connected: AccessKey) {
-  const [, , , { toHex }, , , , { tempo }] = await load()
-  await (
-    await wallet()
-  ).request({
-    method: 'wallet_revokeAccessKey',
-    params: [
-      {
-        accessKeyAddress: connected.keyAddress,
-        address: connected.address,
-        chainId: toHex(tempo.id),
-      },
-    ],
-  } as never)
+  const token = connected.tokens ? await accessToken(connected.tokens) : undefined
+  const reason = await (async () => {
+    if (!token) return 'no Tempo ID session'
+    const response = await fetch(`${id}/v1/access-keys/revoke`, {
+      body: JSON.stringify({
+        account: connected.address,
+        address: connected.keyAddress,
+        chainId: mach.chainId,
+        client_id: clientId,
+      }),
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      method: 'POST',
+    }).catch(() => undefined)
+    if (response?.ok) return undefined
+    const body = (await response?.json().catch(() => undefined)) as
+      | { error?: string; code?: string }
+      | undefined
+    return body?.error ?? body?.code ?? (response ? `HTTP ${response.status}` : 'no response')
+  })()
+  if (!reason) return
+  window.open(connectionsUrl, '_blank', 'noopener')
+  throw new RevokeRequiredError(reason)
+}
+
+export class RevokeRequiredError extends Error {
+  override name = 'RevokeRequiredError'
+  constructor(reason: string) {
+    super(`revoke it on Tempo ID's connections page, ${connectionsUrl} (${reason})`)
+  }
 }
 
 export function forget() {
   localStorage.removeItem(storageKey)
+  localStorage.removeItem(legacyStorageKey)
 }
 
 export async function fund(connected: AccessKey) {
-  const [[{ Mach }], client] = await Promise.all([load(), wallet()])
-  return Mach.fund(client as never, { address: connected.address, displayName: options.name })
+  window.open(fundingUrl(connected), '_blank', 'noopener')
 }
 
 export function fundingUrl(connected: AccessKey) {
-  const url = new URL('https://wallet.tempo.xyz/agent')
-  url.searchParams.set('action', 'fund')
-  url.searchParams.set('intent', 'mach')
+  const url = new URL('/deposit', id)
   url.searchParams.set('address', connected.address)
-  url.searchParams.set('chainId', String(mach.chainId))
+  url.searchParams.set('chain', String(mach.chainId))
+  url.searchParams.set('client_id', clientId)
+  url.searchParams.set('funding_hint', format(allowance))
+  url.searchParams.set('funding_token', mach.address)
   return url.toString()
 }
 

@@ -219,7 +219,7 @@ export function create(options: create.Options = {}): Harness {
       )
     const wallet = session.payer === 'wallet' ? options.wallet?.(ctx.runId) : undefined
     if (session.payer === 'wallet' && !wallet)
-      throw new Error('this deployment has no Tempo Wallet to pay for models')
+      throw new Error('this deployment has no Tempo account to pay for models')
     const configuredFetch = options.sessionFetch?.(ctx.runId) ?? options.fetch
     const githubToken = options.github?.token
     const cellFetch = GitHub.wrap(Egress.guard(configuredFetch), {
