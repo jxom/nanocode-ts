@@ -2943,6 +2943,33 @@ const base64: CommandHandler = async (ctx) => {
   return 0
 }
 
+const cksum: CommandHandler = async (ctx) => {
+  let status = 0
+  for (const operand of ctx.args.length ? ctx.args : ['-']) {
+    let bytes: Uint8Array
+    try {
+      bytes = operand === '-' ? encode(ctx.stdin.read()) : await ctx.fs.read(ctx.resolve(operand))
+    } catch (error) {
+      if (!(error instanceof FsError)) throw error
+      ctx.stderr.write('cksum: ' + readFailure(ctx, operand, error) + '\n')
+      status = 1
+      continue
+    }
+    let crc = 0
+    const step = (byte: number) => {
+      crc ^= byte << 24
+      for (let bit = 0; bit < 8; bit++) crc = crc & 0x80000000 ? (crc << 1) ^ 0x04c11db7 : crc << 1
+    }
+    for (const byte of bytes) step(byte)
+    for (let length = bytes.length; length > 0; length = Math.floor(length / 256))
+      step(length & 0xff)
+    ctx.stdout.write(
+      (~crc >>> 0) + ' ' + bytes.length + (ctx.args.length ? ' ' + operand : '') + '\n',
+    )
+  }
+  return status
+}
+
 function digest(algorithm: string): CommandHandler {
   return checksum(
     async (bytes) =>
@@ -3533,6 +3560,7 @@ export const textCommands: Record<string, CommandHandler> = {
   sha256sum: digest('SHA-256'),
   sha1sum: digest('SHA-1'),
   sha512sum: digest('SHA-512'),
+  cksum,
   expr,
   fold,
   column,

@@ -264,7 +264,7 @@ export function posixRegExp(
       if (result) {
         emit(result[0])
         i = result[1] - 1
-      } else emit('\\[')
+      } else throw new SyntaxError('Invalid regular expression: Unmatched [, [^, [:, [., or [=')
     } else if (c === '*') repeat('*', '*')
     else if (extended && (c === '+' || c === '?')) repeat(c, c)
     else if (extended && (c === '(' || c === '|')) alternate(c)
