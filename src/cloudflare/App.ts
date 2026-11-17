@@ -223,6 +223,18 @@ const workspaceFileBytes = 32 * 1024 * 1024
 const pythonStepsPerMs = 42_000
 const pythonCpuMs = 5_000
 
+// Where the default python.data loader finds the image in the Worker's static assets (env.ASSETS).
+const pythonDataPath = '/nanocode-ts/python.data'
+
+async function assetData(env: unknown): Promise<ArrayBuffer | undefined> {
+  const assets = (env as { ASSETS?: { fetch(input: string): Promise<Response> } } | undefined)
+    ?.ASSETS
+  if (!assets) return undefined
+  const response = await assets.fetch('https://assets.invalid' + pythonDataPath)
+  if (!response.ok) throw new Error('ASSETS answered ' + response.status + ' for ' + pythonDataPath)
+  return response.arrayBuffer()
+}
+
 const workersAiModel = (model: string | undefined): boolean =>
   model === 'glm-5.3' || (model?.startsWith('@cf/') ?? false)
 
@@ -2535,6 +2547,10 @@ ${input.request_id}`
                   ? {
                       python: {
                         module: pythonModule,
+                        data: () =>
+                          options.workspace && options.workspace.pythonData
+                            ? options.workspace.pythonData(this.env)
+                            : assetData(this.env),
                         cpuMs:
                           options.workspace?.pythonCpuMs ??
                           (this.env.PYTHON_CPU_MS === undefined
@@ -5099,6 +5115,12 @@ export declare namespace create {
           psh?: WebAssembly.Module | Promise<WebAssembly.Module>
           pythonCpuMs?: number
           pythonModule?: WebAssembly.Module | Promise<WebAssembly.Module>
+          // Loads python.data, the image python.wasm starts from, once per isolate. Workers can't hold it in
+          // the bundle, so by default it is fetched from the static assets binding (env.ASSETS) at
+          // /nanocode-ts/python.data: copy node_modules/nanocode-ts/dist/python.data there.
+          pythonData?(
+            env: E,
+          ): Uint8Array | ArrayBuffer | Promise<Uint8Array | ArrayBuffer | undefined>
         }
     workspaceTools?: Contracts.AgentConfiguration['workspace_tools']
   }

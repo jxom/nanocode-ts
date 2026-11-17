@@ -1,6 +1,8 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, renameSync, rmSync, symlinkSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
+import { gzipSync } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import { fetchCrates, root } from './wasm.mjs'
 
@@ -211,9 +213,33 @@ function warmed(module) {
   return new Uint8Array(exports.memory.buffer)
 }
 
-export function bake(bytes) {
+// With `image: true` the warmed memory leaves the module as python.data, which the host writes into each new
+// instance's memory before its first call (src/bash/internal/commands/rustpython.ts), so that a host with a
+// cap on code size (a Cloudflare Worker) can serve it as a static asset. python.data is gzip of imageMagic,
+// the SHA-256 of the bytes, their base address and length (u32 little endian), then the bytes; the module's
+// imageSection custom section holds the same 40 bytes after the magic.
+export const imageMagic = 'NCPYMEM1'
+export const imageSection = 'nanocode.python.image'
+
+export function bake(bytes, options = {}) {
   const memory = warmed(new WebAssembly.Module(bytes))
   const runs = segments(memory)
+  const split = options.image === true
+  let image
+  let section
+  if (split) {
+    const base = runs[0][0]
+    const body = memory.subarray(base, runs[runs.length - 1][1])
+    const header = new Uint8Array(48)
+    header.set(new TextEncoder().encode(imageMagic), 0)
+    header.set(createHash('sha256').update(body).digest(), 8)
+    new DataView(header.buffer).setUint32(40, base, true)
+    new DataView(header.buffer).setUint32(44, body.length, true)
+    image = gzipSync(join8([header, body]), { level: 9 })
+    const name = new TextEncoder().encode(imageSection)
+    const payload = join8([Uint8Array.from(uleb(name.length)), name, header.subarray(8)])
+    section = join8([Uint8Array.from([0, ...uleb(payload.length)]), payload])
+  }
   const parts = [bytes.subarray(0, 8)]
   let at = 8
   while (at < bytes.length) {
@@ -241,17 +267,20 @@ export function bake(bytes) {
       if (mutable !== 1) throw new Error('python.wasm has ' + mutable + ' mutable globals, and the snapshot restores only the stack pointer')
     }
     if (id === 11) {
+      if (split) continue
       const data = join8([Uint8Array.from(uleb(runs.length)), ...runs.flatMap(([from, to]) => [Uint8Array.from([0, 0x41, ...sleb(from), 0x0b, ...uleb(to - from)]), memory.subarray(from, to)])])
       parts.push(Uint8Array.from([11, ...uleb(data.length)]), data)
       continue
     }
     if (id === 12) {
+      if (split) continue
       const count = uleb(runs.length)
       parts.push(Uint8Array.from([12, ...uleb(count.length), ...count]))
       continue
     }
     parts.push(bytes.subarray(begin, at))
   }
+  if (split) return { module: join8([...parts, section]), image }
   return join8(parts)
 }
 

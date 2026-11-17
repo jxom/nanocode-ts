@@ -86,6 +86,52 @@ const errno: Record<string, number> = {
 
 const instances = new WeakMap<WebAssembly.Module, Instance>()
 
+// python.wasm's warmed memory ships beside it as python.data rather than as data segments, so that hosts
+// with a cap on code size (Cloudflare Workers) can fetch it as a static asset. The module's custom section
+// names the image it needs: its SHA-256, base address and length.
+export type Image = { base: number; bytes: Uint8Array }
+
+const imageSection = 'nanocode.python.image'
+
+const imageMagic = 'NCPYMEM1'
+
+const images = new WeakMap<WebAssembly.Module, Image>()
+
+function descriptor(module: WebAssembly.Module): Uint8Array | undefined {
+  const [section] = WebAssembly.Module.customSections(module, imageSection)
+  return section && new Uint8Array(section)
+}
+
+export function needsImage(module: WebAssembly.Module): boolean {
+  return descriptor(module) !== undefined && !images.has(module)
+}
+
+async function gunzip(bytes: Uint8Array): Promise<Uint8Array> {
+  const stream = new Response(bytes as unknown as ArrayBuffer).body!.pipeThrough(
+    new DecompressionStream('gzip') as unknown as TransformStream<Uint8Array, Uint8Array>,
+  )
+  return new Uint8Array(await new Response(stream).arrayBuffer())
+}
+
+export async function provide(
+  module: WebAssembly.Module,
+  data: Uint8Array | ArrayBuffer,
+): Promise<void> {
+  const wanted = descriptor(module)
+  if (!wanted || images.has(module)) return
+  let bytes = data instanceof Uint8Array ? data : new Uint8Array(data)
+  if (bytes[0] === 0x1f && bytes[1] === 0x8b) bytes = await gunzip(bytes)
+  const header = bytes.subarray(0, 8 + wanted.length)
+  if (text.decode(header.subarray(0, 8)) !== imageMagic)
+    throw new Error('it is not a python.data image')
+  if (!header.subarray(8).every((byte, index) => byte === wanted[index]))
+    throw new Error('it belongs to another build of python.wasm')
+  const view = new DataView(header.buffer, header.byteOffset, header.length)
+  const length = view.getUint32(44, true)
+  if (bytes.length - header.length !== length) throw new Error('it is truncated')
+  images.set(module, { base: view.getUint32(40, true), bytes: bytes.subarray(header.length) })
+}
+
 const randomBytes = 65536
 
 const text = new TextDecoder()
@@ -224,7 +270,12 @@ function instantiate(module: WebAssembly.Module): Instance {
       host_time: () => Date.now(),
     },
   }
+  const image = images.get(module)
+  if (!image && descriptor(module))
+    throw new Error('python.wasm runs only with its python.data image')
   state.exports = new WebAssembly.Instance(module, imports).exports as unknown as Exports
+  if (image)
+    new Uint8Array(state.exports.memory.buffer, image.base, image.bytes.length).set(image.bytes)
   state.initial = state.exports.memory.buffer.byteLength
   return state
 }

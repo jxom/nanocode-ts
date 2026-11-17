@@ -14,6 +14,9 @@ type Mode = {
   filename: string
 }
 
+const NO_IMAGE =
+  "python3 needs nanocode-ts's python.data beside python.wasm: pass it as Python's data option"
+
 const NO_MODULE =
   "python3 needs nanocode-ts's python.wasm: this host can't load it, so pass it as Python's module option"
 
@@ -101,6 +104,11 @@ export function pythonCommands(
       ctx.stderr.write(NO_MODULE + '\n')
       return 126
     }
+    const missing = await rustImage(options, compiled)
+    if (missing) {
+      ctx.stderr.write(missing + '\n')
+      return 126
+    }
     return executeRust(ctx, compiled, {
       engine: psh === undefined ? undefined : await Psh.load(await psh),
       maxBytes,
@@ -165,6 +173,55 @@ function canCompile(): boolean {
 const packagedRust: { module?: Promise<WebAssembly.Module | undefined> } = {}
 
 const packagedPython = '../../../python.wasm'
+
+const packagedImage = '../../../python.data'
+
+const imageLoads = new WeakMap<WebAssembly.Module, Promise<string | undefined>>()
+
+type Data = Uint8Array | ArrayBuffer
+
+async function packagedData(): Promise<Data | undefined> {
+  const process = (globalThis as { process?: { getBuiltinModule?: (id: string) => unknown } })
+    .process
+  const fs = process?.getBuiltinModule?.('node:fs') as
+    | { promises: { readFile(path: URL): Promise<Uint8Array> } }
+    | undefined
+  const meta = import.meta as { resolve?: (specifier: string) => string; url?: string }
+  const url = meta.resolve
+    ? new URL(meta.resolve('nanocode-ts/python.data'))
+    : meta.url
+      ? new URL(packagedImage, meta.url)
+      : undefined
+  if (!fs || !url) return undefined
+  return fs.promises.readFile(url)
+}
+
+// Loads python.data once per module and isolate; a failed load is retried on the next run.
+function rustImage(
+  options: PythonOptions,
+  module: WebAssembly.Module,
+): Promise<string | undefined> {
+  if (!RustPython.needsImage(module)) return Promise.resolve(undefined)
+  let loading = imageLoads.get(module)
+  if (!loading) {
+    loading = (async () => {
+      const data = await (typeof options.data === 'function'
+        ? options.data()
+        : (options.data ?? packagedData()))
+      if (!data) return NO_IMAGE
+      await RustPython.provide(module, data)
+      return undefined
+    })().catch(
+      (error: unknown) =>
+        NO_IMAGE + ': ' + (error instanceof Error ? error.message : String(error)),
+    )
+    imageLoads.set(module, loading)
+    void loading.then((failed) => {
+      if (failed) imageLoads.delete(module)
+    })
+  }
+  return loading
+}
 
 function rustModule(options: PythonOptions): Promise<WebAssembly.Module | undefined> {
   if (options.module === false) return Promise.resolve(undefined)

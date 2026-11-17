@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const root = fileURLToPath(new URL("..", import.meta.url));
-export const outputs = ["nanocode_wasm.wasm", "interpreter.wasm", "psh.wasm", "python.wasm", "models.js", "models.d.ts"];
+export const outputs = ["nanocode_wasm.wasm", "interpreter.wasm", "psh.wasm", "python.wasm", "python.data", "models.js", "models.d.ts"];
 export const manifestName = "nanocode-wasm.json";
 export const repository = "nanocodexyz/nanocode-ts";
 
