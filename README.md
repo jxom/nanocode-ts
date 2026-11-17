@@ -27,7 +27,7 @@ npm install https://github.com/nanocodexyz/nanocode-ts/releases/download/build-<
 | `nanocode-ts/vercel` | Sessions in Workflow runs, as in [durable-vercel](https://github.com/nanocodexyz/durable-vercel) |
 | `nanocode-ts/client`, `nanocode-ts/react` | The browser client and the headless chat, styled by [nds](https://github.com/nanocodexyz/nds) |
 | `nanocode-ts/bash` | The simulated shell that Code Mode cells run without a machine |
-| `nanocode-ts/machines` | Tempo Wallet and MPP payments |
+| `nanocode-ts/machines` | Tempo ID sign-in and MPP payments |
 
 ## License
 

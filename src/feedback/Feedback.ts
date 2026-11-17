@@ -285,13 +285,13 @@ export function mount(options: mount.Options): mount.ReturnType {
 
     if (state.at === 'sending' && state.prompt)
       return [
-        element('h2', { text: 'Approve in Tempo Wallet' }),
-        element('p', { className: 'muted', text: 'Tempo Wallet shows this code:' }),
+        element('h2', { text: 'Approve in Tempo ID' }),
+        element('p', { className: 'muted', text: 'Tempo ID shows this code:' }),
         element('p', { className: 'code', text: state.prompt.code }),
         element('div', {
           children: [
             button('Cancel', { on: cancel }),
-            link('Open Tempo Wallet', { href: state.prompt.url, primary: true }),
+            link('Open Tempo ID', { href: state.prompt.url, primary: true }),
           ],
           className: 'row',
         }),

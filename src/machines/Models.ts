@@ -57,12 +57,12 @@ export function explain(error: unknown) {
     (/InsufficientBalance/.test(text) && text.toLowerCase().includes(Wallet.usdc.address))
   )
     return new Error(
-      `This payment pays its own fee in ${Wallet.usdc.symbol}, which the service does not sponsor, and your wallet holds too little. Add ${Wallet.usdc.symbol} in Tempo Wallet, then ask again.`,
+      `This payment pays its own fee in ${Wallet.usdc.symbol}, which the service does not sponsor, and your wallet holds too little. Add ${Wallet.usdc.symbol} on Tempo ID, then ask again.`,
       { cause: error },
     )
   if (/InsufficientBalance/.test(text))
     return new Error(
-      'Your Tempo Wallet holds too little MACH for this payment. Type /fund to buy MACH, then ask again.',
+      'Your Tempo account holds too little MACH for this payment. Type /fund to buy MACH, then ask again.',
       { cause: error },
     )
   if (/SpendingLimitExceeded/.test(text))

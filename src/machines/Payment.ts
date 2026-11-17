@@ -51,7 +51,7 @@ export type Sponsor = {
   key: Hex
 }
 
-export const required = 'tempo_wallet_required'
+export const required = 'tempo_id_required'
 
 export const unlocked: Record<string, string> = {
   gateway: 'gateway storage, AI and compute',
@@ -74,12 +74,12 @@ export function unlocks(servers: readonly Mcp.Server[], scripts = true) {
 }
 
 export function explanation(servers: readonly Mcp.Server[], scripts = true) {
-  return `${required}: this tool is paid with Tempo machine payments, and the user has not connected a Tempo Wallet, so nothing was paid or done. Tell the user to connect their Tempo Wallet with the Connect button in the chat, which unlocks ${unlocks(servers, scripts)}; then retry the call. Do not retry it before they connect.`
+  return `${required}: this tool is paid with Tempo machine payments, and the user has not signed in with Tempo ID, so nothing was paid or done. Tell the user to sign in with Tempo ID with the Connect button in the chat, which unlocks ${unlocks(servers, scripts)}; then retry the call. Do not retry it before they connect.`
 }
 
 export function exceeded(servers: readonly Mcp.Server[], options: exceeded.Options) {
   const { allowance, scripts = true } = options
-  return `${required}: this deployment pays for each visitor's paid tool calls up to ${allowance.budget} USD and ${allowance.calls} calls every ${allowance.windowMs / 60_000} minutes, and it did not pay for this one, so nothing was paid or done. Tell the user to connect their Tempo Wallet with the Connect button in the chat, which unlocks ${unlocks(servers, scripts)}; then retry the call. Do not retry it before they connect.`
+  return `${required}: this deployment pays for each visitor's paid tool calls up to ${allowance.budget} USD and ${allowance.calls} calls every ${allowance.windowMs / 60_000} minutes, and it did not pay for this one, so nothing was paid or done. Tell the user to sign in with Tempo ID with the Connect button in the chat, which unlocks ${unlocks(servers, scripts)}; then retry the call. Do not retry it before they connect.`
 }
 
 export declare namespace exceeded {

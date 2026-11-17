@@ -81,7 +81,7 @@ export function useMachine(runtime: Machine.Runtime, options: useMachine.Options
         ? undefined
         : note(
             'tool',
-            `Not logged in. Type /login to connect your Tempo Wallet. It asks you to approve a key that this site's Worker keeps encrypted and pays with, ${Machine.limits}, and only for payments. The agent then pays for its own model and every service it calls.`,
+            `Not logged in. Type /login to sign in with Tempo ID. It asks you to approve a key that this site's Worker keeps encrypted and pays with, ${Machine.limits}, and only for payments. The agent then pays for its own model and every service it calls.`,
           )
     setConnected(saved)
     if (!restored && options.greet !== false)
@@ -117,14 +117,14 @@ export function useMachine(runtime: Machine.Runtime, options: useMachine.Options
       await Cloud.logout(current).catch((error: unknown) =>
         note('error', `The Worker did not forget the key (${Machine.message(error)}).`),
       )
-    note('tool', 'Opening Tempo Wallet to revoke the key.')
+    note('tool', 'Revoking the key with Tempo ID.')
     try {
       await Wallet.revoke(saved)
-      note('tool', 'Tempo Wallet revoked the key.')
+      note('tool', 'Tempo ID revoked the key.')
     } catch (error) {
       note(
         'error',
-        `Tempo Wallet did not revoke the key (${Machine.message(error)}). It stays valid until ${Machine.until(saved)} with what is left of its limit, but this page no longer keeps it.`,
+        `Tempo ID did not revoke the key (${Machine.message(error)}). It stays valid until ${Machine.until(saved)} with what is left of its limit, but this page no longer keeps it.`,
       )
     }
     Wallet.forget()
@@ -254,13 +254,13 @@ async function approve(note: Note): Promise<Wallet.AccessKey> {
     note(
       'tool',
       Wallet.framed()
-        ? "X's player cannot show Tempo Wallet, so Tempo Wallet gives you a code instead. ⌘-click the link below (Ctrl-click on Windows) to open it in a normal tab, or open it on your phone, and approve the key with your passkey."
-        : 'Opening Tempo Wallet. Approve the key with your passkey.',
+        ? "X's player cannot show Tempo ID, so Tempo ID gives you a code instead. ⌘-click the link below (Ctrl-click on Windows) to open it in a normal tab, or open it on your phone, check the code and approve the key with your passkey."
+        : 'Opening Tempo ID. Check the code below and approve the key with your passkey.',
     )
     pending = await Wallet.connect()
     note(
       'tool',
-      `Tempo Wallet approved key ${Wallet.short(pending.keyAddress)} for ${Wallet.short(pending.address)}: ${Machine.limits}, at ${Machine.until(pending)}. Its first payment puts it on Tempo.`,
+      `Tempo ID approved key ${Wallet.short(pending.keyAddress)} for ${Wallet.short(pending.address)}: ${Machine.limits}, at ${Machine.until(pending)}. Its first payment puts it on Tempo.`,
     )
   }
   return pending
@@ -286,11 +286,11 @@ async function fundWallet(
   if (Wallet.framed()) {
     note(
       'tool',
-      "X's player cannot show Tempo Wallet. ⌘-click the link below (Ctrl-click on Windows) to buy MACH in a normal tab, then type /wallet to see your balance.",
+      "X's player cannot show Tempo ID. ⌘-click the link below (Ctrl-click on Windows) to buy MACH in a normal tab, then type /wallet to see your balance.",
     )
     return setCheckout({ address: saved.address, url: Wallet.fundingUrl(saved) })
   }
-  note('tool', 'Opening MACH checkout in Tempo Wallet.')
+  note('tool', 'Opening Tempo ID to buy MACH.')
   await Wallet.fund(saved)
 }
 
@@ -310,7 +310,7 @@ function guard(event: MouseEvent<HTMLAnchorElement>, note: Note) {
   event.preventDefault()
   note(
     'tool',
-    "That link would open in a tab that keeps X's sandbox, where Tempo Wallet cannot sign you in. ⌘-click it (Ctrl-click on Windows) to open a normal tab, or open it on your phone.",
+    "That link would open in a tab that keeps X's sandbox, where Tempo ID cannot sign you in. ⌘-click it (Ctrl-click on Windows) to open a normal tab, or open it on your phone.",
   )
 }
 
@@ -384,14 +384,14 @@ export function useUnlock(
   async function logout() {
     const saved = connected ?? Wallet.restore()
     if (!saved) return note('tool', 'Not connected.')
-    note('tool', 'Opening Tempo Wallet to revoke the key.')
+    note('tool', 'Revoking the key with Tempo ID.')
     try {
       await Wallet.revoke(saved)
-      note('tool', 'Tempo Wallet revoked the key.')
+      note('tool', 'Tempo ID revoked the key.')
     } catch (error) {
       note(
         'error',
-        `Tempo Wallet did not revoke the key (${Machine.message(error)}). It stays valid until ${Machine.until(saved)} with what is left of its limit, but this page no longer keeps it.`,
+        `Tempo ID did not revoke the key (${Machine.message(error)}). It stays valid until ${Machine.until(saved)} with what is left of its limit, but this page no longer keeps it.`,
       )
     }
     await keyring.logout().catch(() => undefined)
@@ -580,7 +580,7 @@ export function Prompts(props: Prompts.Props) {
     <>
       {device && link && (
         <p {...part('prompt')}>
-          Approve in Tempo Wallet:{' '}
+          Approve in Tempo ID:{' '}
           <a href={link} onClick={open} rel="noreferrer" target="_blank">
             {link.replace(/^https:\/\//, '')}
           </a>{' '}
@@ -589,7 +589,7 @@ export function Prompts(props: Prompts.Props) {
       )}
       {checkout && (
         <p {...part('prompt')}>
-          Buy MACH in Tempo Wallet:{' '}
+          Buy MACH on Tempo ID:{' '}
           <a href={checkout.url} onClick={open} rel="noreferrer" target="_blank">
             checkout for {Wallet.short(checkout.address)}
           </a>
@@ -614,8 +614,8 @@ export function SignIn(props: SignIn.Props) {
         {props.children ?? (
           <>
             This chat is a nanocode agent in Code Mode. It pays for its model and every service its
-            scripts call from your Tempo Wallet, in MACH over MPP. Sign in to approve a key that may
-            spend {Machine.limits}.
+            scripts call from your Tempo account, in MACH over MPP. Sign in to approve a key that
+            may spend {Machine.limits}.
           </>
         )}
       </p>
@@ -625,7 +625,7 @@ export function SignIn(props: SignIn.Props) {
         type="button"
         {...part('signInButton')}
       >
-        {machine.working ? 'Waiting for Tempo Wallet…' : 'Sign in with Tempo'}
+        {machine.working ? 'Waiting for Tempo ID…' : 'Sign in with Tempo'}
       </button>
     </div>
   )
@@ -707,7 +707,7 @@ export function Unlock(props: Unlock.Props) {
   return (
     <p {...part('unlock')}>
       <span>
-        Connect Tempo Wallet to unlock tools: {Payment.unlocks(machine.servers, machine.scripts)}.
+        Sign in with Tempo ID to unlock tools: {Payment.unlocks(machine.servers, machine.scripts)}.
       </span>
       <button
         disabled={machine.working}
@@ -715,7 +715,7 @@ export function Unlock(props: Unlock.Props) {
         type="button"
         {...part('unlockButton')}
       >
-        {machine.working ? 'Waiting for Tempo Wallet…' : 'Connect'}
+        {machine.working ? 'Waiting for Tempo ID…' : 'Connect'}
       </button>
     </p>
   )
@@ -731,7 +731,7 @@ export function walletConnection(machine: Unlocking): Connection {
   const connected = machine.connected
   return {
     id: 'wallet',
-    label: 'Tempo Wallet',
+    label: 'Tempo ID',
     detail: 'pay for tools and services per request',
     connect: () => void machine.command('/login', false),
     status: connected
@@ -768,7 +768,7 @@ export function WalletCard(props: WalletCard.Props) {
     if (!latest || retried) return null
     return (
       <div {...part('walletCard', { connected: true })}>
-        <p {...part('walletCardTitle')}>Tempo Wallet connected</p>
+        <p {...part('walletCardTitle')}>Tempo ID connected</p>
         <p {...part('walletCardText')}>
           Paid tools are unlocked. The model still runs on this site&apos;s API key.
         </p>
@@ -776,9 +776,7 @@ export function WalletCard(props: WalletCard.Props) {
           <button
             disabled={machine.busy}
             onClick={() =>
-              machine.submit(
-                'Retry the paid tool call that needed a Tempo Wallet; it is connected now.',
-              )
+              machine.submit('Retry the paid tool call that needed Tempo ID; it is connected now.')
             }
             type="button"
             {...part('walletCardButton')}
@@ -793,7 +791,7 @@ export function WalletCard(props: WalletCard.Props) {
     <div {...part('walletCard', { connected: false })}>
       <p {...part('walletCardTitle')}>This tool is paid with Tempo</p>
       <p {...part('walletCardText')}>
-        Connect Tempo Wallet to unlock {Payment.unlocks(machine.servers, machine.scripts)}. You
+        Sign in with Tempo ID to unlock {Payment.unlocks(machine.servers, machine.scripts)}. You
         approve a key that may spend {Machine.limits}; the model still runs on this site&apos;s API
         key.
       </p>
@@ -804,7 +802,7 @@ export function WalletCard(props: WalletCard.Props) {
           type="button"
           {...part('walletCardButton')}
         >
-          {machine.working ? 'Waiting for Tempo Wallet…' : 'Connect Tempo Wallet'}
+          {machine.working ? 'Waiting for Tempo ID…' : 'Sign in with Tempo ID'}
         </button>
       </div>
     </div>
