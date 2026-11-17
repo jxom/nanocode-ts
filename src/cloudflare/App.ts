@@ -491,6 +491,30 @@ function closeQuietly(socket: Contracts.MessageSocket): void {
   } catch {}
 }
 
+function raced<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason)
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason)
+    signal.addEventListener('abort', abort, { once: true })
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', abort)
+        resolve(value)
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', abort)
+        reject(error)
+      },
+    )
+  })
+}
+
+type ParkedHandshake = {
+  key: string
+  settled: Promise<Contracts.SpareSocket | undefined>
+  claimed: boolean
+}
+
 type Opened = {
   opening: string
   runtime: Promise<AgentRuntime.AgentRuntime>
@@ -688,6 +712,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
       string,
       { key: string; spare: Contracts.SpareSocket; timer: ReturnType<typeof setTimeout> }
     >()
+    private readonly handshakes = new Map<string, ParkedHandshake>()
     private pumping = false
     private handReady = false
     private modelAt?: number
@@ -731,6 +756,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
       runtime_retirements: 0,
       model_socket_spares: 0,
       model_socket_reuses: 0,
+      model_socket_adoptions: 0,
       host_tool_calls: 0,
       prompt_cache_primes: 0,
       prompt_cache_prime_failures: 0,
@@ -3089,7 +3115,8 @@ ${input.request_id}`
                 open: async (request, signal, timing) => {
                   if (this.dispatchBlocked(scope)) throw new Error('request authority stopped')
                   this.dispatched(scope)
-                  const spare = this.takeSpare(scope, request)
+                  const spare =
+                    this.takeSpare(scope, request) ?? (await this.adopt(scope, request, signal))
                   if (spare) {
                     this.dispatching?.()
                     return {
@@ -3102,7 +3129,6 @@ ${input.request_id}`
                   }
                   const handshake = egress(this.env).fetch(
                     new Request('https://egress.internal/socket', {
-                      signal,
                       headers: {
                         upgrade: 'websocket',
                         'x-nanocode-socket': headerJson({
@@ -3119,7 +3145,13 @@ ${input.request_id}`
                     }),
                   )
                   this.dispatching?.()
-                  const response = await handshake
+                  let response: Response
+                  try {
+                    response = await raced(handshake, signal)
+                  } catch (error) {
+                    if (signal.aborted) this.park(scope, request, handshake)
+                    throw error
+                  }
                   this.diagnostic(
                     scope,
                     response.headers.get('x-nanocode-model-diagnostic'),
@@ -4288,6 +4320,71 @@ ${input.request_id}`
       this.counts.model_socket_spares++
     }
 
+    private park(
+      scope: string,
+      request: Contracts.SpareSocket['request'],
+      handshake: Promise<Response>,
+    ): void {
+      const settled = handshake.then(
+        (response): Contracts.SpareSocket | undefined => {
+          const socket = response.status === 101 ? (response.webSocket ?? undefined) : undefined
+          if (!socket) {
+            void response.body?.cancel().catch(() => {})
+            return undefined
+          }
+          socket.accept()
+          return {
+            request,
+            socket,
+            status: response.status,
+            headers: [...response.headers],
+            idle_ms: Number(response.headers.get('x-nanocode-stream-idle-ms')),
+          }
+        },
+        () => undefined,
+      )
+      const parked: ParkedHandshake = { key: spareKey(request), settled, claimed: false }
+      const previous = this.handshakes.get(scope)
+      if (previous) this.discard(previous)
+      this.handshakes.set(scope, parked)
+      void settled.then((spare) => {
+        if (this.handshakes.get(scope) === parked) this.handshakes.delete(scope)
+        if (parked.claimed || !spare) return
+        this.keepSpare(scope, spare)
+      })
+    }
+
+    private discard(parked: ParkedHandshake): void {
+      parked.claimed = true
+      void parked.settled.then((spare) => spare && closeQuietly(spare.socket))
+    }
+
+    private async adopt(
+      scope: string,
+      request: Contracts.SpareSocket['request'],
+      signal: AbortSignal,
+    ): Promise<Contracts.SpareSocket | undefined> {
+      const parked = this.handshakes.get(scope)
+      if (!parked || parked.key !== spareKey(request)) return undefined
+      this.handshakes.delete(scope)
+      parked.claimed = true
+      let spare: Contracts.SpareSocket | undefined
+      try {
+        spare = await raced(parked.settled, signal)
+      } catch (error) {
+        void parked.settled.then((late) => late && this.keepSpare(scope, late))
+        throw error
+      }
+      if (!spare) return undefined
+      if (this.deleted || !socketOpen(spare.socket)) {
+        closeQuietly(spare.socket)
+        return undefined
+      }
+      this.counts.model_socket_reuses++
+      this.counts.model_socket_adoptions++
+      return spare
+    }
+
     private takeSpare(
       scope: string,
       request: Contracts.SpareSocket['request'],
@@ -4314,6 +4411,8 @@ ${input.request_id}`
 
     private releaseConnections(): void {
       for (const scope of this.spares.keys()) this.dropSpare(scope)
+      for (const parked of this.handshakes.values()) this.discard(parked)
+      this.handshakes.clear()
       for (const [scope, runtime] of this.residents()) {
         if (runtime.remote) this.retire(scope, runtime)
         else runtime.releaseConnections()
