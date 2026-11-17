@@ -502,6 +502,11 @@ type Lifecycle = {
   prewarmed?: { session: string; provider: string; model: string; executor: string }
 }
 type Connection = { executor: HandExecutor; hand: string; runtime: string | null }
+type HandCheck = {
+  allowed: boolean | Promise<boolean>
+  descriptor: SessionDescriptor
+  expires: number
+}
 const ownerScope = 'owner'
 const unfinishedStatuses = new Set(['queued', 'running'])
 const parentSubmit = 'parent__submit_result'
@@ -670,10 +675,13 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
     private readonly connections = new Map<string, Connection>()
     private readonly handSockets = new Map<WebSocket, HandExecutor>()
     private readonly handAuthority = new Map<string, SessionDescriptor>()
+    private readonly handChecks = new Map<string, HandCheck>()
     private readonly rechecks = new Set<WebSocket>()
     private readonly handFrames = new Map<WebSocket, Promise<void>>()
     private readonly handReplies = new Map<string, Set<(frame: string) => void>>()
     private handRequestsPruned = 0
+    private readonly handRequested = new Map<string, number>()
+    private effectSync?: Promise<void>
     private readonly handUpdates = new Map<string, { bytes: number; frames: string[] }>()
     private linger?: ReturnType<typeof setTimeout>
     private readonly spares = new Map<
@@ -774,6 +782,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
       this.blobs = Blobs.create(ctx.storage, { partBytes: valueLimit })
       ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'))
       this.restoreHands()
+      this.restoreHandRequests()
       this.restoreWatchers()
       this.retryWaiting()
       this.prefetchModelHeads()
@@ -3254,6 +3263,7 @@ ${input.request_id}`
           this.handSockets.set(executor.socket, resumed.executor)
           executor.socket.serializeAttachment({ connection: resumed.connection })
           this.handAuthority.set(resumed.connection, descriptor)
+          this.handChecks.delete(resumed.connection)
           this.ctx.storage.sql.exec(
             'UPDATE hand_sockets SET descriptor = ? WHERE connection = ?',
             JSON.stringify(descriptor),
@@ -3277,6 +3287,7 @@ ${input.request_id}`
         JSON.stringify(descriptor),
       )
       this.handAuthority.set(connection, descriptor)
+      this.handChecks.delete(connection)
       executor.socket.serializeAttachment({ connection })
       const current = this.hands.get(scope)?.get(hand)?.executor
       const incumbent =
@@ -3339,6 +3350,7 @@ ${input.request_id}`
       const refused = new Set(request.refused ?? [])
       const now = Date.now()
       const timeout = policy(this.env.REMOTE_TIMEOUT_MS, 'REMOTE_TIMEOUT_MS')
+      const rows: { id: number; session_id: string; call_id: string; deadline: number }[] = []
       for (const [index, frame] of (request.frames ?? []).entries()) {
         if (refused.has(index) || !frame.includes('"type":"request"')) continue
         let parsed: { type?: unknown; id?: unknown; operation?: Record<string, unknown> }
@@ -3358,31 +3370,46 @@ ${input.request_id}`
           typeof context.call_id !== 'string'
         )
           continue
-        this.ctx.storage.sql.exec(
-          'INSERT OR REPLACE INTO hand_requests (hand, runtime, id, scope, session_id, call_id, deadline) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          identity.hand,
-          identity.runtime,
-          parsed.id,
-          scope,
-          context.session_id,
-          context.call_id,
-          now + timeout + requestedYield(operation),
-        )
-        this.handUpdates.set(handRequestKey(identity.hand, identity.runtime, parsed.id), {
-          bytes: 0,
-          frames: [],
+        rows.push({
+          id: parsed.id,
+          session_id: context.session_id,
+          call_id: context.call_id,
+          deadline: now + timeout + requestedYield(operation),
         })
       }
-      if (now - this.handRequestsPruned < timeout) return
+      const prune = now - this.handRequestsPruned >= timeout
+      if (!rows.length && !prune) return
+      this.ctx.storage.transactionSync(() => {
+        for (const row of rows)
+          this.ctx.storage.sql.exec(
+            'INSERT OR REPLACE INTO hand_requests (hand, runtime, id, scope, session_id, call_id, deadline) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            identity.hand,
+            identity.runtime,
+            row.id,
+            scope,
+            row.session_id,
+            row.call_id,
+            row.deadline,
+          )
+        if (!prune) return
+        this.ctx.storage.sql.exec(
+          'DELETE FROM hand_requests WHERE replied < ? OR deadline < ?',
+          now - timeout,
+          now - timeout,
+        )
+        this.ctx.storage.sql.exec(
+          'DELETE FROM hand_updates WHERE NOT EXISTS (SELECT 1 FROM hand_requests WHERE hand_requests.hand = hand_updates.hand AND hand_requests.runtime = hand_updates.runtime AND hand_requests.id = hand_updates.id)',
+        )
+      })
+      for (const row of rows) {
+        const key = handRequestKey(identity.hand, identity.runtime, row.id)
+        this.handRequested.set(key, row.deadline)
+        this.handUpdates.set(key, { bytes: 0, frames: [] })
+      }
+      if (!prune) return
       this.handRequestsPruned = now
-      this.ctx.storage.sql.exec(
-        'DELETE FROM hand_requests WHERE replied < ? OR deadline < ?',
-        now - timeout,
-        now - timeout,
-      )
-      this.ctx.storage.sql.exec(
-        'DELETE FROM hand_updates WHERE NOT EXISTS (SELECT 1 FROM hand_requests WHERE hand_requests.hand = hand_updates.hand AND hand_requests.runtime = hand_updates.runtime AND hand_requests.id = hand_updates.id)',
-      )
+      for (const [key, deadline] of this.handRequested)
+        if (deadline < now - timeout) this.handRequested.delete(key)
     }
 
     private recordHandReply(connection: string | undefined, message: string | ArrayBuffer) {
@@ -3403,24 +3430,27 @@ ${input.request_id}`
       }
       const updates = this.handUpdates.get(key)?.frames ?? []
       this.handUpdates.delete(key)
-      this.ctx.storage.sql.exec(
-        'UPDATE hand_requests SET replied = ?, reply = ? WHERE hand = ? AND runtime = ? AND id = ?',
-        Date.now(),
-        message,
-        identity.hand,
-        identity.runtime,
-        Number(id),
-      )
-      if (message.includes('"delivered":true'))
-        for (const [seq, frame] of updates.entries())
+      if (this.handRequested.delete(key))
+        this.ctx.storage.transactionSync(() => {
           this.ctx.storage.sql.exec(
-            'INSERT OR REPLACE INTO hand_updates (hand, runtime, id, seq, frame) VALUES (?, ?, ?, ?, ?)',
+            'UPDATE hand_requests SET replied = ?, reply = ? WHERE hand = ? AND runtime = ? AND id = ?',
+            Date.now(),
+            message,
             identity.hand,
             identity.runtime,
             Number(id),
-            seq,
-            frame,
           )
+          if (message.includes('"delivered":true'))
+            for (const [seq, frame] of updates.entries())
+              this.ctx.storage.sql.exec(
+                'INSERT OR REPLACE INTO hand_updates (hand, runtime, id, seq, frame) VALUES (?, ?, ?, ?, ?)',
+                identity.hand,
+                identity.runtime,
+                Number(id),
+                seq,
+                frame,
+              )
+        })
       for (const waiter of this.handReplies.get(key) ?? []) waiter(message)
       this.handReplies.delete(key)
     }
@@ -3521,6 +3551,16 @@ ${input.request_id}`
         if (!missing.length) return
         await new Promise((resolve) => setTimeout(resolve, 250))
       }
+    }
+
+    private restoreHandRequests(): void {
+      for (const row of this.ctx.storage.sql
+        .exec('SELECT hand, runtime, id, deadline FROM hand_requests WHERE reply IS NULL')
+        .toArray())
+        this.handRequested.set(
+          handRequestKey(String(row.hand), String(row.runtime), Number(row.id)),
+          Number(row.deadline),
+        )
     }
 
     private restoreHands(): void {
@@ -3867,11 +3907,17 @@ ${input.request_id}`
     private async allowed(descriptor: SessionDescriptor): Promise<boolean> {
       if (!this.current(descriptor)) return false
       if (!options.active) return true
+      let allowed: boolean
       try {
-        return await options.active(descriptor.account_id, descriptor.grant, this.env)
+        allowed = await options.active(descriptor.account_id, descriptor.grant, this.env)
       } catch {
-        return false
+        allowed = false
       }
+      if (!allowed)
+        for (const [connection, check] of this.handChecks)
+          if (check.descriptor.account_id === descriptor.account_id)
+            this.handChecks.delete(connection)
+      return allowed
     }
 
     private handTokenMatches(secret: string): boolean {
@@ -3883,7 +3929,24 @@ ${input.request_id}`
 
     private async handAllowed(connection: string): Promise<boolean> {
       const descriptor = this.handAuthority.get(connection)
-      return !descriptor || (await this.allowed(descriptor))
+      if (!descriptor) return true
+      if (options.activeCacheMs === undefined || !this.current(descriptor))
+        return this.allowed(descriptor)
+      const now = Date.now()
+      const cached = this.handChecks.get(connection)
+      if (cached?.descriptor === descriptor && cached.expires > now) return cached.allowed
+      const check: HandCheck = {
+        allowed: this.allowed(descriptor),
+        descriptor,
+        expires: now + options.activeCacheMs,
+      }
+      this.handChecks.set(connection, check)
+      const allowed = await check.allowed
+      if (this.handChecks.get(connection) === check) {
+        if (allowed) check.allowed = true
+        else this.handChecks.delete(connection)
+      }
+      return allowed
     }
 
     private handFrame(
@@ -4284,8 +4347,14 @@ ${input.request_id}`
 
     private async durable(scope: string): Promise<void> {
       const started = performance.now()
-      this.counts.effect_syncs++
-      await this.ctx.storage.sync()
+      if (!this.effectSync) {
+        this.counts.effect_syncs++
+        this.effectSync = nextTask().then(() => {
+          this.effectSync = undefined
+          return this.ctx.storage.sync()
+        })
+      }
+      await this.effectSync
       this.scopeTimings(scope).record('effect.sync', performance.now() - started)
     }
 
@@ -4296,6 +4365,7 @@ ${input.request_id}`
       this.ctx.storage.sql.exec('DELETE FROM hand_sockets WHERE connection = ?', connection)
       this.connections.delete(connection)
       this.handAuthority.delete(connection)
+      this.handChecks.delete(connection)
       const hands = this.hands.get(scope)
       if (hands?.get(hand)?.connection === connection) hands.delete(hand)
       void this.opened(scope)
@@ -5183,6 +5253,7 @@ ${input.request_id}`
 export declare namespace create {
   type Options<E extends Env> = {
     active?(account: string, grant: unknown, env: E): Promise<boolean> | boolean
+    activeCacheMs?: number
     authenticate(
       request: Request,
       env: E,
