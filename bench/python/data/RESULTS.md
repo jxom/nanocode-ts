@@ -59,3 +59,35 @@ SCORE: `pass48` workloads passing at 48 MiB over those not skipped (W10 is repor
 SCORE build-89d6d85 pass48=6/9 passUnl=9/9 warm48=382ms cold48=1166ms warmUnl=452ms coldUnl=1485ms peakLin48=119MiB peakLinUnl=376.1MiB rss48=519.7MiB big48=5 MB bigUnl=50 MB
 
 At 48 MiB the instance is dropped after every run that grew past 24 MiB, so W1's warm run costs 1,063 ms against 226 ms at 1 GiB and W7's five calls 4.1 s against 0.69 s. W3, W5b and W6 are refused at 48 MiB (peak linear 88, 119 and 90 MiB, image 34 MiB); at 1 GiB the numpy/csv path of W3 peaks at 376 MiB linear for a 10 MB CSV, and W10 reaches 650 MiB for 50 MB.
+
+### 2026-11-17 build-89d6d85 in workerd 2026-11-17 (compat date 2026-10-16, nodejs_compat)
+
+`node bench/python/data/run.ts <dist> --runtime workerd --workerd <path to workerd>` bundles `worker.ts` with the dist's `bash/index.js` (esbuild), embeds python.wasm, psh.wasm and python.data as modules, starts one `workerd serve` per workload and limit (a fresh isolate) and runs the same steps inside it. max RSS is the workerd process's VmHWM (all compiled code, every linear memory and the JS heap, the closest local stand-in for Cloudflare's 128 MB isolate limit; workerd sets no limit itself); live linear counts every python.wasm memory not yet collected, since workerd exposes no gc().
+
+| id | workload | limit | status | mode | cold ms | warm ms | peak linear MiB | live linear MiB | max RSS MiB | note |
+| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| W1 | sine chart | 48 | pass | - | 1579 | 1071 | 69.7 | 278.6 | 613 |  |
+| W1 | sine chart | unl | pass | - | 1597 | 316 | 80.1 | 80.1 | 415.3 |  |
+| W2 | repo files chart | 48 | pass | - | 2879 | 2373 | 76.1 | 304.3 | 723.4 |  |
+| W2 | repo files chart | unl | pass | - | 3461 | 1236 | 99.7 | 99.7 | 523.7 |  |
+| W3 | csv 10 MB groupby chart | 48 | fail | - | 1747 | - | 88.1 | 88.1 | 603.3 | ta in chunks (a file line by line, a batch of rows at a time) and write results out as you go instead of holding it all  |
+| W3 | csv 10 MB groupby chart | unl | pass | numpy | 6078 | 5500 | 376.1 | 376.1 | 794.7 |  |
+| W4 | json 10k records table | 48 | pass | - | 407 | 112 | 52.3 | 52.3 | 407.9 |  |
+| W4 | json 10k records table | unl | pass | - | 369 | 102 | 52.3 | 52.3 | 407 |  |
+| W5a | bootstrap 90x4000 | 48 | pass | - | 641 | 125 | 48.5 | 48.5 | 379.3 |  |
+| W5a | bootstrap 90x4000 | unl | pass | - | 883 | 148 | 48.5 | 48.5 | 381 |  |
+| W5b | bootstrap 90x100000 | 48 | fail | - | 700 | - | 119 | 119 | 435.2 | ta in chunks (a file line by line, a batch of rows at a time) and write results out as you go instead of holding it all  |
+| W5b | bootstrap 90x100000 | unl | pass | - | 2898 | 2153 | 119 | 119 | 447.1 |  |
+| W6 | time series daily rolling chart | 48 | fail | - | 2282 | - | 89.6 | 89.6 | 476.6 | ta in chunks (a file line by line, a batch of rows at a time) and write results out as you go instead of holding it all  |
+| W6 | time series daily rolling chart | unl | pass | numpy | 4366 | 3092 | 256.3 | 256.3 | 646.4 |  |
+| W7 | five python3 calls numpy+mpl | 48 | pass | - | 6100 | 5614 | 70.3 | 1401.9 | 1720.8 |  |
+| W7 | five python3 calls numpy+mpl | unl | pass | - | 3057 | 1038 | 109.1 | 109.1 | 446.7 |  |
+| W8 | git subprocess heavy | 48 | pass | - | 232 | 70 | 34.2 | 170.8 | 506.2 |  |
+| W8 | git subprocess heavy | unl | pass | - | 229 | 50 | 34.4 | 170.4 | 505 |  |
+| W9 | polars csv groupby chart | 48 | skip | - | 218 | - | 34 | 34 | 602.6 |  |
+| W9 | polars csv groupby chart | unl | skip | - | 200 | - | 34 | 34 | 603.3 |  |
+| W10 | big csv probe | 48 | pass | - | 2462 | - | 116.7 | 206.3 | 1697.1 | largest 5 MB |
+| W10 | big csv probe | unl | pass | - | 15848 | - | 649.8 | 649.8 | 1696.4 | largest 50 MB |
+SCORE build-89d6d85-workerd pass48=6/9 passUnl=9/9 warm48=491ms cold48=1090ms warmUnl=607ms coldUnl=1662ms peakLin48=119MiB peakLinUnl=376.1MiB rss48=1720.8MiB big48=5MB bigUnl=50MB
+
+Timings track Node within the hosted Hand's noise. The memory finding: at 48 MiB every run that grew past 24 MiB drops its instance, and in workerd those dropped linear memories stay alive: after W7's 20 chart runs 1,402 MiB of python.wasm memory is still uncollected and the process peaks at 1,721 MiB RSS, and W8's nested python3 leaves 170 MiB across instances. On Cloudflare that garbage counts against the 128 MB isolate until V8 collects it, so dropping instances is itself a memory risk, not only a speed cost.
