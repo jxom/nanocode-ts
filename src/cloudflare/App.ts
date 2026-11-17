@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers'
 import interpreter from 'nanocode-ts/interpreter.wasm'
+import python from 'nanocode-ts/python.wasm'
 import wasm from 'nanocode-ts/nanocode_wasm.wasm'
 import * as AgentRuntime from '../AgentRuntime.ts'
 import * as Bash from '../bash/Bash.ts'
@@ -2512,7 +2513,12 @@ ${input.request_id}`
           )
         }
         const cellFetch = guarded()
-        const pythonModule = options.workspace ? await options.workspace.pythonModule : undefined
+        // python3 runs on the bundled python.wasm unless the app passes its own module or false.
+        const workspaceOptions = options.workspace || undefined
+        const pythonModule =
+          workspaceOptions?.pythonModule === false
+            ? undefined
+            : ((await workspaceOptions?.pythonModule) ?? python)
         const mcpServers =
           typeof options.mcp?.servers === 'function'
             ? options.mcp.servers(authority, this.env)
@@ -5114,7 +5120,8 @@ export declare namespace create {
           mounts?(authority: SessionAuthority, env: E): Record<string, FileSystem.FileSystem>
           psh?: WebAssembly.Module | Promise<WebAssembly.Module>
           pythonCpuMs?: number
-          pythonModule?: WebAssembly.Module | Promise<WebAssembly.Module>
+          // python.wasm for the workspace's python3: nanocode-ts/python.wasm by default, false for none.
+          pythonModule?: WebAssembly.Module | Promise<WebAssembly.Module> | false
           // Loads python.data, the image python.wasm starts from, once per isolate. Workers can't hold it in
           // the bundle, so by default it is fetched from the static assets binding (env.ASSETS) at
           // /nanocode-ts/python.data: copy node_modules/nanocode-ts/dist/python.data there.
