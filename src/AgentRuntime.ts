@@ -10,6 +10,7 @@ const maxTimerMs = 2 ** 31 - 1
 
 type Socket = {
   socket: Contracts.MessageSocket
+  spare: Contracts.SpareSocket
   idle: number
   frames: (string | null)[]
   closed?: string
@@ -255,6 +256,7 @@ async function create(
     async shutdown(): Promise<void> {
       state.counters.disposals++
       let failure: unknown
+      if (!state.stopped) internal.releaseSpares()
       if (!state.stopped && state.opened) {
         try {
           await internal.command('dispose', {})
@@ -695,8 +697,21 @@ async function create(
           }
           const handle = ++state.nextSocket
           const idle = handshake.idle_ms ?? 0
+          const headers = [...handshake.headers]
           const entry: Socket = {
             socket,
+            spare: {
+              request: {
+                provider: request.provider,
+                headers: request.headers,
+                origin: request.origin ?? null,
+                subagent: request.subagent ?? null,
+              },
+              socket,
+              status: handshake.status,
+              headers,
+              ...(handshake.idle_ms === undefined ? {} : { idle_ms: handshake.idle_ms }),
+            },
             idle: Number.isSafeInteger(idle) && idle > 0 ? idle : 0,
             frames: [],
             watchers: [],
@@ -714,7 +729,7 @@ async function create(
             internal.closeSocket(handle, 'handshake cancelled', 'cancelled')
             state.sockets.delete(handle)
           })
-          return { id: handle, status: handshake.status, headers: [...handshake.headers] }
+          return { id: handle, status: handshake.status, headers }
         }
         case 'socket_send': {
           const entry = state.sockets.get(request.id)
@@ -981,6 +996,32 @@ async function create(
       entry.waiter = undefined
       waiter?.resolve({ closed: detail })
       for (const watcher of entry.watchers.splice(0)) watcher()
+    },
+
+    releaseSpares() {
+      const release = state.options.socket?.release
+      if (!release) return
+      for (const [handle, entry] of state.sockets) {
+        if (
+          entry.closed !== undefined ||
+          entry.waiter ||
+          entry.frames.length ||
+          (entry.timing.sends ?? 0) > 0 ||
+          entry.timing.body_reads > 0
+        )
+          continue
+        entry.closed = 'released to the host'
+        state.sockets.delete(handle)
+        internal.finishModel(entry.timing, 'closed')
+        for (const watcher of entry.watchers.splice(0)) watcher()
+        try {
+          release(entry.spare)
+        } catch {
+          try {
+            entry.socket.close(1000, 'closed')
+          } catch {}
+        }
+      }
     },
 
     closeSockets(detail: string, outcome: Contracts.ModelTiming['outcome']) {

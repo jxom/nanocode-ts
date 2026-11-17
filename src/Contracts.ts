@@ -409,6 +409,19 @@ export type SocketHandshake = {
   text(): Promise<string>
 }
 
+export type SpareSocket = {
+  request: {
+    provider: ModelProvider
+    headers: [string, string][]
+    origin: string | null
+    subagent: Subagent | null
+  }
+  socket: MessageSocket
+  status: number
+  headers: [string, string][]
+  idle_ms?: number
+}
+
 export type RemoteRequest = {
   op: string
   connection?: string | null
@@ -549,6 +562,7 @@ export type RuntimeOptions = {
       timing: RuntimeTiming,
     ): Promise<SocketHandshake>
     admit(origin: string | null, subagent: Subagent | null): Promise<void>
+    release?(spare: SpareSocket): void
   }
   tools?: {
     call(

@@ -462,6 +462,31 @@ type Watch = { watch: string; cursor: number; live?: boolean }
 type Watcher = { state: Watch; scope: string; descriptor: SessionDescriptor }
 type HandExecutor = Remote.Executor<WebSocket>
 type Admission = Omit<Parameters<AgentRuntime.AgentRuntime['submit']>[1], 'buffered'>
+const perRequestSocketHeaders = new Set(['thread-id', 'x-client-request-id', 'x-codex-turn-state'])
+
+function spareKey(request: Contracts.SpareSocket['request']): string {
+  return JSON.stringify([
+    request.provider,
+    request.origin,
+    request.subagent,
+    request.headers
+      .map(([name, value]) => [name.toLowerCase(), value])
+      .filter(([name]) => !perRequestSocketHeaders.has(name!))
+      .sort(([a], [b]) => (a! < b! ? -1 : a! > b! ? 1 : 0)),
+  ])
+}
+
+function socketOpen(socket: Contracts.MessageSocket): boolean {
+  const state = (socket as { readyState?: number }).readyState
+  return state === undefined || state === 1
+}
+
+function closeQuietly(socket: Contracts.MessageSocket): void {
+  try {
+    socket.close(1000, 'closed')
+  } catch {}
+}
+
 type Opened = {
   opening: string
   runtime: Promise<AgentRuntime.AgentRuntime>
@@ -647,6 +672,10 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
     private handRequestsPruned = 0
     private readonly handUpdates = new Map<string, { bytes: number; frames: string[] }>()
     private linger?: ReturnType<typeof setTimeout>
+    private readonly spares = new Map<
+      string,
+      { key: string; spare: Contracts.SpareSocket; timer: ReturnType<typeof setTimeout> }
+    >()
     private pumping = false
     private handReady = false
     private modelAt?: number
@@ -688,6 +717,8 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
       direct_starts: 0,
       recoveries: 0,
       runtime_retirements: 0,
+      model_socket_spares: 0,
+      model_socket_reuses: 0,
       host_tool_calls: 0,
       prompt_cache_primes: 0,
       prompt_cache_prime_failures: 0,
@@ -3045,6 +3076,17 @@ ${input.request_id}`
                 open: async (request, signal, timing) => {
                   if (this.dispatchBlocked(scope)) throw new Error('request authority stopped')
                   this.dispatched(scope)
+                  const spare = this.takeSpare(scope, request)
+                  if (spare) {
+                    this.dispatching?.()
+                    return {
+                      status: spare.status,
+                      headers: spare.headers,
+                      socket: spare.socket,
+                      ...(spare.idle_ms === undefined ? {} : { idle_ms: spare.idle_ms }),
+                      text: async () => '',
+                    }
+                  }
                   const handshake = egress(this.env).fetch(
                     new Request('https://egress.internal/socket', {
                       signal,
@@ -3085,6 +3127,7 @@ ${input.request_id}`
                   this.dispatching?.()
                   return this.socketEffect(scope)
                 },
+                release: (spare) => this.keepSpare(scope, spare),
               },
             },
           )
@@ -4162,7 +4205,48 @@ ${input.request_id}`
       )
     }
 
+    private keepSpare(scope: string, spare: Contracts.SpareSocket): void {
+      this.dropSpare(scope)
+      if (this.deleted || !socketOpen(spare.socket)) {
+        closeQuietly(spare.socket)
+        return
+      }
+      const timer = setTimeout(
+        () => this.dropSpare(scope, spare.socket),
+        duration(this.env.MODEL_SOCKET_LINGER_MS, 'MODEL_SOCKET_LINGER_MS'),
+      )
+      spare.socket.addEventListener('close', () => this.dropSpare(scope, spare.socket))
+      spare.socket.addEventListener('error', () => this.dropSpare(scope, spare.socket))
+      this.spares.set(scope, { key: spareKey(spare.request), spare, timer })
+      this.counts.model_socket_spares++
+    }
+
+    private takeSpare(
+      scope: string,
+      request: Contracts.SpareSocket['request'],
+    ): Contracts.SpareSocket | undefined {
+      const found = this.spares.get(scope)
+      if (!found || found.key !== spareKey(request)) return undefined
+      clearTimeout(found.timer)
+      this.spares.delete(scope)
+      if (!socketOpen(found.spare.socket)) {
+        closeQuietly(found.spare.socket)
+        return undefined
+      }
+      this.counts.model_socket_reuses++
+      return found.spare
+    }
+
+    private dropSpare(scope: string, socket?: Contracts.MessageSocket): void {
+      const found = this.spares.get(scope)
+      if (!found || (socket !== undefined && found.spare.socket !== socket)) return
+      clearTimeout(found.timer)
+      this.spares.delete(scope)
+      closeQuietly(found.spare.socket)
+    }
+
     private releaseConnections(): void {
+      for (const scope of this.spares.keys()) this.dropSpare(scope)
       for (const [scope, runtime] of this.residents()) {
         if (runtime.remote) this.retire(scope, runtime)
         else runtime.releaseConnections()
