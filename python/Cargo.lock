@@ -124,6 +124,7 @@ dependencies = [
 name = "nanocode-python-capi"
 version = "0.7.0"
 dependencies = [
+ "djs-libm",
  "nanocode-numeric",
  "nanocode-platform",
  "rustpython-vm",
