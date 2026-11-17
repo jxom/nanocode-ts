@@ -8,10 +8,18 @@ import {
 import { FsError, normalize, type FileSystem } from '../../FileSystem.ts'
 import { decode, encode, fromBase64, parentOf, toBase64 } from '../Fs.ts'
 import { mkdirs } from './files.ts'
+import { wat2wasm } from './wat.ts'
 import { load, Refused, Trap, type HostFunction, type Live, type Loaded } from './engine.ts'
 import type * as Wasm from '../../Wasm.ts'
 
 const SNAPSHOT_BYTES = 64 * 1024 * 1024
+
+const HEADER_BYTES = 8
+
+const WAT_TEXT = /^\s*(\(|;;)/
+
+const WAT_HINT =
+  '; hand-encoded bytes are easy to get wrong, and WebAssembly text (WAT) is accepted in their place, such as (module (func (export "add") (param i32 i32) (result i32) local.get 0 local.get 1 i32.add))'
 
 const SNAPSHOT_ENTRIES = 20_000
 
@@ -300,11 +308,30 @@ export function release(loaded: Loaded): void {
 
 export function isWasm(bytes: Uint8Array): boolean {
   return (
-    bytes.length >= 8 &&
+    bytes.length >= HEADER_BYTES &&
     bytes[0] === 0 &&
     bytes[1] === 0x61 &&
     bytes[2] === 0x73 &&
     bytes[3] === 0x6d
+  )
+}
+
+export function moduleBytes(bytes: Uint8Array): Uint8Array | undefined {
+  if (isWasm(bytes)) return bytes
+  const text = decode(bytes)
+  return WAT_TEXT.test(text) ? wat2wasm(text) : undefined
+}
+
+function notModule(bytes: Uint8Array): string {
+  const head = Array.from(bytes.subarray(0, HEADER_BYTES), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join(' ')
+  return (
+    'not a WebAssembly module: a binary module starts with 00 61 73 6d (\\0asm) and these ' +
+    bytes.length +
+    ' bytes start with ' +
+    (head || 'nothing') +
+    '; pass the binary module or its WebAssembly text (WAT)'
   )
 }
 
@@ -380,9 +407,9 @@ const handler =
     const stat = await ctx.fs.stat(path)
     if (!stat) throw new CommandError(run.file + ': No such file or directory', 127)
     if (stat.kind !== 'file') throw new CommandError(run.file + ': Is a directory', 126)
-    const bytes = await ctx.fs.read(path)
-    if (!isWasm(bytes))
-      throw new CommandError(run.file + ': not a WebAssembly module (no \\0asm header)', 126)
+    const read = await ctx.fs.read(path)
+    const bytes = moduleBytes(read)
+    if (!bytes) throw new CommandError(run.file + ': ' + notModule(read), 126)
     const module = await compile(bytes, budgeted(options, ctx.limits))
     const tree = new Tree()
     tree.limit = Math.min(SNAPSHOT_BYTES, Math.floor(ctx.limits.maxMemoryBytes / 2))
@@ -1250,6 +1277,11 @@ export function wasmHost(
     if (!stat || stat.kind !== 'file') throw new Error(request.path + ': No such file')
     return { bytes: await shell.fs.read(path), path }
   }
+  const assembled = (found: { bytes: Uint8Array }) => {
+    const bytes = moduleBytes(found.bytes)
+    if (!bytes) throw new Error(notModule(found.bytes))
+    return bytes
+  }
   const checker = (signal: AbortSignal) => {
     const deadline = Date.now() + shell.limits.timeoutMs
     return () => {
@@ -1262,9 +1294,10 @@ export function wasmHost(
   }
   const loaded = async (request: CellRequest) => {
     const found = await source(request)
-    if (!isWasm(found.bytes)) throw new Error('not a WebAssembly module (no \\0asm header)')
-    return compile(found.bytes, budgeted(options, shell.limits)).catch((error) => {
-      throw new Error(error instanceof Error ? error.message : String(error))
+    const bytes = assembled(found)
+    return compile(bytes, budgeted(options, shell.limits)).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(isWasm(found.bytes) ? message + WAT_HINT : message)
     })
   }
   const instance = (request: CellRequest) => {
@@ -1311,6 +1344,8 @@ export function wasmHost(
           })
           return { stdout: result.stdout, stderr: result.stderr, exit_code: result.exitCode }
         }
+        case 'assemble':
+          return { module: toBase64(assembled(await source(request))) }
         case 'instantiate': {
           const module = await loaded(request)
           let live: Live
@@ -1386,7 +1421,7 @@ export function wasmHost(
         }
         default:
           throw new Error(
-            'wasm op must be run, invoke, instantiate, call, read, write, grow or drop',
+            'wasm op must be run, invoke, assemble, instantiate, call, read, write, grow or drop',
           )
       }
     } catch (error) {

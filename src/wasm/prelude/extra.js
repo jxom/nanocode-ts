@@ -121,17 +121,28 @@ class AbortController {
 }
 const toWire = (value) => typeof value === "bigint" ? { bigint: String(value) } : value;
 const fromWire = (value) => Array.isArray(value) ? value.map(fromWire) : value !== null && typeof value === "object" && typeof value.bigint === "string" ? BigInt(value.bigint) : value;
+const wasmSources = "WebAssembly expects a module's bytes (Uint8Array, ArrayBuffer or Buffer), a WebAssembly.Module, WebAssembly text (WAT) or a .wasm file path";
+const described = (value) => value === null || value === undefined ? String(value) : typeof value === "object" ? "an object (" + (value.constructor?.name ?? "Object") + ") with keys " + (Object.keys(value).slice(0, 5).join(", ") || "none") : "a " + typeof value;
 const wasmSource = (source) => {
   if (typeof source === "string") {
-    if (source.length > 4096 || source.includes("\0")) throw new TypeError("expected WebAssembly bytes (Uint8Array or ArrayBuffer) or a file path, got a " + source.length + "-character string: pass the .wasm file's path, or read it as bytes with bash.readFile(path, { encoding: null })");
+    if (/^\s*(\(|;;)/.test(source)) return { bytes: utf8(source) };
+    if (source.startsWith("\0asm")) {
+      if (source.includes("\uFFFD")) throw new TypeError("this string is a binary module decoded as UTF-8 text, which lost bytes: read it with bash.readFile(path, { encoding: null }) or pass the .wasm file's path");
+      return { bytes: utf8(source) };
+    }
+    if (source.length > 4096 || source.includes("\0")) throw new TypeError(wasmSources + ", got a " + source.length + "-character string that is none of these");
     return { path: source };
   }
   if (source instanceof Module) return source.input;
   if (source instanceof ArrayBuffer) return { bytes: new Uint8Array(source) };
   if (ArrayBuffer.isView(source)) return { bytes: new Uint8Array(source.buffer, source.byteOffset, source.byteLength) };
   if (Array.isArray(source)) return { bytes: Uint8Array.from(source) };
-  throw new TypeError("expected WebAssembly bytes (Uint8Array or ArrayBuffer) or a file path");
+  throw new TypeError(wasmSources + ", got " + described(source));
 };
+const isBinary = (bytes) => bytes[0] === 0 && bytes[1] === 0x61 && bytes[2] === 0x73 && bytes[3] === 0x6d;
+class CompileError extends Error { name = "CompileError"; }
+class LinkError extends Error { name = "LinkError"; }
+class RuntimeError extends Error { name = "RuntimeError"; }
 const wire = (input) => input.bytes ? { module_ref: putBytes(input.bytes) } : input;
 const importHint = (error, imports) => {
   const names = [];
@@ -166,7 +177,14 @@ const moduleEntries = (module, section) => {
   return [];
 };
 class Module {
-  constructor(source) { const input = wasmSource(source); this.input = input.bytes ? { bytes: input.bytes.slice() } : input; }
+  constructor(source) {
+    const input = wasmSource(source);
+    if (input.bytes && !isBinary(input.bytes) && callWasmSync) {
+      try { this.input = { bytes: fromBase64(callWasmSync({ op: "assemble", module_ref: putBytes(input.bytes) }).module) }; } catch (error) { throw new CompileError(error.message); }
+      return;
+    }
+    this.input = input.bytes ? { bytes: input.bytes.slice() } : input;
+  }
   static exports(module) { return moduleEntries(module, "exports"); }
   static imports(module) { return moduleEntries(module, "imports"); }
 }
@@ -187,6 +205,7 @@ const exportsOf = (id, list, imports) => {
 };
 class Instance {
   constructor(module, imports) {
+    Object.defineProperties(this, { instance: { value: this }, module: { value: module } });
     if (callWasmSync) {
       let reply;
       try { reply = callWasmSync({ op: "instantiate", ...wire(wasmSource(module)) }); } catch (error) { throw importHint(error, imports); }
@@ -204,22 +223,27 @@ class Instance {
   async close() { await this.ready; await callWasm({ op: "drop", id: this.id }); }
 }
 const instantiate = async (source, imports) => {
-  const instance = new Instance(source instanceof Module ? source : new Module(source), imports);
+  const module = source instanceof Module ? source : new Module(source);
+  const instance = new Instance(module, imports);
   await instance.ready;
-  return source instanceof Module ? instance : { module: new Module(source), instance };
+  return source instanceof Module ? instance : Object.defineProperty({ module, instance }, "exports", { value: instance.exports });
 };
 const WebAssembly = {
   Module,
   Instance,
   Memory,
+  CompileError,
+  LinkError,
+  RuntimeError,
   compile: async (source) => new Module(source),
   instantiate,
   compileStreaming: async (response) => new Module(new Uint8Array(await (await response).arrayBuffer())),
   instantiateStreaming: async (response, imports) => instantiate(new Uint8Array(await (await response).arrayBuffer()), imports),
-  validate: (source) => { const bytes = wasmSource(source).bytes; return !bytes || (bytes[0] === 0 && bytes[1] === 0x61 && bytes[2] === 0x73 && bytes[3] === 0x6d); },
+  validate: (source) => { try { const bytes = new Module(source).input.bytes; return !bytes || isBinary(bytes); } catch { return false; } },
 };
 const wasm = {
   run: async (source, args = [], options = {}) => {
+    if (!Array.isArray(args)) throw new TypeError("wasm.run(module, args, options) runs a WASI command with an array of string arguments, got " + described(args) + ": to call one export use wasm.invoke(module, name, ...args)");
     const reply = await callWasm({ op: "run", ...wire(wasmSource(source)), args: args.map(String), ...(options.stdin === undefined ? {} : { stdin: String(options.stdin) }), ...(options.env ? { env: options.env } : {}) });
     return { stdout: reply.stdout, stderr: reply.stderr, exitCode: reply.exit_code };
   },
