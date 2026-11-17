@@ -237,6 +237,7 @@ export function layered(
   fetch(): Promise<void>
   files: SyncFileSystem
   missed(): boolean
+  probe(dirs: readonly string[]): Promise<void>
   reset(): void
 } {
   const stats = new Map<string, FileStat | null>()
@@ -273,8 +274,26 @@ export function layered(
     if (files.has(path)) return 'file'
     if (dirs.has(path)) return 'directory'
     if (hidden(path)) return undefined
-    if (!stats.has(path)) throw miss(wanted.stat, path)
+    if (!stats.has(path) && !absent(path)) throw miss(wanted.stat, path)
     return stats.get(path)?.kind
+  }
+  const listing = async (dirs: readonly string[]) => {
+    for (const dir of new Set(dirs)) {
+      if (!stats.has(dir)) keepStat(dir, await fs.stat(dir))
+      if (names.has(dir) || stats.get(dir)?.kind !== 'directory') continue
+      const children = await fs.list(dir)
+      if (fits(weight(children))) keepNames(dir, children)
+    }
+  }
+  const absent = (path: string): boolean => {
+    if (path === '/') return false
+    const up = parentOf(path)
+    if (files.has(up)) return true
+    if (dirs.has(up)) return false
+    if (stats.has(up) && stats.get(up)?.kind !== 'directory') return true
+    const listed = names.get(up)
+    if (listed) return !listed.includes(path.slice(up === '/' ? 1 : up.length + 1))
+    return absent(up)
   }
   const read = (path: string) => {
     const own = files.get(path)
@@ -432,6 +451,7 @@ export function layered(
     }),
     async fetch() {
       for (const path of wanted.stat) keepStat(path, await fs.stat(path))
+      await listing([...wanted.stat].map(parentOf))
       for (const path of wanted.list) {
         const up = parentOf(path)
         const siblings = path === '/' ? undefined : names.get(up)
@@ -501,6 +521,7 @@ export function layered(
       write,
     },
     missed: () => missing,
+    probe: listing,
     reset() {
       missing = false
       files = new Map()

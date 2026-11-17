@@ -1110,6 +1110,10 @@ async function apply(fs: FileSystem, changes: PythonChanges): Promise<void> {
 
 const packagedRust: { module?: Promise<WebAssembly.Module | undefined> } = {}
 
+const packagedPython = '../../../python.wasm'
+
+const sitePackages = '/usr/local/lib/python3.14/site-packages'
+
 function rustModule(options: PythonOptions): Promise<WebAssembly.Module | undefined> {
   if (options.module === false) return Promise.resolve(undefined)
   if (options.module) return Promise.resolve(options.module)
@@ -1119,9 +1123,14 @@ function rustModule(options: PythonOptions): Promise<WebAssembly.Module | undefi
     const fs = process?.getBuiltinModule?.('node:fs') as
       | { promises: { readFile(path: URL): Promise<Uint8Array> } }
       | undefined
-    const resolve = (import.meta as { resolve?: (specifier: string) => string }).resolve
-    if (!fs || !resolve || !canCompile()) return undefined
-    const bytes = await fs.promises.readFile(new URL(resolve('nanocode-ts/python.wasm')))
+    const meta = import.meta as { resolve?: (specifier: string) => string; url?: string }
+    const url = meta.resolve
+      ? new URL(meta.resolve('nanocode-ts/python.wasm'))
+      : meta.url
+        ? new URL(packagedPython, meta.url)
+        : undefined
+    if (!fs || !url || !canCompile()) return undefined
+    const bytes = await fs.promises.readFile(url)
     const compile = (
       WebAssembly as unknown as { compile(bytes: Uint8Array): Promise<WebAssembly.Module> }
     ).compile
@@ -1232,8 +1241,9 @@ async function executeRust(
         },
         machine: undefined,
         script:
-          [name, ...child.argv.slice(1)].map((word) => "'" + word.replaceAll("'", "'\\''") + "'").join(' ') +
-          (child.merged ? ' 2>&1' : ''),
+          [name, ...child.argv.slice(1)]
+            .map((word) => "'" + word.replaceAll("'", "'\\''") + "'")
+            .join(' ') + (child.merged ? ' 2>&1' : ''),
         shellLimits: ctx.limits,
         signal: ctx.signal,
         stdin: child.stdin,
@@ -1244,7 +1254,8 @@ async function executeRust(
       if (ran.ended === 'cancelled') return 'EINTR'
       if (ran.ended === 'exited' && ran.status === notFound && ran.missing.includes(name))
         return 'ENOENT'
-      if (ran.ended === 'exited') return { status: ran.status, stderr: ran.stderr, stdout: ran.stdout }
+      if (ran.ended === 'exited')
+        return { status: ran.status, stderr: ran.stderr, stdout: ran.stdout }
       return {
         status: refusedStatus,
         stderr: encode(name + ': it ran more than this shell allows\n'),
@@ -1272,6 +1283,7 @@ async function executeRust(
       spawn,
       stopped: () => ctx.signal.aborted || (cache?.missed() ?? false),
     })
+  await cache?.probe([ctx.cwd, sitePackages])
   let ran = attempt()
   while (cache?.missed()) {
     await cache.fetch()
