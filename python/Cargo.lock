@@ -107,6 +107,7 @@ dependencies = [
 name = "nanocode-python"
 version = "0.7.0"
 dependencies = [
+ "nanocode-compression",
  "nanocode-platform",
  "nanocode-python-capi",
  "nanocode-shell",
