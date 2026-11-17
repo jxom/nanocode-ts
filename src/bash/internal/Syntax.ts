@@ -557,12 +557,6 @@ class Parser {
         this.pos += 2
         break
       }
-      const op = ['&&', '||', '(', ')', '<', '>'].find((op) => this.starts(op))
-      if (op) {
-        this.pos += op.length
-        tokens.push({ op })
-        continue
-      }
       const last = tokens[tokens.length - 1]
       const regex =
         last !== undefined &&
@@ -571,7 +565,15 @@ class Parser {
         last.word[0].type === 'text' &&
         !last.word[0].quoted &&
         last.word[0].value === '=~'
+      const op = regex ? undefined : ['&&', '||', '(', ')', '<', '>'].find((op) => this.starts(op))
+      if (op) {
+        this.pos += op.length
+        tokens.push({ op })
+        continue
+      }
+      const start = this.pos
       tokens.push({ word: this.word(regex) })
+      if (this.pos === start) this.fail()
     }
     return { type: 'test', tokens, redirects: [] }
   }
@@ -659,7 +661,9 @@ class Parser {
     }
     if (match[2] === '>|') forced.add(redirect)
     if (match[2] === '<<' || match[2] === '<<-') {
-      const raw = this.src.slice(this.pos).match(/^[^\s;&|()<>]+/)?.[0]
+      const raw = this.src
+        .slice(this.pos)
+        .match(/^(?:'[^']*'|"(?:[^"\\]|\\[\s\S])*"|\\[\s\S]|[^\s;&|()<>'"\\])+/)?.[0]
       if (!raw) this.fail(this.done() ? 'newline' : undefined)
       this.pos += raw.length
       const expand = !/['"\\]/.test(raw)
@@ -708,7 +712,7 @@ class Parser {
       parts.push({ type: 'process', body, output })
     }
     if (this.src[this.pos] === '~') {
-      const user = this.src.slice(this.pos + 1).match(/^[A-Za-z0-9_-]*(?=[\/\s;&|()<>]|$)/)
+      const user = this.src.slice(this.pos + 1).match(/^[A-Za-z0-9_-]*(?=[/\s;&|()<>]|$)/)
       if (user) {
         parts.push({ type: 'tilde', user: user[0] })
         this.pos += 1 + user[0].length
@@ -750,12 +754,28 @@ class Parser {
         this.edits.push({ end: this.pos, start, value })
         push(parts, value, true)
       } else if (c === '$' || c === '`') parts.push(this.dollar(false))
-      else {
+      else if (!regex && '?*+@!'.includes(c) && this.src[this.pos + 1] === '(') {
+        const end = this.extglob(this.pos + 1)
+        push(parts, this.src.slice(this.pos, end), false)
+        this.pos = end
+      } else {
         push(parts, c, false)
         this.pos++
       }
     }
     return parts
+  }
+
+  extglob(open: number): number {
+    let depth = 0
+    for (let i = open; i < this.src.length; i++) {
+      const c = this.src[i]
+      if (c === '\\') i++
+      else if (c === '\n') break
+      else if (c === '(') depth++
+      else if (c === ')' && --depth === 0) return i + 1
+    }
+    this.fail()
   }
 
   double(parts: Part[], end: string | undefined) {
@@ -910,6 +930,8 @@ class Parser {
       '^',
       ',,',
       ',',
+      '~~',
+      '~',
     ].find((op) => this.starts(op))
     if (operator) {
       this.pos += operator.length

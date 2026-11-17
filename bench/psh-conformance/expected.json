@@ -1,0 +1,6506 @@
+{
+  "quoting:1": {
+    "script": "echo 'single $HOME \"x\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "single $HOME \"x\"\n"
+  },
+  "quoting:2": {
+    "script": "echo \"double $((1+2)) 'y'\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "double 3 'y'\n"
+  },
+  "quoting:3": {
+    "script": "echo \"a\\$b\" 'c\\d' e\\ f",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a$b c\\d e f\n"
+  },
+  "quoting:4": {
+    "script": "echo $'tab\\there\\nnl'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "tab\there\nnl\n"
+  },
+  "quoting:5": {
+    "script": "x='a  b'; echo $x; echo \"$x\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a b\na  b\n"
+  },
+  "quoting:6": {
+    "script": "x=\"*\"; echo \"$x\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "*\n"
+  },
+  "quoting:7": {
+    "script": "echo \"nested $(echo \"inner $(echo deep)\")\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "nested inner deep\n"
+  },
+  "quoting:8": {
+    "script": "echo \\\"escaped\\\" \\\\ \\$",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"escaped\" \\ $\n"
+  },
+  "quoting:9": {
+    "script": "printf '%s\\n' \"a b\" c 'd e'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a b\nc\nd e\n"
+  },
+  "quoting:10": {
+    "script": "echo ''\"\" | od -c | head -1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0000000  \\n\n"
+  },
+  "quoting:11": {
+    "script": "v=hello; echo \"${v}world\" \"$v\"_x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "helloworld hello_x\n"
+  },
+  "quoting:12": {
+    "script": "echo \"\\t not tab\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\\t not tab\n"
+  },
+  "quoting:13": {
+    "script": "echo -e 'a\\tb\\\\n'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\tb\\n\n"
+  },
+  "quoting:14": {
+    "script": "echo -n abc; echo def",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "abcdef\n"
+  },
+  "quoting:15": {
+    "script": "echo -- -n",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "-- -n\n"
+  },
+  "quoting:16": {
+    "script": "IFS=:; x=a:b:c; for i in $x; do echo $i; done",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\nb\nc\n"
+  },
+  "quoting:17": {
+    "script": "set -- \"a b\" c; for i in \"$@\"; do echo \"[$i]\"; done",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[a b]\n[c]\n"
+  },
+  "quoting:18": {
+    "script": "set -- \"a b\" c; for i in \"$*\"; do echo \"[$i]\"; done",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[a b c]\n"
+  },
+  "quoting:19": {
+    "script": "set -- \"a b\" c; for i in $@; do echo \"[$i]\"; done",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[a]\n[b]\n[c]\n"
+  },
+  "quoting:20": {
+    "script": "a=\"x y\"; b=($a); echo ${#b[@]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "quoting:21": {
+    "script": "echo \"$(printf 'a\\n\\n\\n')|\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a|\n"
+  },
+  "quoting:22": {
+    "script": "echo ~ | sed 's|/.*|/|'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "/\n"
+  },
+  "expansions:23": {
+    "script": "v=hello; echo ${#v}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "5\n"
+  },
+  "expansions:24": {
+    "script": "v=hello; echo ${v:1:3} ${v: -2} ${v:2}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ell lo llo\n"
+  },
+  "expansions:25": {
+    "script": "v=path/to/file.tar.gz; echo ${v##*/} ${v#*/} ${v%%.*} ${v%.*}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "file.tar.gz to/file.tar.gz path/to/file path/to/file.tar\n"
+  },
+  "expansions:26": {
+    "script": "v=aaa; echo ${v/a/b} ${v//a/b} ${v/#a/c} ${v/%a/d}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "baa bbb caa aad\n"
+  },
+  "expansions:27": {
+    "script": "unset u; echo ${u:-def} ${u-def2} \"${u:+alt}\" x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "def def2  x\n"
+  },
+  "expansions:28": {
+    "script": "u=; echo \"[${u:-def}]\" \"[${u-def}]\" \"[${u:+alt}]\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[def] [] []\n"
+  },
+  "expansions:29": {
+    "script": "v=set; echo ${v:+alt} ${v:-def}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "alt set\n"
+  },
+  "expansions:30": {
+    "script": "unset u; echo ${u:=assigned}; echo $u",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "assigned\nassigned\n"
+  },
+  "expansions:31": {
+    "script": "v=Hello; echo ${v^^} ${v,,} ${v^} ${v,}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "HELLO hello Hello hello\n"
+  },
+  "expansions:32": {
+    "script": "arr=(one two three); echo ${arr[@]:1} ${#arr[1]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "two three 3\n"
+  },
+  "expansions:33": {
+    "script": "echo {a,b,c}{1,2}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a1 a2 b1 b2 c1 c2\n"
+  },
+  "expansions:34": {
+    "script": "echo {1..5} {5..1} {a..e}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1 2 3 4 5 5 4 3 2 1 a b c d e\n"
+  },
+  "expansions:35": {
+    "script": "echo {01..03} {1..10..3}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "01 02 03 1 4 7 10\n"
+  },
+  "expansions:36": {
+    "script": "echo pre{x,y}post",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "prexpost preypost\n"
+  },
+  "expansions:37": {
+    "script": "echo $((10/3)) $((10%3)) $((2**10)) $((-7/2))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3 1 1024 -3\n"
+  },
+  "expansions:38": {
+    "script": "echo $(( (1+2)*3 )) $((1<2)) $((1==1&&0)) $((5>3?7:8))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "9 1 0 7\n"
+  },
+  "expansions:39": {
+    "script": "i=5; ((i++)); echo $i; ((i+=10)); echo $i",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "6\n16\n"
+  },
+  "expansions:40": {
+    "script": "i=0; echo $((i++)) $((++i)) $i",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0 2 2\n"
+  },
+  "expansions:41": {
+    "script": "echo $((0x1f)) $((8#17)) $((2#101))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "31 15 5\n"
+  },
+  "expansions:42": {
+    "script": "echo $(( 1 << 4 )) $(( 255 & 15 )) $(( 1 | 6 )) $(( 5 ^ 3 ))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "16 15 7 6\n"
+  },
+  "expansions:43": {
+    "script": "x=3; y=4; echo $((x*y)) $((x>y)) $((x!=y))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "12 0 1\n"
+  },
+  "expansions:44": {
+    "script": "let a=5+3; echo $a",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "8\n"
+  },
+  "expansions:45": {
+    "script": "echo $[2+3]",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "5\n"
+  },
+  "expansions:46": {
+    "script": "echo \"$(( 7 / 2 )).$(( 7 % 2 ))\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3.1\n"
+  },
+  "expansions:47": {
+    "script": "n=010; echo $((10#$n))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "10\n"
+  },
+  "expansions:48": {
+    "script": "name=VAR; declare \"$name=val\"; echo $VAR",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "val\n"
+  },
+  "expansions:49": {
+    "script": "x=abc; y=x; echo ${!y}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "abc\n"
+  },
+  "expansions:50": {
+    "script": "pre_a=1 pre_b=2; echo ${!pre_@}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "pre_a pre_b\n"
+  },
+  "expansions:51": {
+    "script": "v=\"a-b-c\"; echo ${v//-/ }",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a b c\n"
+  },
+  "expansions:52": {
+    "script": "f=/a/b/c.txt; echo $(basename $f) $(dirname $f) $(basename $f .txt)",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "c.txt /a/b c\n"
+  },
+  "expansions:53": {
+    "script": "echo $(echo a; echo b)",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a b\n"
+  },
+  "expansions:54": {
+    "script": "echo \\`echo backtick\\`",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "`echo backtick`\n"
+  },
+  "expansions:55": {
+    "script": "echo `echo backtick`",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "backtick\n"
+  },
+  "expansions:56": {
+    "script": "x=5; echo $((x+=2)) $x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "7 7\n"
+  },
+  "expansions:57": {
+    "script": "s=\"hello world\"; echo ${s/world/there}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "hello there\n"
+  },
+  "expansions:58": {
+    "script": "echo ${#}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "expansions:59": {
+    "script": "set -- a b c; echo $# $1 $3 ${@: -1}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3 a c c\n"
+  },
+  "expansions:60": {
+    "script": "set -- a b c; shift; echo $@",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "b c\n"
+  },
+  "expansions:61": {
+    "script": "set -- a b c d e f g h i j k; echo ${10} ${11}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "j k\n"
+  },
+  "expansions:62": {
+    "script": "f() { echo $#; }; f \"\" \"\" x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "expansions:63": {
+    "script": "echo \"$((1+2))\" \"$[1+2]\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3 3\n"
+  },
+  "globs:64": {
+    "script": "echo *.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a.txt dup.txt nums.txt words.txt\n"
+  },
+  "globs:65": {
+    "script": "echo dir/*",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/sub dir/x.txt dir/z.txt\n"
+  },
+  "globs:66": {
+    "script": "echo dir/*.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/x.txt dir/z.txt\n"
+  },
+  "globs:67": {
+    "script": "echo nomatch*",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "nomatch*\n"
+  },
+  "globs:68": {
+    "script": "shopt -s nullglob; echo nomatch* end",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "end\n"
+  },
+  "globs:69": {
+    "script": "echo [ab]*.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a.txt\n"
+  },
+  "globs:70": {
+    "script": "echo ?.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a.txt\n"
+  },
+  "globs:71": {
+    "script": "echo dir/**/*.md",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/sub/y.md\n"
+  },
+  "globs:72": {
+    "script": "shopt -s globstar; echo dir/**/*.md",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/sub/y.md\n"
+  },
+  "globs:73": {
+    "script": "echo d*r",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir\n"
+  },
+  "globs:74": {
+    "script": "for f in *.txt; do echo \"f:$f\"; done",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "f:a.txt\nf:dup.txt\nf:nums.txt\nf:words.txt\n"
+  },
+  "globs:75": {
+    "script": "case abc in a*) echo yes;; *) echo no;; esac",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "yes\n"
+  },
+  "globs:76": {
+    "script": "case x.md in *.txt) echo t;; *.md|*.rst) echo m;; esac",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "m\n"
+  },
+  "globs:77": {
+    "script": "case 5 in [0-9]) echo digit;; esac",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "digit\n"
+  },
+  "globs:78": {
+    "script": "[[ abc == a* ]] && echo match",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "match\n"
+  },
+  "globs:79": {
+    "script": "[[ abc =~ ^a(b)c$ ]] && echo ${BASH_REMATCH[1]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "b\n"
+  },
+  "globs:80": {
+    "script": "[[ foo.txt == *.@(txt|md) ]] && echo ext",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ext\n"
+  },
+  "globs:81": {
+    "script": "shopt -s extglob; ls !(*.txt) | head -3",
+    "exitCode": 2,
+    "stderr": "/bin/bash: -c: line 1: syntax error near unexpected token `('\n/bin/bash: -c: line 1: `shopt -s extglob; ls !(*.txt) | head -3'\n",
+    "stdout": ""
+  },
+  "pipelines:82": {
+    "script": "echo hi | cat | cat",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "hi\n"
+  },
+  "pipelines:83": {
+    "script": "printf 'b\\na\\nc\\n' | sort | head -2",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\nb\n"
+  },
+  "pipelines:84": {
+    "script": "false | true; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "pipelines:85": {
+    "script": "true | false; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "pipelines:86": {
+    "script": "set -o pipefail; false | true; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "pipelines:87": {
+    "script": "set -o pipefail; true | false | true; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "pipelines:88": {
+    "script": "echo a | { read x; echo got $x; }",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "got a\n"
+  },
+  "pipelines:89": {
+    "script": "echo a b c | while read x y; do echo \"$y|$x\"; done",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "b c|a\n"
+  },
+  "pipelines:90": {
+    "script": "x=1; echo 2 | read x; echo $x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "pipelines:91": {
+    "script": "cat a.txt | grep an | wc -l",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "pipelines:92": {
+    "script": "echo hi |& cat",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "hi\n"
+  },
+  "pipelines:93": {
+    "script": "! true; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "pipelines:94": {
+    "script": "! false; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "pipelines:95": {
+    "script": "true && echo and; false || echo or",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "and\nor\n"
+  },
+  "pipelines:96": {
+    "script": "false && echo no; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "pipelines:97": {
+    "script": "true || echo no; echo ok",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ok\n"
+  },
+  "pipelines:98": {
+    "script": "{ echo a; echo b; } | wc -l",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "pipelines:99": {
+    "script": "(echo sub; exit 3); echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "sub\n3\n"
+  },
+  "pipelines:100": {
+    "script": "x=1; (x=2); echo $x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "pipelines:101": {
+    "script": "x=1; { x=2; }; echo $x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "pipelines:102": {
+    "script": "echo $(exit 4); echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\n0\n"
+  },
+  "pipelines:103": {
+    "script": "seq 3 | tac",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n2\n1\n"
+  },
+  "pipelines:104": {
+    "script": "yes | head -3",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "y\ny\ny\n"
+  },
+  "pipelines:105": {
+    "script": "seq 1 10 | paste -sd+ | bc",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "55\n"
+  },
+  "pipelines:106": {
+    "script": "printf '%s\\n' 3 1 2 | sort -n | tail -1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "redirects:107": {
+    "script": "echo hi > o.txt; cat o.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "hi\n"
+  },
+  "redirects:108": {
+    "script": "echo a > o.txt; echo b >> o.txt; cat o.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\nb\n"
+  },
+  "redirects:109": {
+    "script": "echo err >&2 2>/dev/null; echo after",
+    "exitCode": 0,
+    "stderr": "err\n",
+    "stdout": "after\n"
+  },
+  "redirects:110": {
+    "script": "{ echo out; echo err >&2; } 2>/dev/null",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "out\n"
+  },
+  "redirects:111": {
+    "script": "{ echo out; echo err >&2; } 2>&1 | wc -l",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "redirects:112": {
+    "script": "{ echo out; echo err >&2; } > o.txt 2>&1; cat o.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "out\nerr\n"
+  },
+  "redirects:113": {
+    "script": "ls nonexist 2>/dev/null; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "redirects:114": {
+    "script": "cat < a.txt | head -1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\n"
+  },
+  "redirects:115": {
+    "script": "wc -l < a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "redirects:116": {
+    "script": "echo x &> o.txt; cat o.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "x\n"
+  },
+  "redirects:117": {
+    "script": "echo x 1>&2 2>o.txt; cat o.txt",
+    "exitCode": 0,
+    "stderr": "x\n",
+    "stdout": ""
+  },
+  "redirects:118": {
+    "script": "exec 3> o.txt; echo three >&3; exec 3>&-; cat o.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "three\n"
+  },
+  "redirects:119": {
+    "script": "cat <<< \"here string\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "here string\n"
+  },
+  "redirects:120": {
+    "script": "read a b <<< \"1 2\"; echo $b $a",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2 1\n"
+  },
+  "redirects:121": {
+    "script": "echo data > o.txt; while read l; do echo \"<$l>\"; done < o.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "<data>\n"
+  },
+  "redirects:122": {
+    "script": ": > o.txt; wc -c < o.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "redirects:123": {
+    "script": "echo hi > /dev/null; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "redirects:124": {
+    "script": "cat a.txt nonexist 2>&1 >/dev/null | wc -l",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "redirects:125": {
+    "script": "echo a >o.txt; echo b >| o.txt; cat o.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "b\n"
+  },
+  "redirects:126": {
+    "script": "set -C; echo a > o.txt; echo b > o.txt; echo $?",
+    "exitCode": 0,
+    "stderr": "/bin/bash: line 1: o.txt: cannot overwrite existing file\n",
+    "stdout": "1\n"
+  },
+  "heredocs:127": {
+    "script": "cat <<EOF\nline $((1+1))\nEOF",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "line 2\n"
+  },
+  "heredocs:128": {
+    "script": "cat <<'EOF'\nno $expansion\nEOF",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "no $expansion\n"
+  },
+  "heredocs:129": {
+    "script": "cat <<-EOF\n\ttabbed\n\tEOF",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "tabbed\n"
+  },
+  "heredocs:130": {
+    "script": "x=v; cat <<EOF | tr a-z A-Z\nval $x\nEOF",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "VAL V\n"
+  },
+  "heredocs:131": {
+    "script": "cat <<EOF\na \\$x \\\\ b\nEOF",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a $x \\ b\n"
+  },
+  "heredocs:132": {
+    "script": "cat <<A; cat <<B\nfirst\nA\nsecond\nB",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "first\nsecond\n"
+  },
+  "heredocs:133": {
+    "script": "f() { cat; }; f <<EOF\nfn heredoc\nEOF",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "fn heredoc\n"
+  },
+  "heredocs:134": {
+    "script": "while read l; do echo \"[$l]\"; done <<EOF\n1\n2\nEOF",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[1]\n[2]\n"
+  },
+  "heredocs:135": {
+    "script": "cat <<\"EOF\"\nquoted $x\nEOF",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "quoted $x\n"
+  },
+  "heredocs:136": {
+    "script": "x=$(cat <<EOF\nheredoc in subst\nEOF\n); echo \"$x\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "heredoc in subst\n"
+  },
+  "functions:137": {
+    "script": "f() { echo \"args: $*\"; }; f 1 2 3",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "args: 1 2 3\n"
+  },
+  "functions:138": {
+    "script": "f() { return 3; }; f; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "functions:139": {
+    "script": "f() { local x=inner; echo $x; }; x=outer; f; echo $x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "inner\nouter\n"
+  },
+  "functions:140": {
+    "script": "f() { x=changed; }; x=orig; f; echo $x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "changed\n"
+  },
+  "functions:141": {
+    "script": "function g { echo kw; }; g",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "kw\n"
+  },
+  "functions:142": {
+    "script": "f() { echo $1; shift; echo $1; }; f a b",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\nb\n"
+  },
+  "functions:143": {
+    "script": "fact() { if [ $1 -le 1 ]; then echo 1; else echo $(( $1 * $(fact $(( $1 - 1 ))) )); fi; }; fact 5",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "120\n"
+  },
+  "functions:144": {
+    "script": "f() { echo ${FUNCNAME[0]}; }; f",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "f\n"
+  },
+  "functions:145": {
+    "script": "f() { echo \"$@\" | wc -w; }; f a \"b c\" d",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "4\n"
+  },
+  "functions:146": {
+    "script": "f() { :; }; type f | head -1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "f is a function\n"
+  },
+  "functions:147": {
+    "script": "f() { echo in; }; unset -f f; f 2>/dev/null; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "127\n"
+  },
+  "functions:148": {
+    "script": "f() { local -a a=(1 2 3); echo ${#a[@]}; }; f",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "functions:149": {
+    "script": "f() { declare -g G=global; }; f; echo $G",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "global\n"
+  },
+  "functions:150": {
+    "script": "count() { echo $#; }; count \"$@\"; set -- a b; count \"$@\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n2\n"
+  },
+  "functions:151": {
+    "script": "outer() { inner() { echo inner; }; inner; }; outer",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "inner\n"
+  },
+  "functions:152": {
+    "script": "f() { return; }; f; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "functions:153": {
+    "script": "f() { false; }; f && echo t || echo f",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "f\n"
+  },
+  "functions:154": {
+    "script": "shopt -s expand_aliases\nalias ll='echo aliased'\nll",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "aliased\n"
+  },
+  "arrays:155": {
+    "script": "a=(x y z); echo ${a[0]} ${a[2]} ${#a[@]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "x z 3\n"
+  },
+  "arrays:156": {
+    "script": "a=(x y z); a+=(w); echo ${a[@]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "x y z w\n"
+  },
+  "arrays:157": {
+    "script": "a=(x y z); unset 'a[1]'; echo ${a[@]} ${#a[@]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "x z 2\n"
+  },
+  "arrays:158": {
+    "script": "a=(x y z); echo ${!a[@]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0 1 2\n"
+  },
+  "arrays:159": {
+    "script": "a=(); a[5]=five; echo ${!a[@]} ${a[5]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "5 five\n"
+  },
+  "arrays:160": {
+    "script": "a=(x y z); for e in \"${a[@]}\"; do echo $e; done",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "x\ny\nz\n"
+  },
+  "arrays:161": {
+    "script": "a=(\"a b\" c); echo ${#a[@]}; printf '[%s]\\n' \"${a[@]}\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n[a b]\n[c]\n"
+  },
+  "arrays:162": {
+    "script": "declare -A m; m[k1]=v1; m[k2]=v2; echo ${m[k1]} ${m[k2]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "v1 v2\n"
+  },
+  "arrays:163": {
+    "script": "declare -A m=([a]=1 [b]=2); for k in $(echo ${!m[@]} | tr ' ' '\\n' | sort); do echo $k=${m[$k]}; done",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a=1\nb=2\n"
+  },
+  "arrays:164": {
+    "script": "declare -A m; m[x]=1; [[ -v m[x] ]] && echo has; [[ -v m[y] ]] || echo hasnt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "has\nhasnt\n"
+  },
+  "arrays:165": {
+    "script": "a=(3 1 2); IFS=$'\\n' s=($(sort <<<\"${a[*]}\")); echo ${s[@]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1 2 3\n"
+  },
+  "arrays:166": {
+    "script": "a=(a b c); echo \"${a[*]}\"; IFS=,; echo \"${a[*]}\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a b c\na,b,c\n"
+  },
+  "arrays:167": {
+    "script": "a=(1 2 3 4 5); echo ${a[@]:1:2}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2 3\n"
+  },
+  "arrays:168": {
+    "script": "read -a arr <<< \"p q r\"; echo ${arr[1]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "q\n"
+  },
+  "arrays:169": {
+    "script": "mapfile -t lines < a.txt; echo ${#lines[@]} ${lines[2]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3 cherry\n"
+  },
+  "arrays:170": {
+    "script": "readarray -t L <<< $'1\\n2'; echo ${L[1]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "arrays:171": {
+    "script": "a=(x y); a[1]+=z; echo ${a[1]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "yz\n"
+  },
+  "arrays:172": {
+    "script": "a=(b a c); echo ${a[@]/a/A}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "b A c\n"
+  },
+  "arrays:173": {
+    "script": "a=(1 2 3); echo $(( ${a[0]} + ${a[2]} ))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "4\n"
+  },
+  "arrays:174": {
+    "script": "declare -a a=(1 2); declare -p a",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "declare -a a=([0]=\"1\" [1]=\"2\")\n"
+  },
+  "arrays:175": {
+    "script": "declare -A m=([k]=v); echo ${#m[@]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "arrays:176": {
+    "script": "a=(x y z); echo ${a[-1]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "z\n"
+  },
+  "arith:177": {
+    "script": "for ((i=0;i<3;i++)); do echo $i; done",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n1\n2\n"
+  },
+  "arith:178": {
+    "script": "i=0; while (( i < 3 )); do ((i++)); done; echo $i",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "arith:179": {
+    "script": "(( 0 )); echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "arith:180": {
+    "script": "(( 5 )); echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "arith:181": {
+    "script": "x=$(( 3 > 2 )); echo $x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "arith:182": {
+    "script": "echo $(( 9223372036854775807 + 1 ))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "-9223372036854775808\n"
+  },
+  "arith:183": {
+    "script": "echo $(( -5 % 3 ))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "-2\n"
+  },
+  "arith:184": {
+    "script": "declare -i n=5; n+=3; echo $n",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "8\n"
+  },
+  "arith:185": {
+    "script": "declare -i n; n=\"2*3\"; echo $n",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "6\n"
+  },
+  "arith:186": {
+    "script": "echo $((  1 ,  2 ))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "arith:187": {
+    "script": "a=3; echo $(( a++ + ++a )) $a",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "8 5\n"
+  },
+  "arith:188": {
+    "script": "echo $(( ~5 )) $(( !0 ))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "-6 1\n"
+  },
+  "arith:189": {
+    "script": "x=10; (( x > 5 )) && echo big",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "big\n"
+  },
+  "arith:190": {
+    "script": "echo $(( 1/0 )) 2>&1 | head -1 | grep -c 'division'",
+    "exitCode": 1,
+    "stderr": "/bin/bash: line 1: 1/0 : division by 0 (error token is \"0 \")\n",
+    "stdout": "0\n"
+  },
+  "control:191": {
+    "script": "if true; then echo t; else echo f; fi",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "t\n"
+  },
+  "control:192": {
+    "script": "if false; then echo 1; elif true; then echo 2; else echo 3; fi",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "control:193": {
+    "script": "for i in 1 2 3; do [ $i = 2 ] && continue; echo $i; done",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n3\n"
+  },
+  "control:194": {
+    "script": "for i in 1 2 3; do [ $i = 2 ] && break; echo $i; done",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "control:195": {
+    "script": "for i in 1 2; do for j in a b; do [ $j = b ] && continue 2; echo $i$j; done; done",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1a\n2a\n"
+  },
+  "control:196": {
+    "script": "i=0; until [ $i -ge 2 ]; do echo $i; i=$((i+1)); done",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n1\n"
+  },
+  "control:197": {
+    "script": "set -- p q; for i; do echo $i; done",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "p\nq\n"
+  },
+  "control:198": {
+    "script": "[ -f a.txt ] && echo file",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "file\n"
+  },
+  "control:199": {
+    "script": "[ -d dir ] && echo dir",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir\n"
+  },
+  "control:200": {
+    "script": "[ -e nope ] || echo missing",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "missing\n"
+  },
+  "control:201": {
+    "script": "[ -s a.txt ] && echo nonempty",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "nonempty\n"
+  },
+  "control:202": {
+    "script": "[ -z \"\" ] && [ -n x ] && echo zn",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "zn\n"
+  },
+  "control:203": {
+    "script": "[ 2 -lt 10 ] && [ 10 -gt 2 ] && [ 3 -eq 3 ] && echo num",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "num\n"
+  },
+  "control:204": {
+    "script": "[ abc \\< abd ] && echo lt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "lt\n"
+  },
+  "control:205": {
+    "script": "[[ 2 < 10 ]] && echo strlt || echo strge",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "strge\n"
+  },
+  "control:206": {
+    "script": "[[ -n $undefined ]] || echo emptyvar",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "emptyvar\n"
+  },
+  "control:207": {
+    "script": "[[ a && b ]] && echo both",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "both\n"
+  },
+  "control:208": {
+    "script": "test 1 -ne 2 && echo ne",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ne\n"
+  },
+  "control:209": {
+    "script": "[ ! -f nope ] && echo neg",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "neg\n"
+  },
+  "control:210": {
+    "script": "[[ \"a b\" == \"a b\" ]] && echo eq",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "eq\n"
+  },
+  "control:211": {
+    "script": "x=; [ -z \"$x\" ] && echo empty",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "empty\n"
+  },
+  "control:212": {
+    "script": "case \"\" in \"\") echo emptycase;; esac",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "emptycase\n"
+  },
+  "control:213": {
+    "script": "case foo in f??) echo three;; esac",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "three\n"
+  },
+  "control:214": {
+    "script": "while true; do echo once; break; done",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "once\n"
+  },
+  "control:215": {
+    "script": "for x in $(seq 3); do echo -n $x; done; echo",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "123\n"
+  },
+  "control:216": {
+    "script": "case b in a) echo a;& b) echo b;& c) echo c;; d) echo d;; esac",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "b\nc\n"
+  },
+  "set-e:217": {
+    "script": "set -e; false; echo not-reached",
+    "exitCode": 1,
+    "stderr": "",
+    "stdout": ""
+  },
+  "set-e:218": {
+    "script": "set -e; false || true; echo reached",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "reached\n"
+  },
+  "set-e:219": {
+    "script": "set -e; if false; then :; fi; echo reached-if",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "reached-if\n"
+  },
+  "set-e:220": {
+    "script": "set -e; f() { false; echo inf; }; f || echo caught",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "inf\n"
+  },
+  "set-e:221": {
+    "script": "set -e; x=$(false); echo after-sub",
+    "exitCode": 1,
+    "stderr": "",
+    "stdout": ""
+  },
+  "set-e:222": {
+    "script": "set -e; false && true; echo after-and",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "after-and\n"
+  },
+  "set-e:223": {
+    "script": "set -e; (false); echo nope",
+    "exitCode": 1,
+    "stderr": "",
+    "stdout": ""
+  },
+  "set-e:224": {
+    "script": "set -u; echo $undefined_var; echo nope",
+    "exitCode": 127,
+    "stderr": "/bin/bash: line 1: undefined_var: unbound variable\n",
+    "stdout": ""
+  },
+  "set-e:225": {
+    "script": "set -u; echo ${undefined_var:-ok}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ok\n"
+  },
+  "set-e:226": {
+    "script": "set -e; ! false; echo negok",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "negok\n"
+  },
+  "set-e:227": {
+    "script": "set -eo pipefail; false | true; echo nope",
+    "exitCode": 1,
+    "stderr": "",
+    "stdout": ""
+  },
+  "set-e:228": {
+    "script": "set -e; trap 'echo trapped' EXIT; false",
+    "exitCode": 1,
+    "stderr": "",
+    "stdout": "trapped\n"
+  },
+  "set-e:229": {
+    "script": "trap 'echo bye' EXIT; echo hi",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "hi\nbye\n"
+  },
+  "set-e:230": {
+    "script": "trap 'echo err' ERR; false; echo cont",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "err\ncont\n"
+  },
+  "set-e:231": {
+    "script": "exit 7",
+    "exitCode": 7,
+    "stderr": "",
+    "stdout": ""
+  },
+  "set-e:232": {
+    "script": "f() { exit 2; }; f; echo no",
+    "exitCode": 2,
+    "stderr": "",
+    "stdout": ""
+  },
+  "set-e:233": {
+    "script": "set -e; for i in 1 2; do false; done; echo nope",
+    "exitCode": 1,
+    "stderr": "",
+    "stdout": ""
+  },
+  "set-e:234": {
+    "script": "set -e; while false; do :; done; echo ok-while",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ok-while\n"
+  },
+  "builtins:235": {
+    "script": "printf '%5s|%-5s|%05d|%.2f|%x|%o\\n' a b 42 3.14159 255 8",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "    a|b    |00042|3.14|ff|10\n"
+  },
+  "builtins:236": {
+    "script": "printf '%s,' a b c; echo",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a,b,c,\n"
+  },
+  "builtins:237": {
+    "script": "printf '%d%%\\n' 50",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "50%\n"
+  },
+  "builtins:238": {
+    "script": "printf '%c\\n' hello",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "h\n"
+  },
+  "builtins:239": {
+    "script": "printf '%b\\n' 'a\\tb'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\tb\n"
+  },
+  "builtins:240": {
+    "script": "printf '%q\\n' \"a b'c\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\\ b\\'c\n"
+  },
+  "builtins:241": {
+    "script": "printf -v var '%03d' 7; echo $var",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "007\n"
+  },
+  "builtins:242": {
+    "script": "printf '%s %s\\n' 1 2 3",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1 2\n3 \n"
+  },
+  "builtins:243": {
+    "script": "printf '%10.3s|\\n' abcdef",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "       abc|\n"
+  },
+  "builtins:244": {
+    "script": "printf '%e\\n' 12345.678",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1.234568e+04\n"
+  },
+  "builtins:245": {
+    "script": "printf '%i\\n' 0x10",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "16\n"
+  },
+  "builtins:246": {
+    "script": "x=$(printf '%s' \"no newline\"); echo \"[$x]\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[no newline]\n"
+  },
+  "builtins:247": {
+    "script": "read -r line <<< 'a\\b'; echo \"$line\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\\b\n"
+  },
+  "builtins:248": {
+    "script": "IFS=, read -r a b c <<< \"1,2,3\"; echo $c $a",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3 1\n"
+  },
+  "builtins:249": {
+    "script": "echo \"a b\" | { read; echo \"$REPLY\"; }",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a b\n"
+  },
+  "builtins:250": {
+    "script": "type echo | head -1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "echo is a shell builtin\n"
+  },
+  "builtins:251": {
+    "script": "command -v cat >/dev/null && echo has-cat",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "has-cat\n"
+  },
+  "builtins:252": {
+    "script": "command -v nonexistent_cmd || echo none",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "none\n"
+  },
+  "builtins:253": {
+    "script": "pwd | sed 's|.*/||'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "w\n"
+  },
+  "builtins:254": {
+    "script": "cd dir && pwd | sed 's|.*/||' && cd .. && pwd | sed 's|.*/||'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir\nw\n"
+  },
+  "builtins:255": {
+    "script": "cd dir; cd sub; echo ${PWD##*/}; cd -  >/dev/null; echo ${PWD##*/}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "sub\ndir\n"
+  },
+  "builtins:256": {
+    "script": "pushd dir >/dev/null; echo ${PWD##*/}; popd >/dev/null; echo ${PWD##*/}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir\nw\n"
+  },
+  "builtins:257": {
+    "script": "export FOO=bar; bash -c 'echo $FOO'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "bar\n"
+  },
+  "builtins:258": {
+    "script": "FOO=inline bash -c 'echo $FOO'; echo \"[$FOO]\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "inline\n[]\n"
+  },
+  "builtins:259": {
+    "script": "bash -c 'exit 5'; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "5\n"
+  },
+  "builtins:260": {
+    "script": "sh -c 'echo $0 $1' zero one",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "zero one\n"
+  },
+  "builtins:261": {
+    "script": "eval 'echo evaluated $((2*2))'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "evaluated 4\n"
+  },
+  "builtins:262": {
+    "script": "x='echo hi'; eval \"$x\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "hi\n"
+  },
+  "builtins:263": {
+    "script": "source /dev/null; echo sourced",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "sourced\n"
+  },
+  "builtins:264": {
+    "script": "echo 'echo from-file $1' > s.sh; bash s.sh arg; . ./s.sh dot",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "from-file arg\nfrom-file dot\n"
+  },
+  "builtins:265": {
+    "script": "getopts ab: opt -b val; echo $opt $OPTARG",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "b val\n"
+  },
+  "builtins:266": {
+    "script": "set -- -a -b x; while getopts \"ab:\" o; do echo $o ${OPTARG:-}; done",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\nb x\n"
+  },
+  "builtins:267": {
+    "script": "unset x; x=1; unset x; echo ${x-unset}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "unset\n"
+  },
+  "builtins:268": {
+    "script": "readonly R=1; R=2 2>/dev/null; echo $R",
+    "exitCode": 1,
+    "stderr": "/bin/bash: line 1: R: readonly variable\n",
+    "stdout": ""
+  },
+  "builtins:269": {
+    "script": "true; echo $?; false; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n1\n"
+  },
+  "builtins:270": {
+    "script": "echo $(( $(echo 3) + 4 ))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "7\n"
+  },
+  "builtins:271": {
+    "script": "shopt -s nocasematch; [[ ABC == abc ]] && echo nocase",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "nocase\n"
+  },
+  "builtins:272": {
+    "script": "type -t cd; type -t ls; type -t if",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "builtin\nfile\nkeyword\n"
+  },
+  "builtins:273": {
+    "script": "declare -x E=1; env | grep -c '^E=1$'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "builtins:274": {
+    "script": "wait; echo waited",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "waited\n"
+  },
+  "builtins:275": {
+    "script": "sleep 0 & wait; echo bg",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "bg\n"
+  },
+  "builtins:276": {
+    "script": "(echo async) & wait",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "async\n"
+  },
+  "builtins:277": {
+    "script": "printf '%s\\n' \"${HOME:+set}\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "set\n"
+  },
+  "coreutils:278": {
+    "script": "cat -n a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "     1\tapple\n     2\tbanana\n     3\tcherry\n"
+  },
+  "coreutils:279": {
+    "script": "head -n 2 a.txt; tail -n 1 a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nbanana\ncherry\n"
+  },
+  "coreutils:280": {
+    "script": "head -c 5 a.txt; echo",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\n"
+  },
+  "coreutils:281": {
+    "script": "tail -n +2 a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\ncherry\n"
+  },
+  "coreutils:282": {
+    "script": "wc a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": " 3  3 20 a.txt\n"
+  },
+  "coreutils:283": {
+    "script": "wc -w words.txt; wc -c a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "11 words.txt\n20 a.txt\n"
+  },
+  "coreutils:284": {
+    "script": "sort -r a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "cherry\nbanana\napple\n"
+  },
+  "coreutils:285": {
+    "script": "sort -n nums.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n2\n3\n10\n"
+  },
+  "coreutils:286": {
+    "script": "sort nums.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n10\n2\n3\n"
+  },
+  "coreutils:287": {
+    "script": "sort -t, -k2 -n data.csv",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "name,age,city\nbob,25,LA\nalice,30,NYC\ncarol,35,NYC\n"
+  },
+  "coreutils:288": {
+    "script": "sort -u dup.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\nb\nc\n"
+  },
+  "coreutils:289": {
+    "script": "sort dup.txt | uniq -c",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "      2 a\n      1 b\n      3 c\n"
+  },
+  "coreutils:290": {
+    "script": "uniq -d dup.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\nc\n"
+  },
+  "coreutils:291": {
+    "script": "uniq -u dup.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "b\n"
+  },
+  "coreutils:292": {
+    "script": "cut -d, -f1,3 data.csv",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "name,city\nalice,NYC\nbob,LA\ncarol,NYC\n"
+  },
+  "coreutils:293": {
+    "script": "cut -c1-3 a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "app\nban\nche\n"
+  },
+  "coreutils:294": {
+    "script": "cut -d, -f2- data.csv",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "age,city\n30,NYC\n25,LA\n35,NYC\n"
+  },
+  "coreutils:295": {
+    "script": "tr 'a-z' 'A-Z' < a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "APPLE\nBANANA\nCHERRY\n"
+  },
+  "coreutils:296": {
+    "script": "tr -d 'aeiou' < a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ppl\nbnn\nchrry\n"
+  },
+  "coreutils:297": {
+    "script": "echo baaad | tr -s 'a'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "bad\n"
+  },
+  "coreutils:298": {
+    "script": "echo hello | tr -c 'l\\n' x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "xxllx\n"
+  },
+  "coreutils:299": {
+    "script": "paste -d: a.txt nums.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple:3\nbanana:1\ncherry:2\n:10\n"
+  },
+  "coreutils:300": {
+    "script": "paste -s a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\tbanana\tcherry\n"
+  },
+  "coreutils:301": {
+    "script": "nl a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "     1\tapple\n     2\tbanana\n     3\tcherry\n"
+  },
+  "coreutils:302": {
+    "script": "rev a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "elppa\nananab\nyrrehc\n"
+  },
+  "coreutils:303": {
+    "script": "tac a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "cherry\nbanana\napple\n"
+  },
+  "coreutils:304": {
+    "script": "seq 5; seq 2 2 8; seq -s, 3",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n2\n3\n4\n5\n2\n4\n6\n8\n1,2,3\n"
+  },
+  "coreutils:305": {
+    "script": "seq -w 8 10",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "08\n09\n10\n"
+  },
+  "coreutils:306": {
+    "script": "fold -w 3 <<< abcdefgh",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "abc\ndef\ngh\n"
+  },
+  "coreutils:307": {
+    "script": "expand <<< $'a\\tb' | od -c | head -1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0000000   a                               b  \\n\n"
+  },
+  "coreutils:308": {
+    "script": "comm -12 <(sort a.txt) <(printf 'banana\\ncherry\\nzz\\n')",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\ncherry\n"
+  },
+  "coreutils:309": {
+    "script": "join <(printf '1 a\\n2 b\\n') <(printf '1 x\\n2 y\\n')",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1 a x\n2 b y\n"
+  },
+  "coreutils:310": {
+    "script": "split -l 2 a.txt part_; ls part_*; cat part_ab",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "part_aa\npart_ab\ncherry\n"
+  },
+  "coreutils:311": {
+    "script": "basename /x/y/z.sh .sh; dirname /x/y/z.sh",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "z\n/x/y\n"
+  },
+  "coreutils:312": {
+    "script": "mkdir -p n/m/o && ls -d n/m/o",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "n/m/o\n"
+  },
+  "coreutils:313": {
+    "script": "touch t1; ls t1; rm t1; ls t1 2>/dev/null || echo gone",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "t1\ngone\n"
+  },
+  "coreutils:314": {
+    "script": "cp a.txt b.txt; cat b.txt | wc -l",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "coreutils:315": {
+    "script": "mv a.txt c.txt; ls c.txt; ls a.txt 2>/dev/null || echo moved",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "c.txt\nmoved\n"
+  },
+  "coreutils:316": {
+    "script": "mkdir -p q; cp -r dir q/; find q | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "q\nq/dir\nq/dir/sub\nq/dir/sub/y.md\nq/dir/x.txt\nq/dir/z.txt\n"
+  },
+  "coreutils:317": {
+    "script": "ln -s a.txt lnk; cat lnk | head -1; readlink lnk",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\na.txt\n"
+  },
+  "coreutils:318": {
+    "script": "rm -rf dir; ls dir 2>/dev/null || echo removed",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "removed\n"
+  },
+  "coreutils:319": {
+    "script": "ls",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a.txt\ndata.csv\ndir\ndup.txt\nj.json\nnums.txt\nwords.txt\n"
+  },
+  "coreutils:320": {
+    "script": "ls -1 dir",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "sub\nx.txt\nz.txt\n"
+  },
+  "coreutils:321": {
+    "script": "ls -a dir",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": ".\n..\nsub\nx.txt\nz.txt\n"
+  },
+  "coreutils:322": {
+    "script": "ls -R dir",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir:\nsub\nx.txt\nz.txt\n\ndir/sub:\ny.md\n"
+  },
+  "coreutils:323": {
+    "script": "stat -c %s a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "20\n"
+  },
+  "coreutils:324": {
+    "script": "test -x a.txt || echo notexec; chmod +x a.txt; test -x a.txt && echo exec",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "notexec\nexec\n"
+  },
+  "coreutils:325": {
+    "script": "md5sum a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "e010d6feef1f45c753f750f94af6e9c5  a.txt\n"
+  },
+  "coreutils:326": {
+    "script": "sha256sum a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "6883ada0490e1bd845b6032e95119d522212f98b840eef466ebb09f4a9eb7a03  a.txt\n"
+  },
+  "coreutils:327": {
+    "script": "sha1sum a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "12af4953e95d7dbe183d2a7f30d86aa34fe57f09  a.txt\n"
+  },
+  "coreutils:328": {
+    "script": "echo -n abc | base64; echo YWJj | base64 -d; echo",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "YWJj\nabc\n"
+  },
+  "coreutils:329": {
+    "script": "od -An -tx1 <<< ab",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": " 61 62 0a\n"
+  },
+  "coreutils:330": {
+    "script": "xxd <<< hi",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "00000000: 6869 0a                                  hi.\n"
+  },
+  "coreutils:331": {
+    "script": "printf 'a\\nb\\n' | tee t.txt | wc -l; cat t.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\na\nb\n"
+  },
+  "coreutils:332": {
+    "script": "echo 'a b c' | xargs -n1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\nb\nc\n"
+  },
+  "coreutils:333": {
+    "script": "echo 'a b c' | xargs -n2 echo X",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "X a b\nX c\n"
+  },
+  "coreutils:334": {
+    "script": "printf '1\\n2\\n' | xargs -I{} echo item-{}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "item-1\nitem-2\n"
+  },
+  "coreutils:335": {
+    "script": "find dir -name '*.txt' | sort | xargs cat",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "x\nzz\n"
+  },
+  "coreutils:336": {
+    "script": "printf 'x\\0y\\0' | xargs -0 echo",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "x y\n"
+  },
+  "coreutils:337": {
+    "script": "echo a.txt | xargs wc -l",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3 a.txt\n"
+  },
+  "coreutils:338": {
+    "script": "expr 3 + 4; expr length hello; expr 10 \\* 2",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "7\n5\n20\n"
+  },
+  "coreutils:339": {
+    "script": "expr substr hello 2 3",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ell\n"
+  },
+  "coreutils:340": {
+    "script": "echo $(( $(wc -l < a.txt) * 2 ))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "6\n"
+  },
+  "coreutils:341": {
+    "script": "date -d @0 -u +%Y-%m-%d",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1970-01-01\n"
+  },
+  "coreutils:342": {
+    "script": "date -u -d '2024-01-02 03:04:05' '+%H:%M'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "03:04\n"
+  },
+  "coreutils:343": {
+    "script": "env -i FOO=1 bash -c 'echo $FOO'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "coreutils:344": {
+    "script": "which ls >/dev/null && echo which-ok",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "which-ok\n"
+  },
+  "coreutils:345": {
+    "script": "numfmt --to=iec 2048",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2.0K\n"
+  },
+  "coreutils:346": {
+    "script": "factor 12",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "12: 2 2 3\n"
+  },
+  "coreutils:347": {
+    "script": "seq 3 | shuf -n 3 | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n2\n3\n"
+  },
+  "coreutils:348": {
+    "script": "truncate -s 2 a.txt; cat a.txt; echo",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ap\n"
+  },
+  "coreutils:349": {
+    "script": "column -t <<< $'a b\\nccc d'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a    b\nccc  d\n"
+  },
+  "coreutils:350": {
+    "script": "diff <(echo a) <(echo b); echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1c1\n< a\n---\n> b\n1\n"
+  },
+  "coreutils:351": {
+    "script": "diff -u <(printf 'a\\nb\\n') <(printf 'a\\nc\\n') | tail -2",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "-b\n+c\n"
+  },
+  "coreutils:352": {
+    "script": "cmp a.txt a.txt && echo same",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "same\n"
+  },
+  "coreutils:353": {
+    "script": "realpath -m /a/./b/../c",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "/a/c\n"
+  },
+  "coreutils:354": {
+    "script": "sleep 0.01; echo slept",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "slept\n"
+  },
+  "coreutils:355": {
+    "script": "timeout 1 sleep 0.01; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "coreutils:356": {
+    "script": "du -sb a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "20\ta.txt\n"
+  },
+  "coreutils:357": {
+    "script": "sort -k2 words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "The end\njumps over the lazy dog\nthe quick brown fox\n"
+  },
+  "coreutils:358": {
+    "script": "sort -t, -k3,3 -k2,2nr data.csv",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "bob,25,LA\ncarol,35,NYC\nalice,30,NYC\nname,age,city\n"
+  },
+  "coreutils:359": {
+    "script": "head -n -1 a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nbanana\n"
+  },
+  "coreutils:360": {
+    "script": "tail -c 4 a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "rry\n"
+  },
+  "coreutils:361": {
+    "script": "wc -L words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "23 words.txt\n"
+  },
+  "coreutils:362": {
+    "script": "printf '%s\\n' 10 9 100 | sort -h",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "9\n10\n100\n"
+  },
+  "coreutils:363": {
+    "script": "yes ab | head -c 7; echo",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ab\nab\na\n"
+  },
+  "grep:364": {
+    "script": "grep an a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\n"
+  },
+  "grep:365": {
+    "script": "grep -c a a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "grep:366": {
+    "script": "grep -v an a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\ncherry\n"
+  },
+  "grep:367": {
+    "script": "grep -i the words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "the quick brown fox\njumps over the lazy dog\nThe end\n"
+  },
+  "grep:368": {
+    "script": "grep -n o words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1:the quick brown fox\n2:jumps over the lazy dog\n"
+  },
+  "grep:369": {
+    "script": "grep -o 'o[a-z]' words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ow\nox\nov\nog\n"
+  },
+  "grep:370": {
+    "script": "grep -w the words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "the quick brown fox\njumps over the lazy dog\n"
+  },
+  "grep:371": {
+    "script": "grep -E 'apple|cherry' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\ncherry\n"
+  },
+  "grep:372": {
+    "script": "grep -F '.' data.csv | wc -l",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "grep:373": {
+    "script": "grep -r x dir | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/x.txt:x\n"
+  },
+  "grep:374": {
+    "script": "grep -rl x dir | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/x.txt\n"
+  },
+  "grep:375": {
+    "script": "grep -l an a.txt words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a.txt\n"
+  },
+  "grep:376": {
+    "script": "grep -h . a.txt | head -1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\n"
+  },
+  "grep:377": {
+    "script": "grep -A1 banana a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\ncherry\n"
+  },
+  "grep:378": {
+    "script": "grep -B1 banana a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nbanana\n"
+  },
+  "grep:379": {
+    "script": "grep -C1 banana a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nbanana\ncherry\n"
+  },
+  "grep:380": {
+    "script": "grep -q apple a.txt && echo quiet",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "quiet\n"
+  },
+  "grep:381": {
+    "script": "grep zzz a.txt; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "grep:382": {
+    "script": "grep -e apple -e cherry a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\ncherry\n"
+  },
+  "grep:383": {
+    "script": "grep '^b' a.txt; grep 'y$' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\ncherry\n"
+  },
+  "grep:384": {
+    "script": "grep -P '\\d+' data.csv | head -1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "alice,30,NYC\n"
+  },
+  "grep:385": {
+    "script": "grep -m1 a a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\n"
+  },
+  "grep:386": {
+    "script": "grep -x apple a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\n"
+  },
+  "grep:387": {
+    "script": "grep -E '[0-9]{2}' data.csv",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "alice,30,NYC\nbob,25,LA\ncarol,35,NYC\n"
+  },
+  "grep:388": {
+    "script": "grep -c '' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "grep:389": {
+    "script": "grep 'a\\|c' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nbanana\ncherry\n"
+  },
+  "grep:390": {
+    "script": "grep -E '(an){2}' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\n"
+  },
+  "grep:391": {
+    "script": "grep --include='*.md' -r y dir",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/sub/y.md:y\n"
+  },
+  "grep:392": {
+    "script": "echo 'a.b' | grep -F 'a.b'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a.b\n"
+  },
+  "grep:393": {
+    "script": "grep -ow '[a-z]*' <<< 'x1 yy z'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "yy\nz\n"
+  },
+  "grep:394": {
+    "script": "grep -rn x dir | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/x.txt:1:x\n"
+  },
+  "grep:395": {
+    "script": "grep -H an a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a.txt:banana\n"
+  },
+  "grep:396": {
+    "script": "grep -s x nonexist; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "grep:397": {
+    "script": "grep -iv A a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "cherry\n"
+  },
+  "grep:398": {
+    "script": "grep -E '^(a|b)' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nbanana\n"
+  },
+  "grep:399": {
+    "script": "grep '[[:upper:]]' words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "The end\n"
+  },
+  "sed:400": {
+    "script": "sed 's/a/A/' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "Apple\nbAnana\ncherry\n"
+  },
+  "sed:401": {
+    "script": "sed 's/a/A/g' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "Apple\nbAnAnA\ncherry\n"
+  },
+  "sed:402": {
+    "script": "sed -n '2p' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\n"
+  },
+  "sed:403": {
+    "script": "sed '2d' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\ncherry\n"
+  },
+  "sed:404": {
+    "script": "sed -n '/an/p' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\n"
+  },
+  "sed:405": {
+    "script": "sed '1i\\header' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "header\napple\nbanana\ncherry\n"
+  },
+  "sed:406": {
+    "script": "sed '$a\\footer' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nbanana\ncherry\nfooter\n"
+  },
+  "sed:407": {
+    "script": "sed -e 's/a/1/' -e 's/b/2/' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1pple\n21nana\ncherry\n"
+  },
+  "sed:408": {
+    "script": "sed 's/\\(a\\)\\(n\\)/\\2\\1/g' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nbnanaa\ncherry\n"
+  },
+  "sed:409": {
+    "script": "sed -E 's/(a)(n)/\\2\\1/' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nbnaana\ncherry\n"
+  },
+  "sed:410": {
+    "script": "sed 's|/|_|g' <<< /a/b",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "_a_b\n"
+  },
+  "sed:411": {
+    "script": "sed -n '1,2p' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nbanana\n"
+  },
+  "sed:412": {
+    "script": "sed '1~2d' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\n"
+  },
+  "sed:413": {
+    "script": "sed 'y/abc/xyz/' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "xpple\nyxnxnx\nzherry\n"
+  },
+  "sed:414": {
+    "script": "sed = a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\napple\n2\nbanana\n3\ncherry\n"
+  },
+  "sed:415": {
+    "script": "sed -n '$=' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "sed:416": {
+    "script": "sed 's/.*/[&]/' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[apple]\n[banana]\n[cherry]\n"
+  },
+  "sed:417": {
+    "script": "sed '/banana/,$d' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\n"
+  },
+  "sed:418": {
+    "script": "cp a.txt e.txt; sed -i 's/apple/APPLE/' e.txt; cat e.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "APPLE\nbanana\ncherry\n"
+  },
+  "sed:419": {
+    "script": "sed 's/a/X/2' <<< banana",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banXna\n"
+  },
+  "sed:420": {
+    "script": "sed 's/[aeiou]//g; s/$/!/' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ppl!\nbnn!\nchrry!\n"
+  },
+  "sed:421": {
+    "script": "sed -n 'h;n;G;p' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\napple\n"
+  },
+  "sed:422": {
+    "script": "sed '$!N;s/\\n/ /' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple banana\ncherry\n"
+  },
+  "sed:423": {
+    "script": "sed 'N;P;D' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nbanana\ncherry\n"
+  },
+  "sed:424": {
+    "script": "sed 's/x*/-/g' <<< abc",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "-a-b-c-\n"
+  },
+  "sed:425": {
+    "script": "sed -E 's/^(.)(.*)$/\\U\\1\\E\\2/' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "Apple\nBanana\nCherry\n"
+  },
+  "sed:426": {
+    "script": "sed '/^$/d' <<< $'a\\n\\nb'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\nb\n"
+  },
+  "sed:427": {
+    "script": "sed 'c\\changed' <<< x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "changed\n"
+  },
+  "sed:428": {
+    "script": "sed -n '/apple/{s/apple/fruit/;p}' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "fruit\n"
+  },
+  "sed:429": {
+    "script": "sed 's/a/b/w out.txt' a.txt >/dev/null; cat out.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "bpple\nbbnana\n"
+  },
+  "sed:430": {
+    "script": "sed '2q' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nbanana\n"
+  },
+  "sed:431": {
+    "script": "sed -s -n '1p' a.txt words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nthe quick brown fox\n"
+  },
+  "sed:432": {
+    "script": "sed -n '/apple/,/banana/p' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nbanana\n"
+  },
+  "sed:433": {
+    "script": "sed 's/a/&&/g' <<< ab",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "aab\n"
+  },
+  "sed:434": {
+    "script": "sed '0,/a/s//X/' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "Xpple\nbanana\ncherry\n"
+  },
+  "sed:435": {
+    "script": "sed -E 's/[0-9]+/<&>/g' data.csv",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "name,age,city\nalice,<30>,NYC\nbob,<25>,LA\ncarol,<35>,NYC\n"
+  },
+  "sed:436": {
+    "script": "sed '1!G;h;$!d' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "cherry\nbanana\napple\n"
+  },
+  "sed:437": {
+    "script": "sed 's/\\s\\+/ /g' <<< 'a    b'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a b\n"
+  },
+  "awk:438": {
+    "script": "awk '{print $1}' words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "the\njumps\nThe\n"
+  },
+  "awk:439": {
+    "script": "awk -F, '{print $2}' data.csv",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "age\n30\n25\n35\n"
+  },
+  "awk:440": {
+    "script": "awk -F, 'NR>1 {s+=$2} END {print s}' data.csv",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "90\n"
+  },
+  "awk:441": {
+    "script": "awk '{print NR\": \"$0}' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1: apple\n2: banana\n3: cherry\n"
+  },
+  "awk:442": {
+    "script": "awk 'END{print NR}' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "awk:443": {
+    "script": "awk '{print NF}' words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "4\n5\n2\n"
+  },
+  "awk:444": {
+    "script": "awk '{print $NF}' words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "fox\ndog\nend\n"
+  },
+  "awk:445": {
+    "script": "awk 'length($0)>5' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\ncherry\n"
+  },
+  "awk:446": {
+    "script": "awk '/an/{c++} END{print c}' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "awk:447": {
+    "script": "awk -F, '$3==\"NYC\"{print $1}' data.csv",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "alice\ncarol\n"
+  },
+  "awk:448": {
+    "script": "awk 'BEGIN{printf \"%5.2f|%-4s|%d\\n\", 3.14159, \"ab\", 42}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": " 3.14|ab  |42\n"
+  },
+  "awk:449": {
+    "script": "awk 'BEGIN{x[\"a\"]=1;x[\"b\"]=2; n=0; for(k in x) n++; print n}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "awk:450": {
+    "script": "awk '{a[$0]++} END{for(k in a) print k, a[k]}' dup.txt | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a 2\nb 1\nc 3\n"
+  },
+  "awk:451": {
+    "script": "awk 'BEGIN{print length(\"hello\"), substr(\"hello\",2,3), index(\"hello\",\"l\")}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "5 ell 3\n"
+  },
+  "awk:452": {
+    "script": "awk 'BEGIN{s=\"a,b,c\"; n=split(s,arr,\",\"); print n, arr[3]}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3 c\n"
+  },
+  "awk:453": {
+    "script": "awk 'BEGIN{s=\"hello\"; gsub(/l/,\"L\",s); print s}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "heLLo\n"
+  },
+  "awk:454": {
+    "script": "awk 'BEGIN{s=\"hello\"; sub(/l/,\"L\",s); print s}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "heLlo\n"
+  },
+  "awk:455": {
+    "script": "awk 'BEGIN{print toupper(\"ab\") tolower(\"CD\")}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ABcd\n"
+  },
+  "awk:456": {
+    "script": "awk 'BEGIN{print 1/3}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0.333333\n"
+  },
+  "awk:457": {
+    "script": "awk 'BEGIN{print 2^10, 7%3, int(3.9)}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1024 1 3\n"
+  },
+  "awk:458": {
+    "script": "awk 'BEGIN{OFS=\"-\"} {$1=$1; print}' words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "the-quick-brown-fox\njumps-over-the-lazy-dog\nThe-end\n"
+  },
+  "awk:459": {
+    "script": "awk -v x=5 'BEGIN{print x*2}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "10\n"
+  },
+  "awk:460": {
+    "script": "awk 'NR==2{next} {print}' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\ncherry\n"
+  },
+  "awk:461": {
+    "script": "awk '{printf \"%s \", $1} END{print \"\"}' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple banana cherry \n"
+  },
+  "awk:462": {
+    "script": "awk 'BEGIN{while(i<3){i++; print i}}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n2\n3\n"
+  },
+  "awk:463": {
+    "script": "awk 'BEGIN{if (match(\"foobar\", /ob/)) print RSTART, RLENGTH}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3 2\n"
+  },
+  "awk:464": {
+    "script": "awk '{print > (\"aw_\" NR \".txt\")}' a.txt; cat aw_2.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\n"
+  },
+  "awk:465": {
+    "script": "awk 'BEGIN{\"echo cmd\" | getline x; print x}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "cmd\n"
+  },
+  "awk:466": {
+    "script": "awk 'BEGIN{print sprintf(\"%03d\", 7)}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "007\n"
+  },
+  "awk:467": {
+    "script": "awk -F: '{print $1}' <<< 'a:b:c'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\n"
+  },
+  "awk:468": {
+    "script": "awk 'BEGIN{RS=\"\"}{print NR\": \"$1}' <<< $'a\\nb\\n\\nc'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1: a\n2: c\n"
+  },
+  "awk:469": {
+    "script": "awk '{ $2 = \"X\"; print }' words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "the X brown fox\njumps X the lazy dog\nThe X\n"
+  },
+  "awk:470": {
+    "script": "awk 'BEGIN { print substr(\"hello\", 0, 2) }'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "he\n"
+  },
+  "awk:471": {
+    "script": "awk 'BEGIN { x = \"10\"; y = 9; print (x > y) }'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "awk:472": {
+    "script": "awk 'BEGIN { print 1e6, 0.1+0.2, 100000000 }'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1000000 0.3 100000000\n"
+  },
+  "awk:473": {
+    "script": "awk 'function f(a){return a*2} BEGIN{print f(21)}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "42\n"
+  },
+  "awk:474": {
+    "script": "awk '{s=s $0} END{print s}' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "applebananacherry\n"
+  },
+  "awk:475": {
+    "script": "awk 'NR%2' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\ncherry\n"
+  },
+  "awk:476": {
+    "script": "awk '$1 ~ /^b/' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\n"
+  },
+  "awk:477": {
+    "script": "awk 'BEGIN{print -3 % 2, 3 - -2}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "-1 5\n"
+  },
+  "awk:478": {
+    "script": "awk 'BEGIN{printf \"%c%c\\n\", 65, \"hello\"}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "Ah\n"
+  },
+  "awk:479": {
+    "script": "awk '{print FILENAME; exit}' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a.txt\n"
+  },
+  "awk:480": {
+    "script": "awk 'BEGIN{n=split(\"\",a); print n}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "awk:481": {
+    "script": "seq 5 | awk '{s+=$1} END {print s/NR}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "awk:482": {
+    "script": "awk 'BEGIN{x=\"a b\"; print x \" c\"}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a b c\n"
+  },
+  "awk:483": {
+    "script": "awk -F, 'NR>1{a[$3]+=$2} END{for(k in a) print k, a[k]}' data.csv | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "LA 25\nNYC 65\n"
+  },
+  "awk:484": {
+    "script": "awk '{print length}' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "5\n6\n6\n"
+  },
+  "awk:485": {
+    "script": "awk 'BEGIN { printf \"%s\\n\", 0.000001 }'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1e-06\n"
+  },
+  "awk:486": {
+    "script": "awk 'BEGIN { print 123456789012 }'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "123456789012\n"
+  },
+  "awk:487": {
+    "script": "awk '{ print $(NF-1) }' words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "brown\nlazy\nThe\n"
+  },
+  "awk:488": {
+    "script": "awk 'BEGIN{FS=\",\"} NR==1{for(i=1;i<=NF;i++) print i, $i}' data.csv",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1 name\n2 age\n3 city\n"
+  },
+  "awk:489": {
+    "script": "awk 'BEGIN{print substr(\"abc\", 2)}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "bc\n"
+  },
+  "awk:490": {
+    "script": "awk '{getline; print}' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\ncherry\n"
+  },
+  "jq:491": {
+    "script": "jq . j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "{\n  \"a\": 1,\n  \"b\": [\n    1,\n    2,\n    3\n  ],\n  \"c\": {\n    \"d\": \"x\"\n  },\n  \"items\": [\n    {\n      \"n\": \"a\",\n      \"v\": 1\n    },\n    {\n      \"n\": \"b\",\n      \"v\": 2\n    }\n  ]\n}\n"
+  },
+  "jq:492": {
+    "script": "jq -c . j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "{\"a\":1,\"b\":[1,2,3],\"c\":{\"d\":\"x\"},\"items\":[{\"n\":\"a\",\"v\":1},{\"n\":\"b\",\"v\":2}]}\n"
+  },
+  "jq:493": {
+    "script": "jq .a j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "jq:494": {
+    "script": "jq '.b[1]' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "jq:495": {
+    "script": "jq '.b | length' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "jq:496": {
+    "script": "jq -r '.c.d' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "x\n"
+  },
+  "jq:497": {
+    "script": "jq '.items[] | .n' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"a\"\n\"b\"\n"
+  },
+  "jq:498": {
+    "script": "jq -r '.items[] | \"\\(.n)=\\(.v)\"' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a=1\nb=2\n"
+  },
+  "jq:499": {
+    "script": "jq '[.items[] | .v] | add' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "jq:500": {
+    "script": "jq '.items | map(select(.v > 1))' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[\n  {\n    \"n\": \"b\",\n    \"v\": 2\n  }\n]\n"
+  },
+  "jq:501": {
+    "script": "jq 'keys' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[\n  \"a\",\n  \"b\",\n  \"c\",\n  \"items\"\n]\n"
+  },
+  "jq:502": {
+    "script": "jq -c 'to_entries[0]' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "{\"key\":\"a\",\"value\":1}\n"
+  },
+  "jq:503": {
+    "script": "jq '.b | map(. * 2)' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[\n  2,\n  4,\n  6\n]\n"
+  },
+  "jq:504": {
+    "script": "jq -n '1 + 2'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "jq:505": {
+    "script": "jq -n '[1,2,3] | max'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "jq:506": {
+    "script": "jq -c '.items | sort_by(-.v)' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[{\"n\":\"b\",\"v\":2},{\"n\":\"a\",\"v\":1}]\n"
+  },
+  "jq:507": {
+    "script": "jq -c '.items | group_by(.v > 1) | map(length)' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[1,1]\n"
+  },
+  "jq:508": {
+    "script": "jq 'has(\"a\")' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "true\n"
+  },
+  "jq:509": {
+    "script": "jq -r '.b | join(\",\")' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1,2,3\n"
+  },
+  "jq:510": {
+    "script": "jq -c '{x: .a, y: .c.d}' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "{\"x\":1,\"y\":\"x\"}\n"
+  },
+  "jq:511": {
+    "script": "jq '.missing // \"default\"' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"default\"\n"
+  },
+  "jq:512": {
+    "script": "jq -n '\"abc\" | ascii_upcase'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"ABC\"\n"
+  },
+  "jq:513": {
+    "script": "jq -c -n '\"a,b\" | split(\",\")'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[\"a\",\"b\"]\n"
+  },
+  "jq:514": {
+    "script": "jq -c 'del(.b)' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "{\"a\":1,\"c\":{\"d\":\"x\"},\"items\":[{\"n\":\"a\",\"v\":1},{\"n\":\"b\",\"v\":2}]}\n"
+  },
+  "jq:515": {
+    "script": "jq -c '.a = 5 | .a' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "5\n"
+  },
+  "jq:516": {
+    "script": "jq -c -n '[range(3)]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[0,1,2]\n"
+  },
+  "jq:517": {
+    "script": "jq -r '@base64 \"\\(.c.d)\"' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "eA==\n"
+  },
+  "jq:518": {
+    "script": "jq -n --arg x hi '$x'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"hi\"\n"
+  },
+  "jq:519": {
+    "script": "jq -n --argjson x '{\"a\":1}' '$x.a'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "jq:520": {
+    "script": "jq -c 'paths' <<< '{\"a\":{\"b\":1}}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[\"a\"]\n[\"a\",\"b\"]\n"
+  },
+  "jq:521": {
+    "script": "jq -e '.nope' j.json; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "null\n1\n"
+  },
+  "jq:522": {
+    "script": "jq -r '.items[] | [.n, .v] | @tsv' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\t1\nb\t2\n"
+  },
+  "jq:523": {
+    "script": "jq -r '.items[] | [.n, .v] | @csv' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"a\",1\n\"b\",2\n"
+  },
+  "jq:524": {
+    "script": "jq -s 'add' <<< '1 2 3'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "6\n"
+  },
+  "jq:525": {
+    "script": "jq -c 'reduce .b[] as $x (0; . + $x)' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "6\n"
+  },
+  "jq:526": {
+    "script": "jq -n 'if 1 > 2 then \"a\" else \"b\" end'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"b\"\n"
+  },
+  "jq:527": {
+    "script": "jq -c '[.b[] | select(. % 2 == 1)]' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[1,3]\n"
+  },
+  "jq:528": {
+    "script": "jq -n '\"x\" * 3'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"xxx\"\n"
+  },
+  "jq:529": {
+    "script": "jq -c 'with_entries(.value |= tostring)' <<< '{\"a\":1}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "{\"a\":\"1\"}\n"
+  },
+  "jq:530": {
+    "script": "jq -n '1, 2 | . * 10'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "10\n20\n"
+  },
+  "jq:531": {
+    "script": "jq '.b | first, last' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n3\n"
+  },
+  "jq:532": {
+    "script": "jq -c 'tostream' <<< '[1]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[[0],1]\n[[0]]\n"
+  },
+  "jq:533": {
+    "script": "jq -n 'now | type'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"number\"\n"
+  },
+  "jq:534": {
+    "script": "jq -c '[.. | numbers]' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[1,1,2,3,1,2]\n"
+  },
+  "jq:535": {
+    "script": "jq -n '\"test\" | test(\"es\")'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "true\n"
+  },
+  "jq:536": {
+    "script": "jq -rn '\"a-b\" | sub(\"-\"; \"+\")'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a+b\n"
+  },
+  "jq:537": {
+    "script": "jq -c 'unique' <<< '[2,1,2]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[1,2]\n"
+  },
+  "jq:538": {
+    "script": "jq '.a, .c' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n{\n  \"d\": \"x\"\n}\n"
+  },
+  "jq:539": {
+    "script": "jq -r 'keys[]' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\nb\nc\nitems\n"
+  },
+  "jq:540": {
+    "script": "jq -n '3.0, 1.5, 1e100'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3.0\n1.5\n1E+100\n"
+  },
+  "jq:541": {
+    "script": "jq -c '.items | map({(.n): .v}) | add' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "{\"a\":1,\"b\":2}\n"
+  },
+  "jq:542": {
+    "script": "jq -n '[1,[2,[3]]] | flatten' -c",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[1,2,3]\n"
+  },
+  "jq:543": {
+    "script": "jq -r '.items | length' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "jq:544": {
+    "script": "jq --tab .c j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "{\n\t\"d\": \"x\"\n}\n"
+  },
+  "jq:545": {
+    "script": "jq -n 'null | not'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "true\n"
+  },
+  "jq:546": {
+    "script": "jq -c 'to_entries | map(.key)' <<< '{\"b\":1,\"a\":2}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[\"b\",\"a\"]\n"
+  },
+  "jq:547": {
+    "script": "jq -S -c . <<< '{\"b\":1,\"a\":2}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "{\"a\":2,\"b\":1}\n"
+  },
+  "jq:548": {
+    "script": "jq -n '\"\\u00e9\" | length'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "jq:549": {
+    "script": "jq -r '.items[] | select(.n == \"b\") | .v' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "jq:550": {
+    "script": "jq 'limit(2; .b[])' j.json",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n2\n"
+  },
+  "jq:551": {
+    "script": "jq -c 'splits(\", \")' <<< '\"a, b\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"a\"\n\"b\"\n"
+  },
+  "jq:552": {
+    "script": "jq -c 'any, all' <<< '[true,false]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "true\nfalse\n"
+  },
+  "find:553": {
+    "script": "find dir | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir\ndir/sub\ndir/sub/y.md\ndir/x.txt\ndir/z.txt\n"
+  },
+  "find:554": {
+    "script": "find dir -type f | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/sub/y.md\ndir/x.txt\ndir/z.txt\n"
+  },
+  "find:555": {
+    "script": "find dir -type d | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir\ndir/sub\n"
+  },
+  "find:556": {
+    "script": "find dir -name '*.md'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/sub/y.md\n"
+  },
+  "find:557": {
+    "script": "find . -maxdepth 1 -name '*.txt' | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "./a.txt\n./dup.txt\n./nums.txt\n./words.txt\n"
+  },
+  "find:558": {
+    "script": "find dir -name '*.txt' -exec cat {} \\; | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "x\nzz\n"
+  },
+  "find:559": {
+    "script": "find dir -name '*.txt' -exec echo {} + | tr ' ' '\\n' | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/x.txt\ndir/z.txt\n"
+  },
+  "find:560": {
+    "script": "find dir -path '*sub*' | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/sub\ndir/sub/y.md\n"
+  },
+  "find:561": {
+    "script": "find dir -iname 'X.TXT'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/x.txt\n"
+  },
+  "find:562": {
+    "script": "find dir -size -1k -type f | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": ""
+  },
+  "find:563": {
+    "script": "find dir -not -name '*.txt' -type f",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/sub/y.md\n"
+  },
+  "find:564": {
+    "script": "find dir \\( -name x.txt -o -name y.md \\) | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/sub/y.md\ndir/x.txt\n"
+  },
+  "find:565": {
+    "script": "find dir -mindepth 2",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/sub/y.md\n"
+  },
+  "find:566": {
+    "script": "find . -name nomatch; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "find:567": {
+    "script": "find dir -type f -print0 | xargs -0 cat | wc -c",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "7\n"
+  },
+  "find:568": {
+    "script": "find dir -name '*.txt' -delete; find dir | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir\ndir/sub\ndir/sub/y.md\n"
+  },
+  "find:569": {
+    "script": "find dir -type f -name '*.txt' -printf '%f\\n' | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "x.txt\nz.txt\n"
+  },
+  "find:570": {
+    "script": "find nope 2>/dev/null; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "find:571": {
+    "script": "mkdir emptyd; find . -empty -type d",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "./emptyd\n"
+  },
+  "find:572": {
+    "script": "find dir -maxdepth 1 -type f | wc -l",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "misc:573": {
+    "script": "x=$(seq 100 | wc -l); echo $x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "100\n"
+  },
+  "misc:574": {
+    "script": "for i in {1..3}; do echo $i; done | paste -sd,",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1,2,3\n"
+  },
+  "misc:575": {
+    "script": "false | true; echo \"${PIPESTATUS[@]}\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1 0\n"
+  },
+  "misc:576": {
+    "script": "echo $BASH_VERSION | grep -c '^5'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "misc:577": {
+    "script": "v=abc; [[ $v == \"abc\" ]] && echo quoted-eq",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "quoted-eq\n"
+  },
+  "misc:578": {
+    "script": "echo 'multi\nline'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "multi\nline\n"
+  },
+  "misc:579": {
+    "script": "echo a\\\nb",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ab\n"
+  },
+  "misc:580": {
+    "script": "echo $(( $(seq 1 5 | paste -sd+) ))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "15\n"
+  },
+  "misc:581": {
+    "script": "cat a.txt | sort | uniq | wc -l",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "misc:582": {
+    "script": "[[ -z $(ls nomatch* 2>/dev/null) ]] && echo nofiles",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "nofiles\n"
+  },
+  "misc:583": {
+    "script": "s=\"\"; for w in a b c; do s+=$w; done; echo $s",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "abc\n"
+  },
+  "misc:584": {
+    "script": "IFS= read -r x <<< \"  leading\"; echo \"[$x]\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[  leading]\n"
+  },
+  "misc:585": {
+    "script": "read x <<< \"  leading\"; echo \"[$x]\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[leading]\n"
+  },
+  "misc:586": {
+    "script": "echo \"a\" \"b\" > o.txt; cat -A o.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a b$\n"
+  },
+  "misc:587": {
+    "script": "printf 'a\\r\\n' | od -c | head -1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0000000   a  \\r  \\n\n"
+  },
+  "misc:588": {
+    "script": "echo \"ünïcödé\" | wc -c",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "12\n"
+  },
+  "misc:589": {
+    "script": "echo \"ünïcödé\" | wc -m",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "8\n"
+  },
+  "misc:590": {
+    "script": "v=ünï; echo ${#v}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "misc:591": {
+    "script": "LC_ALL=C sort <<< $'b\\nB\\na\\nA'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "A\nB\na\nb\n"
+  },
+  "misc:592": {
+    "script": "echo {a..c} | tr ' ' '\\n' | sort -r | head -1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "c\n"
+  },
+  "misc:593": {
+    "script": "printf '%s\\n' a b | sed -n '$p'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "b\n"
+  },
+  "misc:594": {
+    "script": "echo \"$((16#ff))\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "255\n"
+  },
+  "misc:595": {
+    "script": "x=1; x+=1; echo $x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "11\n"
+  },
+  "misc:596": {
+    "script": "declare -l lower=ABC; echo $lower",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "abc\n"
+  },
+  "misc:597": {
+    "script": "declare -u upper=abc; echo $upper",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ABC\n"
+  },
+  "misc:598": {
+    "script": "cat /dev/null; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "misc:599": {
+    "script": "echo hi | cat - a.txt | head -2",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "hi\napple\n"
+  },
+  "misc:600": {
+    "script": "printf '' | wc -l",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "misc:601": {
+    "script": "echo $(< a.txt)",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple banana cherry\n"
+  },
+  "misc:602": {
+    "script": "x=$(< a.txt); echo \"${x//$'\\n'/,}\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple,banana,cherry\n"
+  },
+  "misc:603": {
+    "script": "echo $((RANDOM >= 0))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "misc:604": {
+    "script": "nosuchcmd; echo $?",
+    "exitCode": 0,
+    "stderr": "/bin/bash: line 1: nosuchcmd: command not found\n",
+    "stdout": "127\n"
+  },
+  "misc:605": {
+    "script": "./a.txt; echo $?",
+    "exitCode": 0,
+    "stderr": "/bin/bash: line 1: ./a.txt: Permission denied\n",
+    "stdout": "126\n"
+  },
+  "misc:606": {
+    "script": "echo \"$(echo \"a b\")\" | wc -w",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "misc:607": {
+    "script": "f() { echo \"$1\"; }; f \"$(printf 'x\\ny')\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "x\ny\n"
+  },
+  "misc:608": {
+    "script": "arr=($(echo 1 2 3)); echo ${#arr[@]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "misc:609": {
+    "script": "cat a.txt | while read -r l; do echo \"${#l}\"; done",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "5\n6\n6\n"
+  },
+  "misc:610": {
+    "script": "echo abc > f1; [ f1 -nt nope ] && echo newer; echo ok",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "newer\nok\n"
+  },
+  "misc:611": {
+    "script": "echo $(( $(date +%s) > 0 ))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "misc:612": {
+    "script": "echo \"$((1+1))\" > \"n o.txt\"; cat \"n o.txt\"; ls n*",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\nn o.txt\nnums.txt\n"
+  },
+  "hard-expand:1": {
+    "script": "x=\"a b c\"; echo ${x@Q}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "'a b c'\n"
+  },
+  "hard-expand:2": {
+    "script": "a=(1 \"2 3\"); echo ${a[@]@Q}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "'1' '2 3'\n"
+  },
+  "hard-expand:3": {
+    "script": "v=hello; echo ${v:1:-1} ${v: -3:2}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ell ll\n"
+  },
+  "hard-expand:4": {
+    "script": "a=(a b c d); echo ${a[@]: -2:1}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "c\n"
+  },
+  "hard-expand:5": {
+    "script": "a=(); a[3]=x; a[7]=y; echo ${#a[@]} ${!a[*]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2 3 7\n"
+  },
+  "hard-expand:6": {
+    "script": "x=abcabc; echo ${x/#abc/X} ${x/%abc/Y} ${x//b}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "Xabc abcY acac\n"
+  },
+  "hard-expand:7": {
+    "script": "x=Hello; echo ${x~~} ${x~}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "hELLO hello\n"
+  },
+  "hard-expand:8": {
+    "script": "p=\"*.txt\"; echo ${p}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a.txt dup.txt nums.txt words.txt\n"
+  },
+  "hard-expand:9": {
+    "script": "x='a*b'; case 'a*b' in $x) echo m1;; esac; case 'aXb' in \"$x\") echo m2;; *) echo m3;; esac",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "m1\nm3\n"
+  },
+  "hard-expand:10": {
+    "script": "re='^[0-9]+$'; [[ 123 =~ $re ]] && echo num; [[ 123 =~ \"$re\" ]] || echo literal",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "num\nliteral\n"
+  },
+  "hard-expand:11": {
+    "script": "[[ \"a.b\" =~ a\\.b ]] && echo esc",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "esc\n"
+  },
+  "hard-expand:12": {
+    "script": "[[ abc =~ (a)(b)(c) ]] && echo ${#BASH_REMATCH[@]} ${BASH_REMATCH[0]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "4 abc\n"
+  },
+  "hard-expand:13": {
+    "script": "v=\" a  b \"; set -- $v; echo $#",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "hard-expand:14": {
+    "script": "IFS=, read -ra parts <<< \"x,,y\"; echo ${#parts[@]} \"[${parts[1]}]\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3 []\n"
+  },
+  "hard-expand:15": {
+    "script": "IFS=: read -r a b <<< \"1:2:3:4\"; echo \"$b\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2:3:4\n"
+  },
+  "hard-expand:16": {
+    "script": "IFS=' :' read -r a b c <<< \"1 :2\"; echo \"[$a][$b][$c]\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[1][2][]\n"
+  },
+  "hard-expand:17": {
+    "script": "x=$'a\\nb\\nc'; echo \"${x#*$'\\n'}\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "b\nc\n"
+  },
+  "hard-expand:18": {
+    "script": "unset v; echo \"${v:-$(echo sub)}\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "sub\n"
+  },
+  "hard-expand:19": {
+    "script": "v=1; echo \"${v:+$(echo alt)}\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "alt\n"
+  },
+  "hard-expand:20": {
+    "script": "n=3; echo ${n:-$((n+1))}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "hard-expand:21": {
+    "script": "x=5; echo ${x:-${y:-z}}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "5\n"
+  },
+  "hard-expand:22": {
+    "script": "echo ${#undefined}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "hard-expand:23": {
+    "script": "set -- a b c; echo \"${*:2}\" \"${@:1:1}\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "b c a\n"
+  },
+  "hard-expand:24": {
+    "script": "a=(x y); b=(\"${a[@]}\" z); echo ${#b[@]} \"${b[*]}\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3 x y z\n"
+  },
+  "hard-expand:25": {
+    "script": "str=abc; echo ${str:5}\"|\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "|\n"
+  },
+  "hard-expand:26": {
+    "script": "v=10; echo $((v)) $((v+v)) $(( $v * 2 ))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "10 20 20\n"
+  },
+  "hard-expand:27": {
+    "script": "echo $(( 2**63 )) $(( -2**63 ))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "-9223372036854775808 -9223372036854775808\n"
+  },
+  "hard-expand:28": {
+    "script": "echo $(( 07 + 0x7 ))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "14\n"
+  },
+  "hard-expand:29": {
+    "script": "x=; echo $(( x + 1 ))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-expand:30": {
+    "script": "echo $(( 3 / -2 )) $(( -3 % -2 ))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "-1 -1\n"
+  },
+  "hard-expand:31": {
+    "script": "a=5; b=a; echo $(( b + 1 ))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "6\n"
+  },
+  "hard-expand:32": {
+    "script": "echo $(( (2>1) + (1>2) ))",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-expand:33": {
+    "script": "i=1; ((i<<=3)); echo $i",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "8\n"
+  },
+  "hard-scope:34": {
+    "script": "f() { local v=1; g; }; g() { echo ${v:-none}; }; f; g",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\nnone\n"
+  },
+  "hard-scope:35": {
+    "script": "f() { local x; x=$1; echo $x; }; f a; echo \"[${x:-}]\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\n[]\n"
+  },
+  "hard-scope:36": {
+    "script": "x=g; f() { local x=l; unset x; echo \"${x:-unset}\"; }; f; echo $x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "unset\ng\n"
+  },
+  "hard-scope:37": {
+    "script": "declare -n ref=target; target=42; echo $ref; ref=7; echo $target",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "42\n7\n"
+  },
+  "hard-scope:38": {
+    "script": "f() { local -n r=$1; r=set; }; f out; echo $out",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "set\n"
+  },
+  "hard-scope:39": {
+    "script": "f() { echo \"$FUNCNAME:${FUNCNAME[1]:-top}\"; }; g() { f; }; g",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "f:g\n"
+  },
+  "hard-scope:40": {
+    "script": "f() { return 300; }; f; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "44\n"
+  },
+  "hard-scope:41": {
+    "script": "f() { (exit 7); echo $?; }; f",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "7\n"
+  },
+  "hard-scope:42": {
+    "script": "f() { echo $LINENO; }; f",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-scope:43": {
+    "script": "x=1; f() { x=2 echo; echo $x; }; f",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\n1\n"
+  },
+  "hard-scope:44": {
+    "script": "a=1 b=2 c=$a$b; echo $c",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "12\n"
+  },
+  "hard-scope:45": {
+    "script": "v=outer; v=inner bash -c 'echo $v'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "inner\n"
+  },
+  "hard-scope:46": {
+    "script": "export -n PATH 2>/dev/null; echo ok",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ok\n"
+  },
+  "hard-scope:47": {
+    "script": "declare -f f >/dev/null 2>&1 || echo nofunc",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "nofunc\n"
+  },
+  "hard-scope:48": {
+    "script": "f() { echo hi; }; declare -f f",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "f () \n{ \n    echo hi\n}\n"
+  },
+  "hard-scope:49": {
+    "script": "f() { echo \"$#:$*\"; }; f \"$@\"; set -- 1 2; f \"${@}\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0:\n2:1 2\n"
+  },
+  "hard-scope:50": {
+    "script": "f() { shift 2; echo \"$@\"; }; f a b c d",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "c d\n"
+  },
+  "hard-scope:51": {
+    "script": "f() { set -- x y; echo $#; }; set -- a; f; echo $#",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n1\n"
+  },
+  "hard-scope:52": {
+    "script": "f() { trap 'echo ret' RETURN; :; }; f",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ret\n"
+  },
+  "hard-scope:53": {
+    "script": "(cd dir; echo ${PWD##*/}); echo ${PWD##*/}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir\nw\n"
+  },
+  "hard-scope:54": {
+    "script": "x=0; for i in 1 2 3; do x=$((x+i)); done | cat; echo $x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "hard-scope:55": {
+    "script": "x=0; while read i; do x=$((x+i)); done < <(seq 3); echo $x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "6\n"
+  },
+  "hard-scope:56": {
+    "script": "shopt -s lastpipe; set +m; x=0; seq 3 | while read i; do x=$((x+i)); done; echo $x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "6\n"
+  },
+  "hard-redir:57": {
+    "script": "exec {fd}>o.txt; echo via-fd >&$fd; exec {fd}>&-; cat o.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "via-fd\n"
+  },
+  "hard-redir:58": {
+    "script": "{ echo a; echo b >&2; } 3>&1 1>&2 2>&3 | cat",
+    "exitCode": 0,
+    "stderr": "a\n",
+    "stdout": "b\n"
+  },
+  "hard-redir:59": {
+    "script": "echo x 2>&1 1>/dev/null",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": ""
+  },
+  "hard-redir:60": {
+    "script": "cat <(echo p1) <(echo p2)",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "p1\np2\n"
+  },
+  "hard-redir:61": {
+    "script": "echo hi > >(cat); wait; sleep 0.05",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "hi\n"
+  },
+  "hard-redir:62": {
+    "script": "ls a.txt nope 2>&1 | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a.txt\nls: cannot access 'nope': No such file or directory\n"
+  },
+  "hard-redir:63": {
+    "script": "f() { echo out; echo err >&2; }; f 2>&1 >/dev/null | tr a-z A-Z",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ERR\n"
+  },
+  "hard-redir:64": {
+    "script": "echo text > o.txt; cat 0<o.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "text\n"
+  },
+  "hard-redir:65": {
+    "script": "exec 3<a.txt; read -u 3 l; read -u 3 l2; echo $l $l2; exec 3<&-",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple banana\n"
+  },
+  "hard-redir:66": {
+    "script": "echo a > o.txt; exec 4>>o.txt; echo b >&4; exec 4>&-; cat o.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\nb\n"
+  },
+  "hard-redir:67": {
+    "script": "(echo sub-out; echo sub-err >&2) 2>&1 | wc -l",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "hard-redir:68": {
+    "script": "echo $( { echo a; echo b >&2; } 2>&1 ) ",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a b\n"
+  },
+  "hard-redir:69": {
+    "script": "printf 'x' > o.txt; printf 'y' >> o.txt; cat o.txt; echo",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "xy\n"
+  },
+  "hard-redir:70": {
+    "script": "echo hi 1>o.txt 1>p.txt; cat o.txt; cat p.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "hi\n"
+  },
+  "hard-redir:71": {
+    "script": "cat < nonexist; echo $?",
+    "exitCode": 0,
+    "stderr": "/bin/bash: line 1: nonexist: No such file or directory\n",
+    "stdout": "1\n"
+  },
+  "hard-redir:72": {
+    "script": "echo > \"sp ace.txt\" x; ls sp*",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "sp ace.txt\n"
+  },
+  "hard-redir:73": {
+    "script": "read l < a.txt; echo $l",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\n"
+  },
+  "hard-heredoc:74": {
+    "script": "for i in 1 2; do\ncat <<EOF\nit $i\nEOF\ndone",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "it 1\nit 2\n"
+  },
+  "hard-heredoc:75": {
+    "script": "cat <<EOF\n$(echo cmd) \\$(echo no) \\`echo bt\\`\nEOF",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "cmd $(echo no) `echo bt`\n"
+  },
+  "hard-heredoc:76": {
+    "script": "cat << 'X Y'\nspaced\nX Y",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "spaced\n"
+  },
+  "hard-heredoc:77": {
+    "script": "cat <<EOF | sed 's/^/> /'\na\nb\nEOF",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "> a\n> b\n"
+  },
+  "hard-heredoc:78": {
+    "script": "x=$(cat <<'EOF'\n'single' \"double\" $none\nEOF\n)\necho \"$x\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "'single' \"double\" $none\n"
+  },
+  "hard-heredoc:79": {
+    "script": "cat <<EOF\n${HOME:+home-set}\nEOF",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "home-set\n"
+  },
+  "hard-heredoc:80": {
+    "script": "if true; then\n\tcat <<-END\n\t\tindented\n\tEND\nfi",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "indented\n"
+  },
+  "hard-heredoc:81": {
+    "script": "cat <<EOF >o.txt\nto-file\nEOF\ncat o.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "to-file\n"
+  },
+  "hard-heredoc:82": {
+    "script": "f() {\n  cat <<EOF\nin-func $1\nEOF\n}\nf arg",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "in-func arg\n"
+  },
+  "hard-control:83": {
+    "script": "case abc in *b*) echo has-b;;& *c) echo has-c;; esac",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "has-b\nhas-c\n"
+  },
+  "hard-control:84": {
+    "script": "case \"$undefined\" in \"\") echo empty;; esac",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "empty\n"
+  },
+  "hard-control:85": {
+    "script": "for i in a b; do :; done; echo $i",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "b\n"
+  },
+  "hard-control:86": {
+    "script": "for ((;;)); do echo inf; break; done",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "inf\n"
+  },
+  "hard-control:87": {
+    "script": "i=0; while :; do ((i++ < 2)) || break; echo $i; done",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n2\n"
+  },
+  "hard-control:88": {
+    "script": "if ! false; then echo neg; fi",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "neg\n"
+  },
+  "hard-control:89": {
+    "script": "if [ 1 = 1 ] && [ 2 = 2 ] || false; then echo ok; fi",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ok\n"
+  },
+  "hard-control:90": {
+    "script": "[ \"\" ] || echo empty-false",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "empty-false\n"
+  },
+  "hard-control:91": {
+    "script": "[ -n \"\" ] || echo nz",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "nz\n"
+  },
+  "hard-control:92": {
+    "script": "[ a ] && echo nonempty-true",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "nonempty-true\n"
+  },
+  "hard-control:93": {
+    "script": "[ 1 -eq 01 ] && echo numeq",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "numeq\n"
+  },
+  "hard-control:94": {
+    "script": "[[ 01 -eq 1 ]] && echo dnumeq",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dnumeq\n"
+  },
+  "hard-control:95": {
+    "script": "[[ 1+1 -eq 2 ]] && echo arith-in-dbl",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "arith-in-dbl\n"
+  },
+  "hard-control:96": {
+    "script": "[ \"a\" = \"a\" -a \"b\" = \"b\" ] && echo and",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "and\n"
+  },
+  "hard-control:97": {
+    "script": "[ \"a\" = \"b\" -o \"b\" = \"b\" ] && echo or",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "or\n"
+  },
+  "hard-control:98": {
+    "script": "[[ ! -e nope && -e a.txt ]] && echo combo",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "combo\n"
+  },
+  "hard-control:99": {
+    "script": "[[ -f a.txt || -f nope ]] && echo either",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "either\n"
+  },
+  "hard-control:100": {
+    "script": "test -L a.txt || echo notlink",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "notlink\n"
+  },
+  "hard-control:101": {
+    "script": "[ -r a.txt ] && [ -w a.txt ] && echo rw",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "rw\n"
+  },
+  "hard-control:102": {
+    "script": "[[ abc > abb ]] && echo gt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "gt\n"
+  },
+  "hard-control:103": {
+    "script": "x=abc; [[ $x == a?c ]] && echo glob-q",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "glob-q\n"
+  },
+  "hard-control:104": {
+    "script": "[[ $x == \"a?c\" ]] || echo quoted-literal",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "quoted-literal\n"
+  },
+  "hard-control:105": {
+    "script": "until false; do echo once; break; done",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "once\n"
+  },
+  "hard-control:106": {
+    "script": "for i in 1 2 3; do if [ $i = 2 ]; then break; fi; done; echo $i",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "hard-control:107": {
+    "script": "while read -r a b; do echo \"$b\"; done <<< $'1 2\\n3 4'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n4\n"
+  },
+  "hard-errexit:108": {
+    "script": "set -e; f() { false; echo cont; }; if f; then echo t; fi",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "cont\nt\n"
+  },
+  "hard-errexit:109": {
+    "script": "set -e; f() { return 1; }; f && echo no; echo after",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "after\n"
+  },
+  "hard-errexit:110": {
+    "script": "set -e; false | true; echo pipe-ok",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "pipe-ok\n"
+  },
+  "hard-errexit:111": {
+    "script": "set -e; x=1; [ $x = 2 ] && echo no; echo after-test",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "after-test\n"
+  },
+  "hard-errexit:112": {
+    "script": "set -e; (( 0 )) || true; echo arith-ok",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "arith-ok\n"
+  },
+  "hard-errexit:113": {
+    "script": "set -e; (( 0 )); echo nope",
+    "exitCode": 1,
+    "stderr": "",
+    "stdout": ""
+  },
+  "hard-errexit:114": {
+    "script": "set -e; cat nonexist 2>/dev/null; echo nope",
+    "exitCode": 1,
+    "stderr": "",
+    "stdout": ""
+  },
+  "hard-errexit:115": {
+    "script": "set -e; echo $(false) ok",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ok\n"
+  },
+  "hard-errexit:116": {
+    "script": "set -e; local_x=$(false; echo ran); echo \"$local_x\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ran\n"
+  },
+  "hard-errexit:117": {
+    "script": "set -e; f() { false; }; f; echo nope",
+    "exitCode": 1,
+    "stderr": "",
+    "stdout": ""
+  },
+  "hard-errexit:118": {
+    "script": "set -e; { false; echo in-group; }; echo nope",
+    "exitCode": 1,
+    "stderr": "",
+    "stdout": ""
+  },
+  "hard-errexit:119": {
+    "script": "set -e; trap 'echo exit $?' EXIT; false",
+    "exitCode": 1,
+    "stderr": "",
+    "stdout": "exit 1\n"
+  },
+  "hard-errexit:120": {
+    "script": "set -o errexit -o nounset; echo ${U:-u}; echo $U2",
+    "exitCode": 1,
+    "stderr": "/bin/bash: line 1: U2: unbound variable\n",
+    "stdout": "u\n"
+  },
+  "hard-errexit:121": {
+    "script": "set -u; a=(); echo \"${a[@]}\" ok",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ok\n"
+  },
+  "hard-errexit:122": {
+    "script": "set -e; shopt -s inherit_errexit; x=$(false; echo bad); echo \"[$x]\"",
+    "exitCode": 1,
+    "stderr": "",
+    "stdout": ""
+  },
+  "hard-errexit:123": {
+    "script": "set -euo pipefail; echo hi | grep -q zz; echo nope",
+    "exitCode": 1,
+    "stderr": "",
+    "stdout": ""
+  },
+  "hard-errexit:124": {
+    "script": "trap 'echo caught-int' INT; kill -INT $$; echo after",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "caught-int\nafter\n"
+  },
+  "hard-errexit:125": {
+    "script": "trap 'echo t1' EXIT; trap - EXIT; echo none",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "none\n"
+  },
+  "hard-errexit:126": {
+    "script": "trap 'echo e1' EXIT; (exit 3); echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\ne1\n"
+  },
+  "hard-builtins:127": {
+    "script": "printf '%*d|%-*s|\\n' 5 42 4 ab",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "   42|ab  |\n"
+  },
+  "hard-builtins:128": {
+    "script": "printf '%.3d %+d % d\\n' 5 5 5",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "005 +5  5\n"
+  },
+  "hard-builtins:129": {
+    "script": "printf '%s\\n'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\n"
+  },
+  "hard-builtins:130": {
+    "script": "printf '%5.1f%%\\n' 99.44",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": " 99.4%\n"
+  },
+  "hard-builtins:131": {
+    "script": "printf '%x %X %#x %#o\\n' 255 255 255 8",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ff FF 0xff 010\n"
+  },
+  "hard-builtins:132": {
+    "script": "printf '%s=%d\\n' a 1 b 2",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a=1\nb=2\n"
+  },
+  "hard-builtins:133": {
+    "script": "printf '%d\\n' \"'A\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "65\n"
+  },
+  "hard-builtins:134": {
+    "script": "printf '%d\\n' abc",
+    "exitCode": 1,
+    "stderr": "/bin/bash: line 1: printf: abc: invalid number\n",
+    "stdout": "0\n"
+  },
+  "hard-builtins:135": {
+    "script": "printf '%.0f %.0f\\n' 2.5 3.5",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2 4\n"
+  },
+  "hard-builtins:136": {
+    "script": "printf '\\x41\\101\\n'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "AA\n"
+  },
+  "hard-builtins:137": {
+    "script": "printf '%-3s|\\n' abcdef",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "abcdef|\n"
+  },
+  "hard-builtins:138": {
+    "script": "printf '%u\\n' -1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "18446744073709551615\n"
+  },
+  "hard-builtins:139": {
+    "script": "printf '%g %g %g\\n' 0.0001 100000 1e20",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0.0001 100000 1e+20\n"
+  },
+  "hard-builtins:140": {
+    "script": "echo -e '\\e[0m' | od -c | head -1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0000000 033   [   0   m  \\n\n"
+  },
+  "hard-builtins:141": {
+    "script": "echo -e 'a\\cb'; echo after",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "aafter\n"
+  },
+  "hard-builtins:142": {
+    "script": "echo -E 'a\\tb'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\\tb\n"
+  },
+  "hard-builtins:143": {
+    "script": "read -n 2 x <<< abcd; echo $x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ab\n"
+  },
+  "hard-builtins:144": {
+    "script": "read -d , x <<< \"ab,cd\"; echo $x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ab\n"
+  },
+  "hard-builtins:145": {
+    "script": "read -r -d '' x <<< $'multi\\nline'; echo \"$x\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "multi\nline\n"
+  },
+  "hard-builtins:146": {
+    "script": "mapfile -d , -t m <<< \"a,b,c\"; echo ${#m[@]} \"${m[2]}\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3 c\n\n"
+  },
+  "hard-builtins:147": {
+    "script": "mapfile -t -s 1 -n 1 m < a.txt; echo ${m[@]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\n"
+  },
+  "hard-builtins:148": {
+    "script": "printf -v a[2] '%s' x; echo ${a[2]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "x\n"
+  },
+  "hard-builtins:149": {
+    "script": "type -a echo | head -1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "echo is a shell builtin\n"
+  },
+  "hard-builtins:150": {
+    "script": "type nosuch 2>/dev/null; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-builtins:151": {
+    "script": "command echo cmd",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "cmd\n"
+  },
+  "hard-builtins:152": {
+    "script": "builtin echo bi",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "bi\n"
+  },
+  "hard-builtins:153": {
+    "script": "enable -n echo 2>/dev/null; echo still",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "still\n"
+  },
+  "hard-builtins:154": {
+    "script": "echo $- | grep -c h",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-builtins:155": {
+    "script": "set -f; echo *.txt; set +f",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "*.txt\n"
+  },
+  "hard-builtins:156": {
+    "script": "set -- $(echo \"1 2 3\"); echo $2",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "hard-builtins:157": {
+    "script": "shopt -q extglob; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-builtins:158": {
+    "script": "compgen -W \"apple banana\" -- ba",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\n"
+  },
+  "hard-builtins:159": {
+    "script": "let \"x = 2 * 3\" \"y = x + 1\"; echo $x $y",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "6 7\n"
+  },
+  "hard-builtins:160": {
+    "script": "echo \"$( caller 2>&1; echo $? )\"",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-builtins:161": {
+    "script": "times >/dev/null; echo t",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "t\n"
+  },
+  "hard-builtins:162": {
+    "script": "ulimit -n >/dev/null; echo u",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "u\n"
+  },
+  "hard-builtins:163": {
+    "script": "umask 022; umask",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0022\n"
+  },
+  "hard-builtins:164": {
+    "script": "kill -0 $$ && echo alive",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "alive\n"
+  },
+  "hard-builtins:165": {
+    "script": "f() { echo \"${BASH_SOURCE[0]:-none}\"; }; f",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "environment\n"
+  },
+  "hard-builtins:166": {
+    "script": "echo ${BASH_VERSINFO[0]}",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "5\n"
+  },
+  "hard-builtins:167": {
+    "script": "x=1; declare -p x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "declare -- x=\"1\"\n"
+  },
+  "hard-builtins:168": {
+    "script": "declare -r ro=1; declare -p ro",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "declare -r ro=\"1\"\n"
+  },
+  "hard-builtins:169": {
+    "script": "declare -ai ai=(1 2); declare -p ai",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "declare -ai ai=([0]=\"1\" [1]=\"2\")\n"
+  },
+  "hard-builtins:170": {
+    "script": "dirs | wc -w",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-text:171": {
+    "script": "sort -k2,2 -k1,1r <<< $'b 1\\na 1\\nc 0'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "c 0\nb 1\na 1\n"
+  },
+  "hard-text:172": {
+    "script": "sort -s -k1,1 <<< $'b 2\\na 1\\nb 1'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a 1\nb 2\nb 1\n"
+  },
+  "hard-text:173": {
+    "script": "sort -V <<< $'v1.10\\nv1.2\\nv1.9'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "v1.2\nv1.9\nv1.10\n"
+  },
+  "hard-text:174": {
+    "script": "sort -f <<< $'b\\nA\\na\\nB'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "A\na\nB\nb\n"
+  },
+  "hard-text:175": {
+    "script": "sort -n <<< $'-1\\n10\\n2\\n1.5\\nabc'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "-1\nabc\n1.5\n2\n10\n"
+  },
+  "hard-text:176": {
+    "script": "sort -g <<< $'1e3\\n2\\n-5'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "-5\n2\n1e3\n"
+  },
+  "hard-text:177": {
+    "script": "sort -rn -t: -k2 <<< $'a:1\\nb:3\\nc:2'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "b:3\nc:2\na:1\n"
+  },
+  "hard-text:178": {
+    "script": "sort -c <<< $'a\\nc\\nb'; echo $?",
+    "exitCode": 0,
+    "stderr": "sort: -:3: disorder: b\n",
+    "stdout": "1\n"
+  },
+  "hard-text:179": {
+    "script": "sort -o o.txt nums.txt; cat o.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n10\n2\n3\n"
+  },
+  "hard-text:180": {
+    "script": "uniq -i <<< $'a\\nA\\nb'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\nb\n"
+  },
+  "hard-text:181": {
+    "script": "uniq -c <<< $'x\\nx\\ny' ",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "      2 x\n      1 y\n"
+  },
+  "hard-text:182": {
+    "script": "uniq -f1 <<< $'1 a\\n2 a\\n3 b'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1 a\n3 b\n"
+  },
+  "hard-text:183": {
+    "script": "cut -f2 <<< $'a\\tb\\tc'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "b\n"
+  },
+  "hard-text:184": {
+    "script": "cut -d' ' -f2 -s <<< $'a b\\nnodelim'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "b\n"
+  },
+  "hard-text:185": {
+    "script": "cut -b2-3 <<< abcdef",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "bc\n"
+  },
+  "hard-text:186": {
+    "script": "cut --complement -d, -f2 data.csv",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "name,city\nalice,NYC\nbob,LA\ncarol,NYC\n"
+  },
+  "hard-text:187": {
+    "script": "tr '[:lower:]' '[:upper:]' <<< mixedCase",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "MIXEDCASE\n"
+  },
+  "hard-text:188": {
+    "script": "tr -d '[:digit:]' <<< a1b2c3",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "abc\n"
+  },
+  "hard-text:189": {
+    "script": "tr -s '[:space:]' ' ' <<< $'a  \\t b\\n\\nc'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a b c "
+  },
+  "hard-text:190": {
+    "script": "tr 'a-c' 'x' <<< abcd",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "xxxd\n"
+  },
+  "hard-text:191": {
+    "script": "tr -cd '[:alnum:]\\n' <<< 'a-b_c!1'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "abc1\n"
+  },
+  "hard-text:192": {
+    "script": "echo hello | tr 'elo' '310'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "h3110\n"
+  },
+  "hard-text:193": {
+    "script": "head -n0 a.txt; echo end",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "end\n"
+  },
+  "hard-text:194": {
+    "script": "tail -n 0 a.txt; echo end",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "end\n"
+  },
+  "hard-text:195": {
+    "script": "tail -n2 a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\ncherry\n"
+  },
+  "hard-text:196": {
+    "script": "head -c -3 a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nbanana\ncher"
+  },
+  "hard-text:197": {
+    "script": "wc -l <<< ''",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-text:198": {
+    "script": "printf 'no-newline' | wc -l",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "hard-text:199": {
+    "script": "wc -c <<< 'héllo'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "7\n"
+  },
+  "hard-text:200": {
+    "script": "paste - - <<< $'1\\n2\\n3\\n4'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\t2\n3\t4\n"
+  },
+  "hard-text:201": {
+    "script": "paste -d, a.txt <(seq 3)",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple,1\nbanana,2\ncherry,3\n"
+  },
+  "hard-text:202": {
+    "script": "nl -ba -w2 -s: <<< $'a\\n\\nb'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": " 1:a\n 2:\n 3:b\n"
+  },
+  "hard-text:203": {
+    "script": "fmt -w 10 <<< 'the quick brown fox jumps'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "the quick\nbrown\nfox jumps\n"
+  },
+  "hard-text:204": {
+    "script": "expand -t4 <<< $'a\\tb' | cat -A",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a   b$\n"
+  },
+  "hard-text:205": {
+    "script": "unexpand -a <<< '        x' | od -c | head -1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0000000  \\t   x  \\n\n"
+  },
+  "hard-text:206": {
+    "script": "seq 0.5 0.5 2",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0.5\n1.0\n1.5\n2.0\n"
+  },
+  "hard-text:207": {
+    "script": "seq -f '%03g' 3",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "001\n002\n003\n"
+  },
+  "hard-text:208": {
+    "script": "seq 3 -1 1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n2\n1\n"
+  },
+  "hard-text:209": {
+    "script": "printf '%s\\n' b a | sort | head -1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\n"
+  },
+  "hard-text:210": {
+    "script": "od -c <<< 'a b'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0000000   a       b  \\n\n0000004\n"
+  },
+  "hard-text:211": {
+    "script": "base64 <<< 'hello world'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "aGVsbG8gd29ybGQK\n"
+  },
+  "hard-text:212": {
+    "script": "base64 -w 4 <<< hello",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "aGVs\nbG8K\n"
+  },
+  "hard-text:213": {
+    "script": "echo aGk= | base64 --decode",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "hi"
+  },
+  "hard-text:214": {
+    "script": "md5sum <<< x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "401b30e3b8b5d629635a5c613cdb7919  -\n"
+  },
+  "hard-text:215": {
+    "script": "cksum <<< x",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2192966820 2\n"
+  },
+  "hard-text:216": {
+    "script": "sha256sum <<< ''",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b  -\n"
+  },
+  "hard-text:217": {
+    "script": "xargs -n 2 <<< '1 2 3 4 5'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1 2\n3 4\n5\n"
+  },
+  "hard-text:218": {
+    "script": "xargs -L1 echo L: <<< $'a b\\nc'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "L: a b\nL: c\n"
+  },
+  "hard-text:219": {
+    "script": "xargs echo <<< '\"a b\" c'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a b c\n"
+  },
+  "hard-text:220": {
+    "script": "printf 'a\\nb\\n' | xargs -I % sh -c 'echo [%]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[a]\n[b]\n"
+  },
+  "hard-text:221": {
+    "script": "echo | xargs echo empty",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "empty\n"
+  },
+  "hard-text:222": {
+    "script": "xargs -r echo none < /dev/null; echo end",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "end\n"
+  },
+  "hard-text:223": {
+    "script": "seq 5 | xargs -n2 -P1 echo",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1 2\n3 4\n5\n"
+  },
+  "hard-text:224": {
+    "script": "find dir -type f | sort | xargs -d '\\n' -n1 basename",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "y.md\nx.txt\nz.txt\n"
+  },
+  "hard-text:225": {
+    "script": "rev <<< $'abc\\nde'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "cba\ned\n"
+  },
+  "hard-text:226": {
+    "script": "tac <<< $'1\\n2\\n3'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n2\n1\n"
+  },
+  "hard-text:227": {
+    "script": "comm <(printf 'a\\nb\\n') <(printf 'b\\nc\\n')",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\n\t\tb\n\tc\n"
+  },
+  "hard-text:228": {
+    "script": "join -t, <(printf 'k1,a\\nk2,b\\n') <(printf 'k1,x\\nk3,y\\n')",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "k1,a,x\n"
+  },
+  "hard-text:229": {
+    "script": "join -a1 <(printf '1 a\\n2 b\\n') <(printf '1 x\\n')",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1 a x\n2 b\n"
+  },
+  "hard-text:230": {
+    "script": "csplit -s -f cs_ <(printf 'a\\n--\\nb\\n') '/--/'; cat cs_01",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "--\nb\n"
+  },
+  "hard-grep:231": {
+    "script": "grep -E 'a+n' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\n"
+  },
+  "hard-grep:232": {
+    "script": "grep -c -v '^$' <<< $'a\\n\\nb'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "hard-grep:233": {
+    "script": "grep -o '[0-9]*' <<< 'a12b345'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "12\n345\n"
+  },
+  "hard-grep:234": {
+    "script": "grep -ob an a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "7:an\n9:an\n"
+  },
+  "hard-grep:235": {
+    "script": "grep -E '\\bfox\\b' words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "the quick brown fox\n"
+  },
+  "hard-grep:236": {
+    "script": "grep '\\<the\\>' words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "the quick brown fox\njumps over the lazy dog\n"
+  },
+  "hard-grep:237": {
+    "script": "grep -E 'o{2,}' <<< $'fo\\nfoo\\nfooo'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "foo\nfooo\n"
+  },
+  "hard-grep:238": {
+    "script": "grep -i -c THE words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "hard-grep:239": {
+    "script": "grep -n -A1 -B1 -m1 quick words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1:the quick brown fox\n2-jumps over the lazy dog\n"
+  },
+  "hard-grep:240": {
+    "script": "grep -L zzz a.txt words.txt",
+    "exitCode": 1,
+    "stderr": "",
+    "stdout": "a.txt\nwords.txt\n"
+  },
+  "hard-grep:241": {
+    "script": "grep -r --exclude='*.md' . dir | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/x.txt:x\ndir/z.txt:zz\n"
+  },
+  "hard-grep:242": {
+    "script": "grep -rh . dir | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "x\ny\nzz\n"
+  },
+  "hard-grep:243": {
+    "script": "grep -c x dir/x.txt dir/z.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/x.txt:1\ndir/z.txt:0\n"
+  },
+  "hard-grep:244": {
+    "script": "grep -E '^.{6}$' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\ncherry\n"
+  },
+  "hard-grep:245": {
+    "script": "grep -P '(?<=b)an' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\n"
+  },
+  "hard-grep:246": {
+    "script": "grep -oP '\\w+(?=,)' data.csv | head -2",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "name\nage\n"
+  },
+  "hard-grep:247": {
+    "script": "grep -z -c a a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-grep:248": {
+    "script": "grep -E '(a|b)\\1' <<< $'aa\\nab'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "aa\n"
+  },
+  "hard-grep:249": {
+    "script": "grep '\\(an\\)\\1' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\n"
+  },
+  "hard-grep:250": {
+    "script": "grep -E '[[:digit:]]+' data.csv | wc -l",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "hard-grep:251": {
+    "script": "grep --color=never an a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\n"
+  },
+  "hard-grep:252": {
+    "script": "grep -e '-x' <<< $'-x\\ny'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "-x\n"
+  },
+  "hard-grep:253": {
+    "script": "grep -f <(echo apple) a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\n"
+  },
+  "hard-grep:254": {
+    "script": "grep -vx -f <(printf 'apple\\ncherry\\n') a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\n"
+  },
+  "hard-grep:255": {
+    "script": "grep -E 'a|' <<< xyz",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "xyz\n"
+  },
+  "hard-grep:256": {
+    "script": "grep '' <<< ''; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\n0\n"
+  },
+  "hard-grep:257": {
+    "script": "grep -E '[' a.txt; echo $?",
+    "exitCode": 0,
+    "stderr": "grep: Invalid regular expression\n",
+    "stdout": "2\n"
+  },
+  "hard-grep:258": {
+    "script": "grep -w 'an' <<< 'an ban an.'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "an ban an.\n"
+  },
+  "hard-grep:259": {
+    "script": "grep -o -i 'TH.' words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "the\nthe\nThe\n"
+  },
+  "hard-sed:260": {
+    "script": "sed -n '/^b/{p;q}' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\n"
+  },
+  "hard-sed:261": {
+    "script": "sed '2,3s/^/#/' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\n#banana\n#cherry\n"
+  },
+  "hard-sed:262": {
+    "script": "sed '/apple/!s/a/A/' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nbAnana\ncherry\n"
+  },
+  "hard-sed:263": {
+    "script": "sed 's/a/\\n/g' <<< bab",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "b\nb\n"
+  },
+  "hard-sed:264": {
+    "script": "sed 's/\\t/TAB/' <<< $'a\\tb'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "aTABb\n"
+  },
+  "hard-sed:265": {
+    "script": "sed -E 's/(.)/\\1\\1/3' <<< abc",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "abcc\n"
+  },
+  "hard-sed:266": {
+    "script": "sed 's/b*/x/2' <<< abc",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "axc\n"
+  },
+  "hard-sed:267": {
+    "script": "sed '1d;$d' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\n"
+  },
+  "hard-sed:268": {
+    "script": "sed -n '2{p;p}' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\nbanana\n"
+  },
+  "hard-sed:269": {
+    "script": "sed -e :a -e '$!N;s/\\n//;ta' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "applebananacherry\n"
+  },
+  "hard-sed:270": {
+    "script": "sed 's/[^,]*,//' data.csv",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "age,city\n30,NYC\n25,LA\n35,NYC\n"
+  },
+  "hard-sed:271": {
+    "script": "sed -E 's/([a-z]+),([0-9]+)/\\2-\\1/' data.csv",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "name,age,city\n30-alice,NYC\n25-bob,LA\n35-carol,NYC\n"
+  },
+  "hard-sed:272": {
+    "script": "sed '/banana/a after' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nbanana\nafter\ncherry\n"
+  },
+  "hard-sed:273": {
+    "script": "sed '/banana/i before' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nbefore\nbanana\ncherry\n"
+  },
+  "hard-sed:274": {
+    "script": "sed '2r words.txt' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nbanana\nthe quick brown fox\njumps over the lazy dog\nThe end\ncherry\n"
+  },
+  "hard-sed:275": {
+    "script": "sed -n '/an/=' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "hard-sed:276": {
+    "script": "sed 'n;d' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\ncherry\n"
+  },
+  "hard-sed:277": {
+    "script": "sed '$!d' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "cherry\n"
+  },
+  "hard-sed:278": {
+    "script": "sed -n 'l' <<< $'a\\tb'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\\tb$\n"
+  },
+  "hard-sed:279": {
+    "script": "sed 's/.*/\\L&/; s/^./\\u&/' <<< 'HELLO world'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "Hello world\n"
+  },
+  "hard-sed:280": {
+    "script": "sed 's/a\\|e/X/g' <<< 'apple'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "XpplX\n"
+  },
+  "hard-sed:281": {
+    "script": "sed -E 's/a{2}/X/' <<< aaa",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "Xa\n"
+  },
+  "hard-sed:282": {
+    "script": "sed 's/^[[:space:]]*//' <<< '   lead'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "lead\n"
+  },
+  "hard-sed:283": {
+    "script": "sed 's/o/0/3g' <<< oooooo",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "oo0000\n"
+  },
+  "hard-sed:284": {
+    "script": "sed -n '/^$/!p' <<< $'a\\n\\nb'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\nb\n"
+  },
+  "hard-sed:285": {
+    "script": "sed '/x/,+1d' <<< $'a\\nx\\nb\\nc'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\nc\n"
+  },
+  "hard-sed:286": {
+    "script": "sed 'h;s/a/b/;x;G' <<< a",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\nb\n"
+  },
+  "hard-sed:287": {
+    "script": "sed '=' <<< x | sed 'N;s/\\n/ /'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1 x\n"
+  },
+  "hard-sed:288": {
+    "script": "sed --expression='s/a/b/' <<< a",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "b\n"
+  },
+  "hard-sed:289": {
+    "script": "sed -i.bak 's/a/b/' a.txt; cat a.txt.bak | head -1; head -1 a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nbpple\n"
+  },
+  "hard-sed:290": {
+    "script": "sed 'a\\' <<< x; echo rc=$?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "x\nrc=0\n"
+  },
+  "hard-sed:291": {
+    "script": "sed 's/x/y' <<< x; echo $?",
+    "exitCode": 0,
+    "stderr": "sed: -e expression #1, char 5: unterminated `s' command\n",
+    "stdout": "1\n"
+  },
+  "hard-sed:292": {
+    "script": "sed -z 's/\\n/,/g' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple,banana,cherry,"
+  },
+  "hard-awk:293": {
+    "script": "awk 'BEGIN{printf \"%*d|\\n\", 5, 3}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "    3|\n"
+  },
+  "hard-awk:294": {
+    "script": "awk 'BEGIN { print length() }' <<< abc",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "hard-awk:295": {
+    "script": "awk '{ print length() }' <<< abcd",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "4\n"
+  },
+  "hard-awk:296": {
+    "script": "awk 'BEGIN{CONVFMT=\"%.2g\"; x=3.14159; y=x \"\"; print y}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3.1\n"
+  },
+  "hard-awk:297": {
+    "script": "awk 'BEGIN{OFMT=\"%.2f\"; print 3.14159}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3.14\n"
+  },
+  "hard-awk:298": {
+    "script": "awk 'BEGIN{x; if (x == 0 && x == \"\") print \"both\"}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "both\n"
+  },
+  "hard-awk:299": {
+    "script": "awk '{ $5 = \"e\"; print; print NF }' <<< 'a b'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a b   e\n5\n"
+  },
+  "hard-awk:300": {
+    "script": "awk '{ NF = 2; print }' <<< 'a b c d'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a b\n"
+  },
+  "hard-awk:301": {
+    "script": "awk -F'[,;]' '{print $2}' <<< 'a,b;c'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "b\n"
+  },
+  "hard-awk:302": {
+    "script": "awk -F '\\t' '{print $2}' <<< $'a\\tb c'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "b c\n"
+  },
+  "hard-awk:303": {
+    "script": "awk 'BEGIN{FS=\"\"} {print $2}' <<< abc",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "b\n"
+  },
+  "hard-awk:304": {
+    "script": "awk '{print $1}' FS=, data.csv | head -2",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "name\nalice\n"
+  },
+  "hard-awk:305": {
+    "script": "awk 'BEGIN{a[\"x\"]; if (\"x\" in a) print \"in\"; delete a[\"x\"]; if (!(\"x\" in a)) print \"out\"}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "in\nout\n"
+  },
+  "hard-awk:306": {
+    "script": "awk 'BEGIN{split(\"c b a\", arr); asort(arr); print arr[1]}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\n"
+  },
+  "hard-awk:307": {
+    "script": "awk 'BEGIN{print substr(\"hello\", -1, 3)}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "hel\n"
+  },
+  "hard-awk:308": {
+    "script": "awk 'BEGIN{print index(\"abc\", \"\")}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-awk:309": {
+    "script": "awk 'BEGIN{s=\"aaa\"; n=gsub(/a/, \"&&\", s); print n, s}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3 aaaaaa\n"
+  },
+  "hard-awk:310": {
+    "script": "awk 'BEGIN{s=\"a.b\"; gsub(\".\", \"x\", s); print s}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "xxx\n"
+  },
+  "hard-awk:311": {
+    "script": "awk 'BEGIN{s=\"path/to\"; gsub(\"/\", \"\\\\/\", s); print s}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "path\\/to\n"
+  },
+  "hard-awk:312": {
+    "script": "awk 'BEGIN{print match(\"xxabc\", \"ab\"), RSTART}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3 3\n"
+  },
+  "hard-awk:313": {
+    "script": "awk 'BEGIN{printf \"%s %s\\n\", \"only\"}'",
+    "exitCode": 2,
+    "stderr": "awk: cmd. line:1: fatal: not enough arguments to satisfy format string\n\t`%s %s\n'\n\t    ^ ran out for this one\n",
+    "stdout": ""
+  },
+  "hard-awk:314": {
+    "script": "awk 'BEGIN{printf \"%d %d\\n\", \"3abc\", -2.7}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3 -2\n"
+  },
+  "hard-awk:315": {
+    "script": "awk 'BEGIN{print 10 % 3.5, 2 ** 3}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3 8\n"
+  },
+  "hard-awk:316": {
+    "script": "awk 'BEGIN{print 1==1.0, \"1\"==1, \"a\"<\"b\"}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1 1 1\n"
+  },
+  "hard-awk:317": {
+    "script": "awk 'BEGIN{x = 1; x += x++; print x}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "hard-awk:318": {
+    "script": "awk '{ getline line < \"a.txt\"; print $0, line }' <<< $'1\\n2'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1 apple\n2 banana\n"
+  },
+  "hard-awk:319": {
+    "script": "awk 'BEGIN{while ((getline l < \"a.txt\") > 0) n++; print n}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "hard-awk:320": {
+    "script": "awk 'BEGIN{cmd=\"sort -r a.txt\"; while ((cmd | getline l) > 0) print l; close(cmd)}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "cherry\nbanana\napple\n"
+  },
+  "hard-awk:321": {
+    "script": "awk '{print | \"sort -r\"}' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "cherry\nbanana\napple\n"
+  },
+  "hard-awk:322": {
+    "script": "awk 'BEGIN{print \"err\" > \"/dev/stderr\"}' 2>&1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "err\n"
+  },
+  "hard-awk:323": {
+    "script": "awk 'BEGIN{system(\"echo sys\"); print \"after\"}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "sys\nafter\n"
+  },
+  "hard-awk:324": {
+    "script": "awk 'BEGIN{exit 3}'; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "hard-awk:325": {
+    "script": "awk 'END{print $0}' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "cherry\n"
+  },
+  "hard-awk:326": {
+    "script": "awk 'BEGIN{n=split(\"a1b2c\", arr, /[0-9]/); print n, arr[2]}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3 b\n"
+  },
+  "hard-awk:327": {
+    "script": "awk '/apple/,/banana/' a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\nbanana\n"
+  },
+  "hard-awk:328": {
+    "script": "awk 'BEGIN{RS=\",\"} {print}' <<< 'a,b,c'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\nb\nc\n\n"
+  },
+  "hard-awk:329": {
+    "script": "awk 'BEGIN{ORS=\"|\"} {print}' a.txt; echo",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple|banana|cherry|\n"
+  },
+  "hard-awk:330": {
+    "script": "awk 'NR==FNR{a[$1];next} $1 in a' <(echo banana) a.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "banana\n"
+  },
+  "hard-awk:331": {
+    "script": "awk '{$0=\"x y\"; print $2}' <<< z",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "y\n"
+  },
+  "hard-awk:332": {
+    "script": "awk 'BEGIN{printf(\"%5.1e\\n\", 12345)}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1.2e+04\n"
+  },
+  "hard-awk:333": {
+    "script": "awk 'BEGIN{print toupper(substr(\"hello\",1,1)) substr(\"hello\",2)}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "Hello\n"
+  },
+  "hard-awk:334": {
+    "script": "awk 'BEGIN { srand(1); r = rand(); print (r >= 0 && r < 1) }'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-awk:335": {
+    "script": "awk -v 's=a\\tb' 'BEGIN{print s}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\tb\n"
+  },
+  "hard-awk:336": {
+    "script": "awk 'BEGIN{print ARGV[1]}' foo",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "foo\n"
+  },
+  "hard-awk:337": {
+    "script": "awk '{print}' ENVIRON_TEST=1 a.txt | head -1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "apple\n"
+  },
+  "hard-awk:338": {
+    "script": "awk 'BEGIN{print ENVIRON[\"HOME\"] != \"\"}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-awk:339": {
+    "script": "awk 'BEGIN { print 017, 0x11 }'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "15 17\n"
+  },
+  "hard-awk:340": {
+    "script": "awk 'BEGIN { x[\"a\"]=1; x[\"b\"]=2; delete x; print length(x) }'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "hard-awk:341": {
+    "script": "awk 'BEGIN { print substr(\"abc\", 2, 100) \"|\" }'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "bc|\n"
+  },
+  "hard-awk:342": {
+    "script": "awk 'BEGIN { print 100000 * 100000, 2^53 + 1 }'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "10000000000 9007199254740992\n"
+  },
+  "hard-awk:343": {
+    "script": "awk 'BEGIN { printf \"%.10g\\n\", 1/3 }'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0.3333333333\n"
+  },
+  "hard-awk:344": {
+    "script": "awk 'BEGIN { print -0 }'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "hard-awk:345": {
+    "script": "awk '{ printf \"%-10s|%5s\\n\", $1, $2 }' words.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "the       |quick\njumps     | over\nThe       |  end\n"
+  },
+  "hard-awk:346": {
+    "script": "awk 'BEGIN{a=\"10\"; b=\"9\"; print (a<b)}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-awk:347": {
+    "script": "awk '{print ($1 < $2)}' <<< '10 9'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0\n"
+  },
+  "hard-jq:348": {
+    "script": "jq -r '@sh' <<< '[\"a b\", \"c'\"'\"'d\"]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "'a b' 'c'\\''d'\n"
+  },
+  "hard-jq:349": {
+    "script": "jq -r '@json' <<< '{\"a\":\"x\"}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "{\"a\":\"x\"}\n"
+  },
+  "hard-jq:350": {
+    "script": "jq -r '@uri' <<< '\"a b&c\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a%20b%26c\n"
+  },
+  "hard-jq:351": {
+    "script": "jq -r '@html' <<< '\"<a>\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "&lt;a&gt;\n"
+  },
+  "hard-jq:352": {
+    "script": "jq -R . <<< 'raw line'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"raw line\"\n"
+  },
+  "hard-jq:353": {
+    "script": "jq -Rs . <<< $'l1\\nl2'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"l1\\nl2\\n\"\n"
+  },
+  "hard-jq:354": {
+    "script": "jq -n 'input' <<< '1 2'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-jq:355": {
+    "script": "jq -n '[inputs]' -c <<< '1 2 3'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[1,2,3]\n"
+  },
+  "hard-jq:356": {
+    "script": "jq -c '.[1:]' <<< '[1,2,3]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[2,3]\n"
+  },
+  "hard-jq:357": {
+    "script": "jq -c '.[-1:]' <<< '[1,2,3]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[3]\n"
+  },
+  "hard-jq:358": {
+    "script": "jq -r '.[] | tostring' <<< '[1,\"a\",null,true]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\na\nnull\ntrue\n"
+  },
+  "hard-jq:359": {
+    "script": "jq -c 'map(type)' <<< '[1,\"a\",null,true,[],{}]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[\"number\",\"string\",\"null\",\"boolean\",\"array\",\"object\"]\n"
+  },
+  "hard-jq:360": {
+    "script": "jq 'length' <<< '\"héllo\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "5\n"
+  },
+  "hard-jq:361": {
+    "script": "jq 'utf8bytelength' <<< '\"héllo\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "6\n"
+  },
+  "hard-jq:362": {
+    "script": "jq -c 'to_entries' <<< '{\"a\":1}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[{\"key\":\"a\",\"value\":1}]\n"
+  },
+  "hard-jq:363": {
+    "script": "jq -c 'from_entries' <<< '[{\"key\":\"a\",\"value\":1}]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "{\"a\":1}\n"
+  },
+  "hard-jq:364": {
+    "script": "jq -c '. as [$a, $b] | {a: $a, b: $b}' <<< '[1,2]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "{\"a\":1,\"b\":2}\n"
+  },
+  "hard-jq:365": {
+    "script": "jq -c '.[] as {n: $n} | $n' <<< '[{\"n\":1}]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-jq:366": {
+    "script": "jq -c 'path(..)' <<< '{\"a\":[1]}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[]\n[\"a\"]\n[\"a\",0]\n"
+  },
+  "hard-jq:367": {
+    "script": "jq -c 'getpath([\"a\",\"b\"])' <<< '{\"a\":{\"b\":5}}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "5\n"
+  },
+  "hard-jq:368": {
+    "script": "jq -c 'setpath([\"a\"]; 1)' <<< '{}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "{\"a\":1}\n"
+  },
+  "hard-jq:369": {
+    "script": "jq -c 'del(.[0])' <<< '[1,2]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[2]\n"
+  },
+  "hard-jq:370": {
+    "script": "jq -c 'to_entries | map(select(.value > 1)) | from_entries' <<< '{\"a\":1,\"b\":2}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "{\"b\":2}\n"
+  },
+  "hard-jq:371": {
+    "script": "jq -c '[.[] | ascii_downcase]' <<< '[\"A\",\"b\"]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[\"a\",\"b\"]\n"
+  },
+  "hard-jq:372": {
+    "script": "jq -c 'ltrimstr(\"a\") , rtrimstr(\"c\")' <<< '\"abc\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"bc\"\n\"ab\"\n"
+  },
+  "hard-jq:373": {
+    "script": "jq -c 'startswith(\"a\"), endswith(\"x\")' <<< '\"abc\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "true\nfalse\n"
+  },
+  "hard-jq:374": {
+    "script": "jq -c 'indices(\", \")' <<< '\"a, b, c\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[1,4]\n"
+  },
+  "hard-jq:375": {
+    "script": "jq -c '[match(\"a+\"; \"g\") | .string]' <<< '\"aa b aaa\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[\"aa\",\"aaa\"]\n"
+  },
+  "hard-jq:376": {
+    "script": "jq -c 'capture(\"(?<x>[0-9]+)\")' <<< '\"ab12\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "{\"x\":\"12\"}\n"
+  },
+  "hard-jq:377": {
+    "script": "jq -c '[scan(\"[0-9]\")]' <<< '\"a1b2\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[\"1\",\"2\"]\n"
+  },
+  "hard-jq:378": {
+    "script": "jq -c 'gsub(\"a\"; \"b\")' <<< '\"aaa\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"bbb\"\n"
+  },
+  "hard-jq:379": {
+    "script": "jq -c 'ascii' <<< 65 2>/dev/null || echo noascii",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "noascii\n"
+  },
+  "hard-jq:380": {
+    "script": "jq -c 'implode' <<< '[104,105]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"hi\"\n"
+  },
+  "hard-jq:381": {
+    "script": "jq -c 'explode' <<< '\"hi\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[104,105]\n"
+  },
+  "hard-jq:382": {
+    "script": "jq -c 'tojson, (tojson|fromjson)' <<< '{\"a\":[1]}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"{\\\"a\\\":[1]}\"\n{\"a\":[1]}\n"
+  },
+  "hard-jq:383": {
+    "script": "jq -c 'min_by(.x), max_by(.x)' <<< '[{\"x\":2},{\"x\":1}]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "{\"x\":1}\n{\"x\":2}\n"
+  },
+  "hard-jq:384": {
+    "script": "jq -c 'unique_by(length)' <<< '[\"a\",\"b\",\"cc\"]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[\"a\",\"cc\"]\n"
+  },
+  "hard-jq:385": {
+    "script": "jq -c 'group_by(.k) | map({k: .[0].k, n: length})' <<< '[{\"k\":1},{\"k\":2},{\"k\":1}]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[{\"k\":1,\"n\":2},{\"k\":2,\"n\":1}]\n"
+  },
+  "hard-jq:386": {
+    "script": "jq -c 'reverse' <<< '[1,2,3]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[3,2,1]\n"
+  },
+  "hard-jq:387": {
+    "script": "jq -c 'contains([\"b\"])' <<< '[\"abc\"]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "true\n"
+  },
+  "hard-jq:388": {
+    "script": "jq -c 'inside({\"a\":1,\"b\":2})' <<< '{\"a\":1}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "true\n"
+  },
+  "hard-jq:389": {
+    "script": "jq -c 'index(\"b\")' <<< '\"abc\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-jq:390": {
+    "script": "jq -c 'combinations' <<< '[[1,2],[3]]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[1,3]\n[2,3]\n"
+  },
+  "hard-jq:391": {
+    "script": "jq -c 'walk(if type == \"number\" then . + 1 else . end)' <<< '[1,[2]]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[2,[3]]\n"
+  },
+  "hard-jq:392": {
+    "script": "jq -c 'env | type'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": ""
+  },
+  "hard-jq:393": {
+    "script": "jq -c '$ENV | type'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": ""
+  },
+  "hard-jq:394": {
+    "script": "jq -c 'splits(\"a\")' <<< '\"bab\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"b\"\n\"b\"\n"
+  },
+  "hard-jq:395": {
+    "script": "jq -c 'ascii_upcase' <<< '\"é\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"é\"\n"
+  },
+  "hard-jq:396": {
+    "script": "jq -c '.a?' <<< '[1]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": ""
+  },
+  "hard-jq:397": {
+    "script": "jq -c 'try error(\"x\") catch .' <<< null",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"x\"\n"
+  },
+  "hard-jq:398": {
+    "script": "jq -c '.[] | numbers' <<< '[1,\"a\"]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-jq:399": {
+    "script": "jq -c 'tonumber' <<< '\"1.50\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1.50\n"
+  },
+  "hard-jq:400": {
+    "script": "jq -c '1 / 3'  <<< null",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0.3333333333333333\n"
+  },
+  "hard-jq:401": {
+    "script": "jq -c '[limit(3; repeat(1))]' <<< null",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[1,1,1]\n"
+  },
+  "hard-jq:402": {
+    "script": "jq -c 'until(. > 100; . * 2)' <<< 1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "128\n"
+  },
+  "hard-jq:403": {
+    "script": "jq -c '[recurse(if . < 3 then . + 1 else empty end)]' <<< 0",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[0,1,2,3]\n"
+  },
+  "hard-jq:404": {
+    "script": "jq -c 'def f(x): x * 2; f(.)' <<< 3",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "6\n"
+  },
+  "hard-jq:405": {
+    "script": "jq -c '[.[] | if . then \"t\" elif . == null then \"n\" else \"f\" end]' <<< '[true,false,null]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[\"t\",\"f\",\"n\"]\n"
+  },
+  "hard-jq:406": {
+    "script": "jq -c '.a += 1 | .b -= 1 | .c *= 2' <<< '{\"a\":1,\"b\":1,\"c\":2}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "{\"a\":2,\"b\":0,\"c\":4}\n"
+  },
+  "hard-jq:407": {
+    "script": "jq -c '.. |= (if type == \"string\" then ascii_upcase else . end)' <<< '{\"a\":\"x\"}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "{\"a\":\"X\"}\n"
+  },
+  "hard-jq:408": {
+    "script": "jq -c 'label $out | foreach .[] as $i (0; . + $i; if . > 2 then ., break $out else . end)' <<< '[1,2,3]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n3\n"
+  },
+  "hard-jq:409": {
+    "script": "jq -c 'input_line_number' <<< 1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-jq:410": {
+    "script": "jq -c '@text' <<< 1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"1\"\n"
+  },
+  "hard-jq:411": {
+    "script": "jq -c 'ltrimstr(1)' <<< '\"1a\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"1a\"\n"
+  },
+  "hard-jq:412": {
+    "script": "jq -c 'sort' <<< '[3,\"a\",null,true,[1],{\"a\":1}]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[null,true,3,\"a\",[1],{\"a\":1}]\n"
+  },
+  "hard-jq:413": {
+    "script": "jq -c 'add' <<< '[]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "null\n"
+  },
+  "hard-jq:414": {
+    "script": "jq -c 'join(\"-\")' <<< '[1,null,\"a\"]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"1--a\"\n"
+  },
+  "hard-jq:415": {
+    "script": "jq -c 'tostring' <<< '1.0'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"1.0\"\n"
+  },
+  "hard-jq:416": {
+    "script": "jq -c '.' <<< '100000000000000000000'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "100000000000000000000\n"
+  },
+  "hard-jq:417": {
+    "script": "jq -c '.' <<< '1.000'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1.000\n"
+  },
+  "hard-jq:418": {
+    "script": "jq -c 'keys_unsorted' <<< '{\"b\":1,\"a\":2}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[\"b\",\"a\"]\n"
+  },
+  "hard-jq:419": {
+    "script": "jq -c 'has(0)' <<< '[1]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "true\n"
+  },
+  "hard-jq:420": {
+    "script": "jq '.a.b.c' <<< '{\"a\":null}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "null\n"
+  },
+  "hard-jq:421": {
+    "script": "jq '.a.b' <<< '{\"a\":1}'; echo $?",
+    "exitCode": 0,
+    "stderr": "jq: error (at <stdin>:1): Cannot index number with string \"b\"\n",
+    "stdout": "5\n"
+  },
+  "hard-jq:422": {
+    "script": "jq -r '.[]' <<< '[\"a\\nb\"]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "a\nb\n"
+  },
+  "hard-jq:423": {
+    "script": "jq -j '.[]' <<< '[\"a\",\"b\"]'; echo",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "ab\n"
+  },
+  "hard-jq:424": {
+    "script": "jq --arg n 5 '$n|tonumber + 1' -n",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "6\n"
+  },
+  "hard-jq:425": {
+    "script": "jq --slurp -c . <<< '1 2'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[1,2]\n"
+  },
+  "hard-jq:426": {
+    "script": "jq -c --indent 1 . <<< '{\"a\":1}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "{\n \"a\": 1\n}\n"
+  },
+  "hard-jq:427": {
+    "script": "jq '.' <<< '{\"a\":1' 2>/dev/null; echo $?",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "5\n"
+  },
+  "hard-jq:428": {
+    "script": "jq -c 'ascii_downcase' <<< '\"ABC\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"abc\"\n"
+  },
+  "hard-jq:429": {
+    "script": "jq -c '@base64d' <<< '\"aGk=\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"hi\"\n"
+  },
+  "hard-jq:430": {
+    "script": "jq -c 'getpath([\"x\"]) // \"d\"' <<< '{}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"d\"\n"
+  },
+  "hard-jq:431": {
+    "script": "jq -c 'map_values(. + 1)' <<< '{\"a\":1}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "{\"a\":2}\n"
+  },
+  "hard-jq:432": {
+    "script": "jq -c 'to_entries[] | \"\\(.key):\\(.value)\"' <<< '{\"a\":1,\"b\":2}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"a:1\"\n\"b:2\"\n"
+  },
+  "hard-jq:433": {
+    "script": "jq -c 'any(. > 2)' <<< '[1,3]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "true\n"
+  },
+  "hard-jq:434": {
+    "script": "jq -c 'isempty(empty)' <<< null",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "true\n"
+  },
+  "hard-jq:435": {
+    "script": "jq -c 'getpath([\"a\",0])' <<< '{\"a\":[9]}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "9\n"
+  },
+  "hard-jq:436": {
+    "script": "jq -c 'paths(type == \"number\")' <<< '{\"a\":1,\"b\":{\"c\":2}}'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[\"a\"]\n[\"b\",\"c\"]\n"
+  },
+  "hard-jq:437": {
+    "script": "jq -c 'leaf_paths' <<< '{\"a\":1}'",
+    "exitCode": 3,
+    "stderr": "jq: error: leaf_paths/0 is not defined at <top-level>, line 1:\nleaf_paths\njq: 1 compile error\n",
+    "stdout": ""
+  },
+  "hard-jq:438": {
+    "script": "jq -c 'del(.. | nulls)' <<< '[1,null,2]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[1,2]\n"
+  },
+  "hard-jq:439": {
+    "script": "jq -c 'tojson' <<< '\"é\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"\\\"é\\\"\"\n"
+  },
+  "hard-jq:440": {
+    "script": "jq -c 'splits(\"\\\\s+\")' <<< '\"a  b\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"a\"\n\"b\"\n"
+  },
+  "hard-jq:441": {
+    "script": "jq -c 'ascii_downcase | test(\"abc\"; \"i\")' <<< '\"ABC\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "true\n"
+  },
+  "hard-jq:442": {
+    "script": "jq -c 'significand' <<< 8 2>/dev/null || echo nosig",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-jq:443": {
+    "script": "jq -c 'floor, ceil, round, sqrt' <<< 2.5",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n3\n3\n1.5811388300841898\n"
+  },
+  "hard-jq:444": {
+    "script": "jq -c 'pow(2;10), log10' <<< 100",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1024\n2\n"
+  },
+  "hard-jq:445": {
+    "script": "jq -c 'infinite, nan | isinfinite' <<< null",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "true\nfalse\n"
+  },
+  "hard-jq:446": {
+    "script": "jq -c '[.[] | select(type == \"object\")]' <<< '[1,{}]'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "[{}]\n"
+  },
+  "hard-jq:447": {
+    "script": "jq -c 'todate' <<< 0",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"1970-01-01T00:00:00Z\"\n"
+  },
+  "hard-jq:448": {
+    "script": "jq -c 'strftime(\"%Y\")' <<< 0",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"1970\"\n"
+  },
+  "hard-jq:449": {
+    "script": "jq -c '\"2015-03-05T23:51:47Z\" | fromdate'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": ""
+  },
+  "hard-jq:450": {
+    "script": "jq -c 'splits(\",\")' <<< '\"a,\"'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "\"a\"\n\"\"\n"
+  },
+  "hard-find:451": {
+    "script": "find dir -name '*.txt' -newer dir/sub -o -name '*.md' -print | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/sub/y.md\n"
+  },
+  "hard-find:452": {
+    "script": "find dir -type f -exec sh -c 'echo \"f:$1\"' _ {} \\; | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "f:dir/sub/y.md\nf:dir/x.txt\nf:dir/z.txt\n"
+  },
+  "hard-find:453": {
+    "script": "find dir -type f -name '*.txt' | wc -l",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2\n"
+  },
+  "hard-find:454": {
+    "script": "find . -path ./dir -prune -o -name '*.txt' -print | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "./a.txt\n./dup.txt\n./nums.txt\n./words.txt\n"
+  },
+  "hard-find:455": {
+    "script": "find dir -depth | head -1",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/sub/y.md\n"
+  },
+  "hard-find:456": {
+    "script": "find dir/ -maxdepth 1 | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/\ndir/sub\ndir/x.txt\ndir/z.txt\n"
+  },
+  "hard-find:457": {
+    "script": "find . -name 'x*' -type f",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "./dir/x.txt\n"
+  },
+  "hard-find:458": {
+    "script": "find dir -regex '.*/[xy]\\..*' | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/sub/y.md\ndir/x.txt\n"
+  },
+  "hard-find:459": {
+    "script": "find dir -type f -size +0 | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/sub/y.md\ndir/x.txt\ndir/z.txt\n"
+  },
+  "hard-find:460": {
+    "script": "find dir -name '*.txt' -printf '%s %p\\n' | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "2 dir/x.txt\n3 dir/z.txt\n"
+  },
+  "hard-find:461": {
+    "script": "find dir -type f -perm -u=r | wc -l",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "hard-find:462": {
+    "script": "find dir -name sub -type d -exec ls {} \\;",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "y.md\n"
+  },
+  "hard-find:463": {
+    "script": "find dir -type f -print -quit | wc -l",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "1\n"
+  },
+  "hard-find:464": {
+    "script": "find . -maxdepth 1 -type f -name '*.csv' -o -maxdepth 1 -name '*.json' | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "./data.csv\n./j.json\n"
+  },
+  "hard-find:465": {
+    "script": "find dir -mmin -60 -type f | wc -l",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "hard-find:466": {
+    "script": "find dir -links 1 -type f | wc -l",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "3\n"
+  },
+  "hard-find:467": {
+    "script": "find dir -wholename 'dir/sub/*'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/sub/y.md\n"
+  },
+  "hard-find:468": {
+    "script": "find dir -type f -exec grep -l x {} + | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/x.txt\n"
+  },
+  "hard-find:469": {
+    "script": "find dir -samefile dir/x.txt",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "dir/x.txt\n"
+  },
+  "hard-find:470": {
+    "script": "find -name 'y.md'",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "./dir/sub/y.md\n"
+  },
+  "hard-find:471": {
+    "script": "find dir -printf '%d %y %P\\n' | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "0 d \n1 d sub\n1 f x.txt\n1 f z.txt\n2 f sub/y.md\n"
+  },
+  "hard-find:472": {
+    "script": "find dir -type f -execdir echo {} \\; | sort",
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "./x.txt\n./y.md\n./z.txt\n"
+  }
+}

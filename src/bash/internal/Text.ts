@@ -98,12 +98,26 @@ export function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
 }
 
-export function globSource(pattern: string, path = false): string {
+export function globSource(pattern: string, path = false, extended = false): string {
   let out = ''
   for (let i = 0; i < pattern.length; i++) {
     const c = pattern[i]
     if (c === '\\' && i + 1 < pattern.length) out += escapeRegExp(pattern[++i])
-    else if (c === '*') out += path ? '[^/]*' : '[\\s\\S]*'
+    else if (extended && '?*+@!'.includes(c) && pattern[i + 1] === '(') {
+      const end = closing(pattern, i + 1)
+      if (end < 0) {
+        out += escapeRegExp(c)
+        continue
+      }
+      const body = alternatives(pattern.slice(i + 2, end))
+        .map((part) => globSource(part, path, true))
+        .join('|')
+      const any = path ? '[^/]*' : '[\\s\\S]*'
+      const rest = globSource(pattern.slice(end + 1), path, true)
+      if (c === '!') out += '(?:(?!(?:' + body + ')' + rest + '$)' + any + ')'
+      else out += '(?:' + body + ')' + (c === '@' ? '' : c)
+      i = end
+    } else if (c === '*') out += path ? '[^/]*' : '[\\s\\S]*'
     else if (c === '?') out += path ? '[^/]' : '[\\s\\S]'
     else if (c === '[') {
       const result = bracket(pattern, i, true)
@@ -116,13 +130,41 @@ export function globSource(pattern: string, path = false): string {
   return out
 }
 
+function closing(pattern: string, open: number): number {
+  let depth = 0
+  for (let i = open; i < pattern.length; i++) {
+    if (pattern[i] === '\\') i++
+    else if (pattern[i] === '(') depth++
+    else if (pattern[i] === ')' && --depth === 0) return i
+  }
+  return -1
+}
+
+function alternatives(body: string): string[] {
+  const parts: string[] = []
+  let depth = 0
+  let start = 0
+  for (let i = 0; i < body.length; i++) {
+    if (body[i] === '\\') i++
+    else if (body[i] === '(') depth++
+    else if (body[i] === ')') depth--
+    else if (body[i] === '|' && depth === 0) {
+      parts.push(body.slice(start, i))
+      start = i + 1
+    }
+  }
+  parts.push(body.slice(start))
+  return parts
+}
+
 export function globRegExp(pattern: string, flags = ''): RegExp {
   return new RegExp('^' + globSource(pattern) + '$', flags)
 }
 
-export function hasGlob(pattern: string): boolean {
+export function hasGlob(pattern: string, extended = false): boolean {
   for (let i = 0; i < pattern.length; i++) {
     if (pattern[i] === '\\') i++
+    else if (extended && '+@!'.includes(pattern[i]) && pattern[i + 1] === '(') return true
     else if (pattern[i] === '*' || pattern[i] === '?') return true
     else if (pattern[i] === '[' && bracket(pattern, i, true)) return true
   }

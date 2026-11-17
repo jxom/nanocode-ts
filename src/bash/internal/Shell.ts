@@ -775,7 +775,7 @@ const BRACE_LIMIT = 100_000
 const LINES: string[] = []
 
 function escapeGlob(text: string): string {
-  return text.replace(/[*?[\]\\]/g, '\\$&')
+  return text.replace(/[*?[\]\\()|]/g, '\\$&')
 }
 
 function message(error: unknown): string {
@@ -892,6 +892,7 @@ export class Runner {
   #ignored = false
   #depth = 0
   #condition = 0
+  #aliasing = new Set<string>()
   loops = 0
   #substitution: number | undefined
   #trapping = false
@@ -1495,7 +1496,12 @@ export class Runner {
           let matched = falling
           if (!matched) {
             for (const pattern of item.patterns) {
-              if (compiled('^' + globbed(await this.pattern(pattern, io)) + '$').test(value)) {
+              if (
+                compiled(
+                  '^' + globbed(await this.pattern(pattern, io)) + '$',
+                  this.state.shopt.has('nocasematch') ? 'i' : '',
+                ).test(value)
+              ) {
                 matched = true
                 break
               }
@@ -1588,7 +1594,11 @@ export class Runner {
           if (map) return map.has(element[2])
           return this.state.vars.get(element[1])?.[Number(element[2])] !== undefined
         },
-        match: (text, pattern) => compiled('^' + globbed(pattern) + '$').test(text),
+        match: (text, pattern) =>
+          compiled(
+            '^' + globbed(pattern) + '$',
+            this.state.shopt.has('nocasematch') ? 'i' : '',
+          ).test(text),
         regex: (text, source) => {
           const match = text.match(posixRegExp(source, true))
           this.set('BASH_REMATCH', match ? [...match].map((group) => group ?? '') : [])
@@ -1647,6 +1657,28 @@ export class Runner {
     const argv: string[] = []
     for (const word of command.words)
       if (Array.isArray(word)) append(argv, await this.fields(word, io))
+    if (
+      this.state.aliases.size &&
+      head &&
+      Array.isArray(head) &&
+      head.length === 1 &&
+      head[0].type === 'text' &&
+      !head[0].quoted &&
+      this.state.shopt.has('expand_aliases') &&
+      !this.#aliasing.has(head[0].value)
+    ) {
+      const name = head[0].value
+      const value = this.state.aliases.get(name)
+      if (value !== undefined) {
+        this.#aliasing.add(name)
+        try {
+          const rest = argv.slice(1).map(shellQuote).join(' ')
+          return await this.script(parse(value + (rest ? ' ' + rest : '')), io)
+        } finally {
+          this.#aliasing.delete(name)
+        }
+      }
+    }
     if (!argv.length) {
       for (const assign of command.assigns) await this.assign(assign, io)
       return this.#substitution ?? 0
@@ -2452,9 +2484,10 @@ export class Runner {
     this.enter()
     const out = this.buffer()
     try {
-      const status = await this.subshell(() =>
-        this.script(body, { stdin: io.stdin, stdout: out, stderr: io.stderr, fds: io.fds }),
-      )
+      const status = await this.subshell(() => {
+        if (!this.state.shopt.has('inherit_errexit')) this.state.options.errexit = false
+        return this.script(body, { stdin: io.stdin, stdout: out, stderr: io.stderr, fds: io.fds })
+      })
       this.#substitution = status
       this.state.status = status
     } finally {
@@ -2627,7 +2660,7 @@ export class Runner {
     let result = values!
     if (op === '#' || op === '##' || op === '%' || op === '%%') {
       const pattern = await this.pattern(part.arg ?? [], io)
-      if (!hasGlob(pattern)) {
+      if (!hasGlob(pattern, true)) {
         const literal = pattern.includes('\\') ? pattern.replace(/\\([\s\S])/g, '$1') : pattern
         result = result.map((value) =>
           op[0] === '#'
@@ -2666,7 +2699,7 @@ export class Runner {
     } else if (op.startsWith('/')) {
       const pattern = await this.pattern(part.arg ?? [], io)
       const replacement = part.arg2 ? await this.string(part.arg2, io) : ''
-      if (pattern !== '' && !hasGlob(pattern)) {
+      if (pattern !== '' && !hasGlob(pattern, true)) {
         const literal = pattern.includes('\\') ? pattern.replace(/\\([\s\S])/g, '$1') : pattern
         result = result.map((value) => {
           if (op === '//') return value.split(literal).join(replacement)
@@ -2705,11 +2738,28 @@ export class Runner {
         const source = name === '@' || name === '*' ? ['bash', ...result] : result
         result = slice(source)
       } else result = [slice([...result[0]]).join('')]
-    } else if (op === '^^' || op === ',,' || op === '^' || op === ',') {
-      const source = part.arg?.length ? globSource(await this.pattern(part.arg, io)) : ''
+    } else if (
+      op === '^^' ||
+      op === ',,' ||
+      op === '^' ||
+      op === ',' ||
+      op === '~~' ||
+      op === '~'
+    ) {
+      const source = part.arg?.length
+        ? globSource(await this.pattern(part.arg, io), false, true)
+        : ''
       const allowed = source ? new RegExp('^(?:' + source + ')$') : undefined
       const convert = (c: string) =>
-        allowed && !allowed.test(c) ? c : op[0] === '^' ? c.toUpperCase() : c.toLowerCase()
+        allowed && !allowed.test(c)
+          ? c
+          : op[0] === '^'
+            ? c.toUpperCase()
+            : op[0] === ','
+              ? c.toLowerCase()
+              : c === c.toUpperCase()
+                ? c.toLowerCase()
+                : c.toUpperCase()
       result = result.map((value) =>
         op.length === 2
           ? [...value].map(convert).join('')
@@ -2819,7 +2869,7 @@ export class Runner {
       const part = word[0]
       if (
         part.type === 'text' &&
-        (part.quoted || (!part.value.includes('{') && !hasGlob(part.value)))
+        (part.quoted || (!part.value.includes('{') && !hasGlob(part.value, true)))
       )
         return part.quoted || part.value ? [part.value] : []
     }
@@ -2848,7 +2898,7 @@ export class Runner {
         } else if (!piece.split || !split) {
           current.text += piece.text
           current.pattern += piece.text
-          current.glob ||= hasGlob(piece.text)
+          current.glob ||= hasGlob(piece.text, true)
           current.content ||= piece.text !== ''
         } else {
           const segments = piece.text.split(split)
@@ -2860,7 +2910,7 @@ export class Runner {
             if (segment !== '') {
               current.text += segment
               current.pattern += segment
-              current.glob ||= hasGlob(segment)
+              current.glob ||= hasGlob(segment, true)
               current.content = true
             }
           })
@@ -2919,7 +2969,7 @@ export class Runner {
       }
       for (const base of paths) {
         const dir = this.resolve(base || '.')
-        if (!hasGlob(segment)) {
+        if (!hasGlob(segment, true)) {
           const literal = segment.replace(/\\([\s\S])/g, '$1')
           const path = join(base, literal)
           if (
@@ -2932,7 +2982,7 @@ export class Runner {
         }
         const stat = await this.host.fs.stat(dir)
         if (stat?.kind !== 'directory') continue
-        const regex = new RegExp('^' + globSource(segment, true) + '$')
+        const regex = new RegExp('^' + globSource(segment, true, true) + '$')
         const hidden = segment.startsWith('.') || segment.startsWith('\\.')
         for (const name of await this.host.fs.list(dir)) {
           if (name.startsWith('.') && !hidden && !dot) continue
@@ -2957,6 +3007,8 @@ export class Runner {
   }
 }
 
+const COMMAND_BUILTINS = new Set(['[', 'echo', 'false', 'kill', 'printf', 'pwd', 'test', 'true'])
+
 const REGEXPS = new Map<string, RegExp>()
 
 function compiled(source: string, flags = ''): RegExp {
@@ -2974,7 +3026,7 @@ const GLOBS = new Map<string, string>()
 function globbed(pattern: string): string {
   let source = GLOBS.get(pattern)
   if (source !== undefined) return source
-  source = globSource(pattern)
+  source = globSource(pattern, false, true)
   if (GLOBS.size > 1024) GLOBS.clear()
   GLOBS.set(pattern, source)
   return source
@@ -4088,6 +4140,8 @@ export const BUILTINS: Record<string, Builtin> = {
   },
   async builtin(args, io) {
     const builtin = args.length ? BUILTINS[args[0]] : undefined
+    if (!builtin && COMMAND_BUILTINS.has(args[0]) && this.host.commands.has(args[0]))
+      return this.dispatch(args, io, false)
     if (!builtin) throw new CommandError((args[0] ?? '') + ': not a shell builtin')
     if (this.host.machine && machineBuiltin(args[0], args.slice(1)))
       throw new MachineError(unanswered(args[0]))

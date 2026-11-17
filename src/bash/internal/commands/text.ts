@@ -2038,7 +2038,7 @@ const tr: CommandHandler = streaming(async (ctx) => {
   let previous = ''
   let last = -1
   let map: Int32Array | undefined
-  let squeezable: Uint8Array | undefined
+  let squeezable: Int8Array | undefined
   const squeeze = f.has('s')
     ? new Set(f.has('d') || second === undefined ? (second === undefined ? [...set1] : set2) : set2)
     : undefined
@@ -2055,20 +2055,23 @@ const tr: CommandHandler = streaming(async (ctx) => {
   const simple = [...list1, ...set2].every((c) => c.length === 1 && !/[\uD800-\uDFFF]/.test(c))
   const convert = (input: string): string => {
     if (simple && (!complement || !/[\uD800-\uDFFF]/.test(input))) {
-      if (!map || !squeezable) {
-        map = new Int32Array(65536)
-        squeezable = new Uint8Array(65536)
-        for (let code = 0; code < 65536; code++) {
-          const value = translate(String.fromCharCode(code))
-          map[code] = value === undefined ? -1 : value.charCodeAt(0)
-          if (value !== undefined && squeezes(value)) squeezable[map[code]] = 1
-        }
-      }
+      map ??= new Int32Array(65536).fill(-2)
+      squeezable ??= new Int8Array(65536).fill(-1)
       const codes = new Uint16Array(input.length)
       let n = 0
       for (let i = 0; i < input.length; i++) {
-        const value = map[input.charCodeAt(i)]
-        if (value < 0 || (value === last && squeezable[value])) continue
+        const code = input.charCodeAt(i)
+        let value = map[code]
+        if (value === -2) {
+          const translated = translate(String.fromCharCode(code))
+          value = map[code] = translated === undefined ? -1 : translated.charCodeAt(0)
+        }
+        if (value < 0) continue
+        if (value === last) {
+          if (squeezable[value] < 0)
+            squeezable[value] = squeezes(String.fromCharCode(value)) ? 1 : 0
+          if (squeezable[value]) continue
+        }
         codes[n++] = value
         last = value
       }
