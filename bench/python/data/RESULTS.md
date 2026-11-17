@@ -91,3 +91,35 @@ At 48 MiB the instance is dropped after every run that grew past 24 MiB, so W1's
 SCORE build-89d6d85-workerd pass48=6/9 passUnl=9/9 warm48=491ms cold48=1090ms warmUnl=607ms coldUnl=1662ms peakLin48=119MiB peakLinUnl=376.1MiB rss48=1720.8MiB big48=5MB bigUnl=50MB
 
 Timings track Node within the hosted Hand's noise. The memory finding: at 48 MiB every run that grew past 24 MiB drops its instance, and in workerd those dropped linear memories stay alive: after W7's 20 chart runs 1,402 MiB of python.wasm memory is still uncollected and the process peaks at 1,721 MiB RSS, and W8's nested python3 leaves 170 MiB across instances. On Cloudflare that garbage counts against the 128 MB isolate until V8 collects it, so dropping instances is itself a memory risk, not only a speed cost.
+
+### 2026-11-17 rerun at master 2d10d99 (split: lazy python.wasm load; same python.wasm as build-89d6d85), Node
+
+Built with `sh bench/python/data/dist.sh <release dist> output/dist-2d10d99` (master's TypeScript, the release's wasm files). Load average on the shared Hand was 6.6 to 7.9.
+
+| id | workload | limit | status | mode | cold ms | warm ms | peak linear MiB | live linear MiB | max RSS MiB | note |
+| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| W1 | sine chart | 48 | pass | - | 1986 | 1544.1 | 69.7 | 0 | 405.6 |  |
+| W1 | sine chart | unl | pass | - | 2320 | 315 | 80.1 | 80.1 | 409.4 |  |
+| W2 | repo files chart | 48 | pass | - | 2962 | 1866.6 | 76.1 | 0 | 437.7 |  |
+| W2 | repo files chart | unl | pass | - | 2690 | 1020.4 | 99.7 | 99.7 | 477.7 |  |
+| W3 | csv 10 MB groupby chart | 48 | fail | - | 1577 | - | 88.1 | 0 | 507.4 | ta in chunks (a file line by line, a batch of rows at a time) and write results out as you go instead of holding it all  |
+| W3 | csv 10 MB groupby chart | unl | pass | numpy | 7956 | 5477 | 376.1 | 376.1 | 796.6 |  |
+| W4 | json 10k records table | 48 | pass | - | 790 | 104.6 | 52.3 | 52.3 | 376.5 |  |
+| W4 | json 10k records table | unl | pass | - | 764 | 93.6 | 52.3 | 52.3 | 376.1 |  |
+| W5a | bootstrap 90x4000 | 48 | pass | - | 1424 | 148.9 | 48.5 | 48.5 | 358.2 |  |
+| W5a | bootstrap 90x4000 | unl | pass | - | 986 | 188.3 | 48.5 | 48.5 | 354.1 |  |
+| W5b | bootstrap 90x100000 | 48 | fail | - | 1347 | - | 119 | 0 | 421.6 | ta in chunks (a file line by line, a batch of rows at a time) and write results out as you go instead of holding it all  |
+| W5b | bootstrap 90x100000 | unl | pass | - | 2630 | 1707.4 | 119 | 119 | 428 |  |
+| W6 | time series daily rolling chart | 48 | fail | - | 2760 | - | 89.6 | 0 | 442.4 | ta in chunks (a file line by line, a batch of rows at a time) and write results out as you go instead of holding it all  |
+| W6 | time series daily rolling chart | unl | pass | numpy | 7538 | 2629.8 | 256.3 | 256.3 | 608.4 |  |
+| W7 | five python3 calls numpy+mpl | 48 | pass | - | 6990 | 5839.3 | 70.3 | 0 | 422.1 |  |
+| W7 | five python3 calls numpy+mpl | unl | pass | - | 3104 | 1297 | 109.2 | 109.2 | 423 |  |
+| W8 | git subprocess heavy | 48 | pass | - | 908 | 68.6 | 34.2 | 34 | 363.8 |  |
+| W8 | git subprocess heavy | unl | pass | - | 660 | 67.3 | 34.4 | 34.4 | 366.7 |  |
+| W9 | polars csv groupby chart | 48 | skip | - | 356 | - | 34 | 34 | 433.3 |  |
+| W9 | polars csv groupby chart | unl | skip | - | 474 | - | 34 | 34 | 391.6 |  |
+| W10 | big csv probe | 48 | pass | - | 2917 | - | 116.7 | 0 | 1000 | largest 5 MB |
+| W10 | big csv probe | unl | pass | - | 18656 | - | 649.8 | 436.1 | 1737.6 | largest 50 MB |
+SCORE master-2d10d99 pass48=6/9 passUnl=9/9 warm48=512ms cold48=1864ms warmUnl=613ms coldUnl=2257ms peakLin48=119MiB peakLinUnl=376.1MiB rss48=507.4MiB big48=5MB bigUnl=50MB
+
+The full run reads slower than the baseline (warmUnl 613 against 452 ms), but an interleaved A/B of W1, W4, W5a, W7 and W8 at 1 GiB, two rounds each, gives warmUnl 196 and 200 ms for build-89d6d85 against 233 and 182 ms for master, coldUnl 1,126 and 1,211 against 1,200 and 1,059 ms: no regression, the gap is the Hand's load. The change only moves compiling python.wasm out of Worker boot under the new module registry, which this Node bench (it hands the runtime a compiled module) cannot see. Memory is unchanged (peakLinUnl 376 MiB, pass48 6/9). Compare interleaved runs, not runs taken at different times.

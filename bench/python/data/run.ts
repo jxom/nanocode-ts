@@ -1,6 +1,7 @@
 import * as Child from 'node:child_process'
 import * as Fs from 'node:fs'
 import * as Net from 'node:net'
+import * as Os from 'node:os'
 import * as Path from 'node:path'
 import * as Measure from './measure.ts'
 import * as Workloads from './workloads.ts'
