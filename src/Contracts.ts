@@ -93,6 +93,7 @@ export type CodexOptions = {
   max_output_tokens?: number
   min_wait_ms?: number
   verification_requested?: boolean
+  single_verification?: boolean
 }
 
 export type AgentConfiguration = {
