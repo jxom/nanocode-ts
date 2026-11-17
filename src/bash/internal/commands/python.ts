@@ -457,29 +457,43 @@ async function executeRust(
     }
     return 'EAGAIN'
   }
-  const attempt = () =>
-    RustPython.run(module, {
-      files,
-      fresh: known.length > 0,
-      request: {
-        argv: ctx.args,
-        cwd: ctx.cwd,
-        depth: ctx.limits.maxCallDepth,
-        env: { ...ctx.env, PWD: ctx.cwd },
-        file: limit,
-        memory: ctx.limits.maxMemoryBytes,
-        output: ctx.limits.maxOutputLength,
-        stdin: encode(options.stdin),
-        steps:
-          options.stepsPerMs === undefined
-            ? Number.MAX_SAFE_INTEGER
-            : Math.ceil(cpuMs * options.stepsPerMs),
-        timeMs: deadline - Date.now(),
-      },
-      spawn,
-      stopped: () => ctx.signal.aborted || pending !== undefined || (cache?.missed() ?? false),
-      tape,
-    })
+  const request = (): RustPython.Request => ({
+    argv: ctx.args,
+    cwd: ctx.cwd,
+    depth: ctx.limits.maxCallDepth,
+    env: { ...ctx.env, PWD: ctx.cwd },
+    file: limit,
+    memory: ctx.limits.maxMemoryBytes,
+    output: ctx.limits.maxOutputLength,
+    stdin: encode(options.stdin),
+    steps:
+      options.stepsPerMs === undefined
+        ? Number.MAX_SAFE_INTEGER
+        : Math.ceil(cpuMs * options.stepsPerMs),
+    timeMs: deadline - Date.now(),
+  })
+  const stopped = () => ctx.signal.aborted || pending !== undefined || (cache?.missed() ?? false)
+  const attempt = (): Promise<RustPython.Ran> =>
+    RustPython.suspends
+      ? RustPython.runAsync(module, {
+          files,
+          fresh: known.length > 0,
+          request: request(),
+          retry,
+          spawn: suspended,
+          stopped,
+          tape,
+        })
+      : Promise.resolve(
+          RustPython.run(module, {
+            files,
+            fresh: known.length > 0,
+            request: request(),
+            spawn,
+            stopped,
+            tape,
+          }),
+        )
   const retry = cache
     ? async () => {
         if (!cache.missed()) return false
@@ -488,34 +502,10 @@ async function executeRust(
         return true
       }
     : undefined
-  const again = () => {
-    if (cache) cache.reset()
-    else journal.rollback({ first: 0, changes: 0 })
-    journal.clear()
-    spawned = 0
-    pending = undefined
-    tape.clockAt = 0
-    tape.randomAt = 0
-    tape.timeAt = 0
-    return attempt()
-  }
-  await cache?.probe([ctx.cwd, sitePackages])
-  let ran = attempt()
-  for (;;) {
-    if (cache?.missed()) {
-      await cache.fetch()
-      ran = again()
-      continue
-    }
-    if (!pending || !host || ctx.signal.aborted) break
-    const { at, child, key, mark } = pending
-    tape.clock.length = pending.clock
-    tape.random.length = pending.random
-    tape.time.length = pending.time
-    journal.rollback(mark)
+  const hosted = async (at: number, child: RustPython.Child, key: string) => {
     const started = journal.mark()
     const script = shellScript(child.argv) ?? words(child.argv)
-    const exited = await host.run({
+    const exited = await host!.run({
       cwd: child.cwd,
       env: child.env,
       fs: Journal.view(files, { retry }),
@@ -533,7 +523,74 @@ async function executeRust(
       }
     known.length = at
     known.push({ effects, exited, key, replaced })
-    ran = again()
+    return exited
+  }
+  const nests = (child: RustPython.Child) =>
+    child.argv.some((word) => word.includes('python')) &&
+    !RustPython.fits(module, ctx.limits.maxMemoryBytes)
+  const resumed = async (
+    child: RustPython.Child,
+    at: number,
+    mark: Journal.Mark,
+  ): Promise<RustPython.Exited | FsError['code']> => {
+    for (;;) {
+      journal.rollback(mark)
+      spawned = at
+      known.length = at
+      pending = undefined
+      await retry!()
+      const ran = spawn!(child)
+      if (!cache!.missed()) return onward(child, at, ran)
+    }
+  }
+  const onward = (
+    child: RustPython.Child,
+    at: number,
+    ran: RustPython.Exited | FsError['code'],
+  ): RustPython.Exited | FsError['code'] | Promise<RustPython.Exited | FsError['code']> => {
+    if (ran !== 'EAGAIN' || !pending || !host || nests(pending.child)) return ran
+    const { key } = pending
+    pending = undefined
+    return hosted(at, child, key).catch((error: unknown) => {
+      if (error instanceof FsError) return error.code
+      throw error
+    })
+  }
+  const suspended: RustPython.Suspended | undefined =
+    spawn &&
+    ((child) => {
+      const at = spawned
+      const mark = journal.mark()
+      const ran = spawn(child)
+      return cache?.missed() ? resumed(child, at, mark) : onward(child, at, ran)
+    })
+  const again = () => {
+    if (cache) cache.reset()
+    else journal.rollback({ first: 0, changes: 0 })
+    journal.clear()
+    spawned = 0
+    pending = undefined
+    tape.clockAt = 0
+    tape.randomAt = 0
+    tape.timeAt = 0
+    return attempt()
+  }
+  await cache?.probe([ctx.cwd, sitePackages])
+  let ran = await attempt()
+  for (;;) {
+    if (cache?.missed()) {
+      await cache.fetch()
+      ran = await again()
+      continue
+    }
+    if (!pending || !host || ctx.signal.aborted) break
+    const { at, child, key, mark } = pending
+    tape.clock.length = pending.clock
+    tape.random.length = pending.random
+    tape.time.length = pending.time
+    journal.rollback(mark)
+    await hosted(at, child, key)
+    ran = await again()
   }
   if (cache) await apply(ctx.fs, cache.changes())
   if (ran.kind !== 'needs')

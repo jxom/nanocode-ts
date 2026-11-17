@@ -11,15 +11,27 @@ type Exports = {
 }
 
 type Instance = {
+  call: (() => Promise<unknown>) | undefined
   exports: Exports
   files: SyncFileSystem | undefined
   initial: number
   panic: string | undefined
-  running: boolean
-  spawn: Spawn | undefined
+  retry: (() => Promise<boolean>) | undefined
+  spare: boolean
+  spawn: Spawn | Suspended | undefined
   stopped: () => boolean
   tape: Tape | undefined
 }
+
+type Jspi = {
+  Suspending: new (body: (...args: never[]) => unknown) => unknown
+  promising: (body: unknown) => (...args: unknown[]) => Promise<unknown>
+}
+
+const jspi = WebAssembly as unknown as Partial<Jspi>
+
+export const suspends =
+  typeof jspi.Suspending === 'function' && typeof jspi.promising === 'function'
 
 export type Changes = { deleted: string[]; dirs: string[]; files: Map<string, Uint8Array> }
 
@@ -43,6 +55,10 @@ export type Tape = {
 }
 
 export type Spawn = (child: Child) => Exited | FsError['code']
+
+export type Suspended = (
+  child: Child,
+) => Exited | FsError['code'] | Promise<Exited | FsError['code']>
 
 export type Missing = { module: string; package: boolean; text: string }
 
@@ -150,11 +166,13 @@ const limits = ['output', 'sleep', 'steps', 'time', 'memory'] as const
 
 function instantiate(module: WebAssembly.Module): Instance {
   const state: Instance = {
+    call: undefined,
     exports: undefined as unknown as Exports,
     files: undefined,
     initial: 0,
     panic: undefined,
-    running: false,
+    retry: undefined,
+    spare: false,
     spawn: undefined,
     tape: undefined,
     stopped: () => false,
@@ -224,16 +242,20 @@ function instantiate(module: WebAssembly.Module): Instance {
         dataLen: number,
         arg: bigint,
       ) {
-        const files = state.files
         const handler = ops[op]
-        if (!files || !handler) return -BigInt(errno['ENOTSUP'] ?? 0)
-        try {
-          return handler(files, decode(view(path, pathLen)), view(data, dataLen), arg)
-        } catch (error) {
-          const code = error instanceof FsError ? errno[error.code] : undefined
-          if (code === undefined) throw error
-          return -BigInt(code)
+        if (!state.files || !handler) return -BigInt(errno['ENOTSUP'] ?? 0)
+        const attempt = (): bigint | Promise<bigint> => {
+          try {
+            return handler(state.files!, decode(view(path, pathLen)), view(data, dataLen), arg)
+          } catch (error) {
+            const code = error instanceof FsError ? errno[error.code] : undefined
+            if (code === undefined) throw error
+            const retry = state.retry
+            if (!retry) return -BigInt(code)
+            return retry().then((again) => (again ? attempt() : -BigInt(code)))
+          }
         }
+        return attempt()
       },
       host_now() {
         const tape = state.tape
@@ -288,16 +310,19 @@ function instantiate(module: WebAssembly.Module): Instance {
         const cwd = decode(field())
         const stdin = field()
         const merged = u32() !== 0
+        const answer = (exited: Exited | FsError['code']) => {
+          if (typeof exited === 'string') return -BigInt(errno[exited] ?? errno['EIO'] ?? 0)
+          const out = new Uint8Array(12 + exited.stdout.length + exited.stderr.length)
+          const fields = new DataView(out.buffer)
+          fields.setInt32(0, exited.status, true)
+          fields.setUint32(4, exited.stdout.length, true)
+          out.set(exited.stdout, 8)
+          fields.setUint32(8 + exited.stdout.length, exited.stderr.length, true)
+          out.set(exited.stderr, 12 + exited.stdout.length)
+          return reply(out)
+        }
         const exited = spawn({ argv, cwd, env, merged, stdin })
-        if (typeof exited === 'string') return -BigInt(errno[exited] ?? errno['EIO'] ?? 0)
-        const out = new Uint8Array(12 + exited.stdout.length + exited.stderr.length)
-        const fields = new DataView(out.buffer)
-        fields.setInt32(0, exited.status, true)
-        fields.setUint32(4, exited.stdout.length, true)
-        out.set(exited.stdout, 8)
-        fields.setUint32(8 + exited.stdout.length, exited.stderr.length, true)
-        out.set(exited.stderr, 12 + exited.stdout.length)
-        return reply(out)
+        return exited instanceof Promise ? exited.then(answer) : answer(exited)
       },
       host_stopped: () => (state.stopped() ? 1 : 0),
       host_time() {
@@ -318,7 +343,13 @@ function instantiate(module: WebAssembly.Module): Instance {
   const image = images.get(module)
   if (!image && descriptor(module))
     throw new Error('python.wasm runs only with its python.data image')
+  if (suspends) {
+    const python = imports.python as Record<string, unknown>
+    python['host_fs'] = new jspi.Suspending!(imports.python.host_fs)
+    python['host_spawn'] = new jspi.Suspending!(imports.python.host_spawn)
+  }
   state.exports = new WebAssembly.Instance(module, imports).exports as unknown as Exports
+  if (suspends) state.call = jspi.promising!(state.exports.python_run) as () => Promise<unknown>
   if (image)
     new Uint8Array(state.exports.memory.buffer, image.base, image.bytes.length).set(image.bytes)
   state.initial = state.exports.memory.buffer.byteLength
@@ -732,48 +763,106 @@ export function prepare(module: WebAssembly.Module): void {
   if (!instances.has(module)) instances.set(module, instantiate(module))
 }
 
-export function run(
-  module: WebAssembly.Module,
-  options: {
-    files: SyncFileSystem
-    fresh?: boolean
-    request: Request
-    spawn?: Spawn
-    stopped: () => boolean
-    tape?: Tape
-  },
-): Ran {
-  if (options.fresh || instances.get(module)?.running) instances.delete(module)
-  prepare(module)
-  const instance = instances.get(module)!
+type RunOptions = {
+  files: SyncFileSystem
+  fresh?: boolean
+  request: Request
+  stopped: () => boolean
+  tape?: Tape
+}
+
+const busy = new WeakMap<WebAssembly.Module, Set<Instance>>()
+
+export function fits(module: WebAssembly.Module, memory: number): boolean {
+  let used = 0
+  let image = 0
+  for (const instance of busy.get(module) ?? []) {
+    used += instance.exports.memory.buffer.byteLength
+    image = instance.initial
+  }
+  return instances.has(module) || used + image <= memory
+}
+
+function take(module: WebAssembly.Module, fresh: boolean | undefined): Instance {
+  const idle = instances.get(module)
+  instances.delete(module)
+  const running = busy.get(module) ?? new Set<Instance>()
+  busy.set(module, running)
+  const taken = idle && !fresh ? idle : instantiate(module)
+  if (taken !== idle) taken.spare = running.size > 0
+  running.add(taken)
+  return taken
+}
+
+function begin(instance: Instance, options: RunOptions & { spawn?: Spawn | Suspended }) {
   instance.files = options.files
   instance.stopped = options.stopped
   instance.spawn = options.spawn
   instance.tape = options.tape
+  const input = encodeRequest(options.request, options.spawn !== undefined)
+  const ptr = instance.exports.python_input(input.length)
+  new Uint8Array(instance.exports.memory.buffer, ptr >>> 0, input.length).set(input)
+}
+
+function end(module: WebAssembly.Module, instance: Instance, len: number, request: Request): Ran {
+  if (
+    instance.exports.memory.buffer.byteLength - instance.initial <= request.memory / 2 &&
+    !instance.spare &&
+    !instances.has(module)
+  )
+    instances.set(module, instance)
+  return decodeRan(
+    new Uint8Array(
+      instance.exports.memory.buffer,
+      instance.exports.python_output() >>> 0,
+      len >>> 0,
+    ).slice(),
+  )
+}
+
+function failed(instance: Instance, error: unknown): CommandError {
+  return new CommandError(
+    'the Python interpreter failed and restarts on the next run: ' +
+      (instance.panic ?? (error instanceof Error ? error.message : String(error))),
+    1,
+  )
+}
+
+function release(module: WebAssembly.Module, instance: Instance) {
+  busy.get(module)?.delete(instance)
+  instance.files = undefined
+  instance.retry = undefined
+  instance.spawn = undefined
+  instance.tape = undefined
+  instance.stopped = () => false
+}
+
+export function run(module: WebAssembly.Module, options: RunOptions & { spawn?: Spawn }): Ran {
+  const instance = take(module, options.fresh)
   try {
-    const input = encodeRequest(options.request, options.spawn !== undefined)
-    const ptr = instance.exports.python_input(input.length)
-    new Uint8Array(instance.exports.memory.buffer, ptr >>> 0, input.length).set(input)
-    instance.running = true
-    const len = instance.exports.python_run()
-    instance.running = false
-    if (instance.exports.memory.buffer.byteLength - instance.initial > options.request.memory / 2)
-      instances.delete(module)
-    return decodeRan(
-      new Uint8Array(instance.exports.memory.buffer, instance.exports.python_output() >>> 0, len >>> 0).slice(),
-    )
+    begin(instance, options)
+    return end(module, instance, instance.exports.python_run(), options.request)
   } catch (error) {
-    instances.delete(module)
-    throw new CommandError(
-      'the Python interpreter failed and restarts on the next run: ' +
-        (instance.panic ?? (error instanceof Error ? error.message : String(error))),
-      1,
-    )
+    throw failed(instance, error)
   } finally {
-    instance.files = undefined
-    instance.spawn = undefined
-    instance.tape = undefined
-    instance.stopped = () => false
+    release(module, instance)
+  }
+}
+
+export async function runAsync(
+  module: WebAssembly.Module,
+  options: RunOptions & { retry?: () => Promise<boolean>; spawn?: Suspended },
+): Promise<Ran> {
+  const instance = take(module, options.fresh)
+  try {
+    begin(instance, options)
+    instance.retry = options.retry
+    const len = (await instance.call!()) as number
+    return end(module, instance, len, options.request)
+  } catch (error) {
+    throw failed(instance, error)
+  } finally {
+    release(module, instance)
   }
 }
 
