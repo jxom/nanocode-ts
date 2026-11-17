@@ -1393,8 +1393,16 @@ async function create(
     async identity(
       frame: string,
       max_frame_bytes: number,
-    ): Promise<{ name: string | null; runtime_id: string | null }> {
-      return (await internal.command('catalog', { frame, max_frame_bytes })) as {
+      definitions = false,
+    ): Promise<{
+      catalog_hash: string
+      definitions?: string
+      name: string | null
+      runtime_id: string | null
+    }> {
+      return (await internal.command('catalog', { frame, max_frame_bytes, definitions })) as {
+        catalog_hash: string
+        definitions?: string
         name: string | null
         runtime_id: string | null
       }
