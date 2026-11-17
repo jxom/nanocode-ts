@@ -185,3 +185,33 @@ Interleaved A/B over W1, W2, W4, W5a, W7 and W8 (two rounds, build-89d6d85 then 
 SCORE nocopy-86d0a18-workerd pass48=6/9 passUnl=9/9 warm48=323ms cold48=819ms warmUnl=408ms coldUnl=1120ms peakLin48=82.6MiB peakLinUnl=361.2MiB rss48=1392.3MiB big48=5MB bigUnl=50MB
 
 Against build-89d6d85 in workerd: cold48 1,090 to 819 ms, coldUnl 1,662 to 1,120 ms, warmUnl 607 to 408 ms, peak VmHWM at 48 MiB 1,721 to 1,392 MiB. Dropped instances still go uncollected: W7 at 48 MiB leaves 1,058 MiB of python.wasm memory alive (was 1,402), W8's nested python3 51 MiB (was 170). Only keeping one instance per isolate (the warm lane) removes this.
+
+### 2026-11-17 warm + pandas: master 1d3032f (one warm instance per module) with the warm lane's python.wasm (nanocode with pandas 95215778c, heap and nocopy commits, warm's gc patches; not yet pinned), Node
+
+| id | workload | limit | status | mode | cold ms | warm ms | peak linear MiB | live linear MiB | max RSS MiB | note |
+| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| W1 | sine chart | 48 | pass | - | 1229 | 212.8 | 60.8 | 60.8 | 312.4 |  |
+| W1 | sine chart | unl | pass | - | 1246 | 216.2 | 60.8 | 60.8 | 335.1 |  |
+| W2 | repo files chart | 48 | pass | - | 1938 | 773.9 | 65.5 | 65.5 | 364.1 |  |
+| W2 | repo files chart | unl | pass | - | 1993 | 696.6 | 65.5 | 65.5 | 358.8 |  |
+| W3 | csv 10 MB groupby chart | 48 | fail | - | 1324 | - | 71.3 | 71.3 | 419.1 | ta in chunks (a file line by line, a batch of rows at a time) and write results out as you go instead of holding it all  |
+| W3 | csv 10 MB groupby chart | unl | pass | pandas | 2580 | 886.8 | 204.2 | 204.2 | 559.1 |  |
+| W4 | json 10k records table | 48 | pass | - | 306 | 61.5 | 28.5 | 28.5 | 300.5 |  |
+| W4 | json 10k records table | unl | pass | - | 296 | 64.9 | 28.5 | 28.5 | 288.8 |  |
+| W5a | bootstrap 90x4000 | 48 | pass | - | 635 | 98.4 | 30.1 | 30.1 | 288 |  |
+| W5a | bootstrap 90x4000 | unl | pass | - | 657 | 100.8 | 30.1 | 30.1 | 293.9 |  |
+| W5b | bootstrap 90x100000 | 48 | fail | - | 533 | - | 99.8 | 0 | 326.5 | ta in chunks (a file line by line, a batch of rows at a time) and write results out as you go instead of holding it all  |
+| W5b | bootstrap 90x100000 | unl | pass | - | 1786 | 1307.3 | 99.8 | 99.8 | 364.1 |  |
+| W6 | time series daily rolling chart | 48 | fail | - | 1215 | - | 71.4 | 71.4 | 381 | ta in chunks (a file line by line, a batch of rows at a time) and write results out as you go instead of holding it all  |
+| W6 | time series daily rolling chart | unl | pass | pandas | 1570 | 257.4 | 132 | 132 | 461.1 |  |
+| W7 | five python3 calls numpy+mpl | 48 | pass | - | 1681 | 744.5 | 60.9 | 60.9 | 355.4 |  |
+| W7 | five python3 calls numpy+mpl | unl | pass | - | 1820 | 757.5 | 60.9 | 60.9 | 342.4 |  |
+| W8 | git subprocess heavy | 48 | pass | - | 203 | 48 | 11.8 | 10.9 | 291.8 |  |
+| W8 | git subprocess heavy | unl | pass | - | 183 | 46.1 | 11.8 | 10.9 | 289.9 |  |
+| W9 | polars csv groupby chart | 48 | skip | - | 99 | - | 10.2 | 10.2 | 355.6 |  |
+| W9 | polars csv groupby chart | unl | skip | - | 88 | - | 10.2 | 10.2 | 356.8 |  |
+| W10 | big csv probe | 48 | fail | - | 758 | - | 68.5 | 68.5 | 1192.8 | largest none |
+| W10 | big csv probe | unl | pass | - | 1515 | - | 322.9 | 322.9 | 1390.9 | largest 50 MB |
+SCORE warm-1d3032f pass48=6/9 passUnl=9/9 warm48=181ms cold48=735ms warmUnl=279ms coldUnl=1017ms peakLin48=99.8MiB peakLinUnl=204.2MiB rss48=419.1MiB big48=none bigUnl=50MB
+
+Against the baseline: warm48 382 to 181 ms and cold48 1,166 to 735 ms. At 48 MiB the instance now survives runs, so warm W1 drops from 1,063 to 213 ms and W7's five calls from 4.1 to 0.74 s. warmUnl 452 to 279 ms; peakLinUnl 376 to 204 MiB. With pandas, W3 warm at 1 GiB is 3,941 to 887 ms and W6 2,047 to 257 ms. Regression: big48 goes from 5 MB to none. W10 now takes the pandas path (pandas imports) and peaks at 68.5 MiB for 5 MB, where the csv path passed; at 1 GiB, W10 goes from 10.9 s / 650 MiB to 1.5 s / 323 MiB. W3, W5b and W6 still fail at 48 MiB (71.3, 99.8 and 71.4 MiB).
