@@ -13,8 +13,10 @@ type Socket = {
   spare: Contracts.SpareSocket
   idle: number
   frames: (string | null)[]
-  closed?: string
-  waiter?: { id: number; resolve(value: unknown): void }
+  state:
+    | { phase: 'closed'; reason: string }
+    | { phase: 'idle' }
+    | { phase: 'waiting'; waiter: { id: number; resolve(value: unknown): void } }
   watchers: (() => void)[]
   timing: Contracts.ModelTiming
 }
@@ -714,6 +716,7 @@ async function create(
             },
             idle: Number.isSafeInteger(idle) && idle > 0 ? idle : 0,
             frames: [],
+            state: { phase: 'idle' },
             watchers: [],
             timing,
           }
@@ -733,15 +736,17 @@ async function create(
         }
         case 'socket_send': {
           const entry = state.sockets.get(request.id)
-          if (entry?.closed !== undefined) return { closed: entry.closed }
+          const before = entry?.state
+          if (before?.phase === 'closed') return { closed: before.reason }
           if (!entry) return { closed: 'after the client released it' }
           await state.options.socket!.admit(request.origin ?? null, request.subagent ?? null)
-          if (entry.closed !== undefined) return { closed: entry.closed }
+          const after = entry.state
+          if (after.phase === 'closed') return { closed: after.reason }
           try {
             entry.socket.send(state.decoder.decode(request.body))
           } catch {
             internal.closeSocket(request.id, 'before request dispatch', 'failed')
-            return { closed: entry.closed }
+            return { closed: entry.state.phase === 'closed' ? entry.state.reason : undefined }
           }
           entry.timing.sends = (entry.timing.sends ?? 0) + 1
           state.counters.socket_sends++
@@ -751,8 +756,8 @@ async function create(
           const entry = state.sockets.get(request.id)
           if (!entry) return { closed: 'after the client released it' }
           if (entry.frames.length) return internal.frame(entry)
-          if (entry.closed !== undefined) return { closed: entry.closed }
-          if (entry.waiter) throw new Error('socket_next is already pending')
+          if (entry.state.phase === 'closed') return { closed: entry.state.reason }
+          if (entry.state.phase === 'waiting') throw new Error('socket_next is already pending')
           const readStarted = performance.now()
           try {
             return await new Promise((resolve) => {
@@ -770,16 +775,20 @@ async function create(
               const clear = () => {
                 if (timer !== undefined) clearTimeout(timer)
               }
-              entry.waiter = {
-                id,
-                resolve: (value) => {
-                  clear()
-                  resolve(value)
+              entry.state = {
+                phase: 'waiting',
+                waiter: {
+                  id,
+                  resolve: (value) => {
+                    clear()
+                    resolve(value)
+                  },
                 },
               }
               internal.onCancel(id, () => {
                 clear()
-                if (entry.waiter?.id === id) entry.waiter = undefined
+                if (entry.state.phase === 'waiting' && entry.state.waiter.id === id)
+                  entry.state = { phase: 'idle' }
                 resolve(null)
               })
             })
@@ -789,7 +798,7 @@ async function create(
         }
         case 'socket_wait': {
           const entry = state.sockets.get(request.id)
-          if (!entry || entry.closed !== undefined) return null
+          if (!entry || entry.state.phase === 'closed') return null
           return new Promise((resolve) => {
             entry.watchers.push(() => resolve(null))
             internal.onCancel(id, () => resolve(null))
@@ -963,16 +972,16 @@ async function create(
     },
 
     receive(entry: Socket, data: unknown) {
-      if (entry.closed !== undefined) return
+      if (entry.state.phase === 'closed') return
       const at = internal.elapsed() - entry.timing.started_ms
       entry.timing.first_byte_ms ??= at
       entry.timing.last_byte_ms = at
       entry.timing.body_reads++
       state.counters.socket_frames++
       entry.frames.push(typeof data === 'string' ? data : null)
-      const waiter = entry.waiter
-      if (!waiter) return
-      entry.waiter = undefined
+      if (entry.state.phase !== 'waiting') return
+      const waiter = entry.state.waiter
+      entry.state = { phase: 'idle' }
       waiter.resolve(internal.frame(entry))
     },
 
@@ -986,14 +995,13 @@ async function create(
 
     closeSocket(handle: number, detail: string, outcome: Contracts.ModelTiming['outcome']) {
       const entry = state.sockets.get(handle)
-      if (!entry || entry.closed !== undefined) return
-      entry.closed = detail
+      if (!entry || entry.state.phase === 'closed') return
+      const waiter = entry.state.phase === 'waiting' ? entry.state.waiter : undefined
+      entry.state = { phase: 'closed', reason: detail }
       internal.finishModel(entry.timing, outcome)
       try {
         entry.socket.close(1000, 'closed')
       } catch {}
-      const waiter = entry.waiter
-      entry.waiter = undefined
       waiter?.resolve({ closed: detail })
       for (const watcher of entry.watchers.splice(0)) watcher()
     },
@@ -1003,14 +1011,13 @@ async function create(
       if (!release) return
       for (const [handle, entry] of state.sockets) {
         if (
-          entry.closed !== undefined ||
-          entry.waiter ||
+          entry.state.phase !== 'idle' ||
           entry.frames.length ||
           (entry.timing.sends ?? 0) > 0 ||
           entry.timing.body_reads > 0
         )
           continue
-        entry.closed = 'released to the host'
+        entry.state = { phase: 'closed', reason: 'released to the host' }
         state.sockets.delete(handle)
         internal.finishModel(entry.timing, 'closed')
         for (const watcher of entry.watchers.splice(0)) watcher()
@@ -1344,7 +1351,7 @@ async function create(
     },
 
     get connected(): boolean {
-      for (const entry of state.sockets.values()) if (entry.closed === undefined) return true
+      for (const entry of state.sockets.values()) if (entry.state.phase !== 'closed') return true
       return false
     },
 
