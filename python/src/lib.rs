@@ -41,6 +41,7 @@ const LIST: u32 = 3;
 const MKDIR: u32 = 4;
 const REMOVE: u32 = 5;
 const RENAME: u32 = 6;
+const READ_AT: u32 = 7;
 
 thread_local! {
     static INPUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
@@ -145,6 +146,15 @@ impl Files for Shell {
             return Err(io::ErrorKind::FileTooLarge.into());
         }
         Ok(data)
+    }
+
+    fn read_at(&self, path: &[u8], offset: u64, len: usize, limit: u64) -> io::Result<Vec<u8>> {
+        let len = u64::try_from(len).unwrap_or(u64::MAX).min(limit);
+        call(READ_AT, path, &offset.to_le_bytes(), len)
+    }
+
+    fn ranged(&self) -> bool {
+        true
     }
 
     fn write(&self, path: &[u8], data: &[u8], how: Write) -> io::Result<()> {

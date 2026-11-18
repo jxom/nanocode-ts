@@ -25,6 +25,19 @@ const shipped: Record<string, string> = {
 
 export const shippedModules = Object.values(shipped)
 
+const alternatives: Record<string, string> = {
+  cryptography:
+    'hashlib, hmac and secrets for hashes, MACs and keys; pip install pyaes or rsa for pure-Python ciphers',
+  lxml: "BeautifulSoup(text, 'html.parser') from beautifulsoup4, or xml.etree.ElementTree",
+  orjson: 'json, ujson (built in) or pip install simplejson',
+  polars: 'pandas (built in)',
+  pyarrow: 'pandas (built in) with CSV or JSON files',
+  'scikit-learn': 'numpy (built in) for the linear algebra, such as numpy.linalg.lstsq',
+  scipy:
+    'numpy (built in): numpy.linalg, numpy.fft, numpy.polynomial and numpy.random; pip install sympy or mpmath for symbolic and special functions',
+  statsmodels: 'numpy and pandas (built in), such as numpy.linalg.lstsq for a regression',
+}
+
 const carriedDists: Record<string, [string, string, string]> = {
   contourpy: ['contourpy', 'contourpy', '1.4.0'],
   cycler: ['cycler', 'cycler', '0.12.1'],
@@ -38,6 +51,7 @@ const carriedDists: Record<string, [string, string, string]> = {
   pandas: ['pandas', 'pandas', '3.1.1'],
   pillow: ['pillow', 'PIL', '13.0.0'],
   pyparsing: ['pyparsing', 'pyparsing', '3.3.3'],
+  pysha3: ['pysha3', 'sha3', '1.0.2'],
   'python-dateutil': ['python-dateutil', 'dateutil', '4.0.0'],
   pyyaml: ['PyYAML', 'yaml', '6.0.3'],
   regex: ['regex', 'regex', '2026.11.9'],
@@ -1387,7 +1401,8 @@ async function install(ctx: CommandContext, wanted: string[], flags: Flags): Pro
             failure.modules.slice(0, 4).join(', ') +
             (failure.modules.length > 4 ? ', ... ' + failure.modules.length + ' in all' : '') +
             ') and has no pure-Python fallback; python.wasm ships compiled ' +
-            shippedModules.join(', '),
+            shippedModules.join(', ') +
+            (alternatives[key] ? '. Instead: ' + alternatives[key] : ''),
           1,
         )
       const kinds = [
@@ -1402,7 +1417,8 @@ async function install(ctx: CommandContext, wanted: string[], flags: Flags): Pro
           ' ' +
           pick.text +
           ' has no pure-Python or CPython 3.14 x86_64 Linux wheel and no usable source, only ' +
-          kinds.slice(0, 5).join(', '),
+          kinds.slice(0, 5).join(', ') +
+          (alternatives[key] ? '. Instead: ' + alternatives[key] : ''),
         1,
       )
     }

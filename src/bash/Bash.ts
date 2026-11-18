@@ -178,7 +178,7 @@ export async function create(options: create.Options = {}): Promise<Bash> {
     }),
   )
   if (!options.python?.module && !(options.webassembly ?? compiles()))
-    for (const name of ['python', 'python3', 'pip', 'pip3'])
+    for (const name of ['python', 'python3', 'pip', 'pip3', 'uv'])
       if (!options.commands?.[name]) commands.delete(name)
   let calls = 0
   const shellDefaults: [string, string[]][] = Object.entries({

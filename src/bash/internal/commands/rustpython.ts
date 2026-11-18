@@ -263,6 +263,12 @@ function instantiate(module: WebAssembly.Module): Instance {
       files.rename(path, decode(data))
       return 0n
     },
+    (files, path, data, len) => {
+      const all = files.read(path)
+      const offset = new DataView(data.buffer, data.byteOffset, 8).getBigUint64(0, true)
+      const start = Math.min(all.length, Number(offset))
+      return reply(all.subarray(start, Math.min(all.length, start + Number(len))))
+    },
   ]
   const imports = {
     python: {

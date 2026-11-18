@@ -41,7 +41,34 @@ function usage(name: string): string {
   return 'usage: ' + name + ' [-c CMD | -m MOD | FILE | -] [ARGS...]'
 }
 
+function uv(args: string[]): Mode | 'version' {
+  const rest = args.filter((arg) => arg !== '--system' && arg !== '--quiet' && arg !== '-q')
+  const quiet = args.includes('-q') || args.includes('--quiet') ? ['-q'] : []
+  const [command, ...more] = rest
+  if (command === '--version' || command === 'version') return 'version'
+  if (command === 'pip') return { kind: 'pip', target: '', argv: [...more, ...quiet], filename: '' }
+  if (command === 'add')
+    return { kind: 'pip', target: '', argv: ['install', ...more, ...quiet], filename: '' }
+  if (command === 'remove')
+    return { kind: 'pip', target: '', argv: ['uninstall', '-y', ...more], filename: '' }
+  throw new CommandError(
+    'only uv pip, uv add, uv remove and uv run (python or a .py file) work here; they use pip and python3',
+    2,
+  )
+}
+
+function uvRun(ctx: CommandContext): CommandContext {
+  const args = ctx.args.filter((arg) => arg !== '--system')
+  if (args[0] !== 'run') return ctx
+  const rest = args[1] === '--' ? args.slice(2) : args.slice(1)
+  if (rest[0] === 'python' || rest[0] === 'python3')
+    return { ...ctx, name: 'python3', args: rest.slice(1) }
+  if (rest[0]?.endsWith('.py')) return { ...ctx, name: 'python3', args: rest }
+  return ctx
+}
+
 function parse(ctx: CommandContext, args: string[]): Mode | 'help' | 'version' {
+  if (ctx.name === 'uv') return uv(args)
   if (ctx.name === 'pip' || ctx.name === 'pip3')
     return { kind: 'pip', target: '', argv: args, filename: '' }
   let i = 0
@@ -101,7 +128,8 @@ export function pythonCommands(
   host?: Host,
 ): Record<string, CommandHandler> {
   const maxBytes = options.maxBytes ?? 64 * 1024 * 1024
-  const handler: CommandHandler = async (ctx) => {
+  const handler: CommandHandler = async (given) => {
+    const ctx = given.name === 'uv' ? uvRun(given) : given
     const mode = parse(ctx, ctx.args.slice())
     if (mode === 'help') {
       ctx.stdout.write(
@@ -110,6 +138,10 @@ export function pythonCommands(
           sitePackages +
           '\n',
       )
+      return 0
+    }
+    if (mode === 'version' && ctx.name === 'uv') {
+      ctx.stdout.write('uv (nanocode compatibility: uv pip and uv add run pip, uv run runs python3)\n')
       return 0
     }
     if (mode !== 'version' && mode.kind === 'pip') return pip(ctx, mode.argv)
@@ -139,7 +171,7 @@ export function pythonCommands(
     const status = await executeRust(ctx, compiled, { ...run, sci: sci && modules })
     return status === 'sci' ? runSci(ctx, sci!, run) : status
   }
-  return { pip: handler, pip3: handler, python: handler, python3: handler }
+  return { pip: handler, pip3: handler, python: handler, python3: handler, uv: handler }
 }
 
 async function erase(fs: FileSystem, path: string): Promise<void> {
@@ -174,6 +206,22 @@ function absent(missing: RustPython.Missing): string {
       " runs on nanocode-ts's separate polars interpreter (python-polars.wasm), which this host doesn't offer; pass it as Python's sci option"
     )
   if (!missing.package) return missing.text
+  const head = 'python3: ' + missing.module + ': '
+  const error = missing.text.startsWith(head)
+    ? missing.text.slice(head.length).replace(/ \(this simulated shell has no [^)]*\)$/, '')
+    : missing.text
+  const named = /^No module named '([^']+)'/.exec(error)?.[1]
+  if (named === undefined) return 'python3: import ' + missing.module + ' failed: ' + error
+  if (named !== top && !missing.module.startsWith(named + '.'))
+    return (
+      "python3: No module named '" +
+      named +
+      "', which " +
+      missing.module +
+      ' imports (pip install ' +
+      named.split('.')[0] +
+      ' if it is a pure-Python package)'
+    )
   return (
     "python3: No module named '" +
     top +
@@ -627,7 +675,11 @@ async function executeRust(
       : ran.kind === 'exited' && ran.status !== 0
         ? uncaughtImport(decode(ran.stderr))
         : []
-  if (options.sci && !ctx.signal.aborted && notImported.some((name) => options.sci!.includes(name))) {
+  if (
+    options.sci &&
+    !ctx.signal.aborted &&
+    notImported.some((name) => options.sci!.includes(name))
+  ) {
     if (!cache) journal.rollback({ first: 0, changes: 0 })
     return 'sci'
   }
@@ -638,7 +690,8 @@ async function executeRust(
       stepsPerMs: options.stepsPerMs,
     })
     for (const name of notImported)
-      if (sciModules.includes(name)) ctx.stderr.write(absent({ module: name, package: false, text: '' }) + '\n')
+      if (sciModules.includes(name))
+        ctx.stderr.write(absent({ module: name, package: false, text: '' }) + '\n')
     return status
   }
   for (const missing of ran.missing) ctx.stderr.write(absent(missing) + '\n')
@@ -685,12 +738,12 @@ async function importsAny(
 ): Promise<boolean> {
   if (mode.kind === 'code') return importing(mode.target, modules)
   if (mode.kind === 'stdin') return importing(stdin, modules)
-  if (mode.kind === 'file')
-    return importing((await readText(ctx.fs, mode.filename)) ?? '', modules)
+  if (mode.kind === 'file') return importing((await readText(ctx.fs, mode.filename)) ?? '', modules)
   if (mode.kind !== 'module') return false
   if (modules.includes(mode.target.split('.')[0]!)) return true
   const base = join(ctx.cwd, mode.target.replaceAll('.', '/'))
-  const source = (await readText(ctx.fs, base + '.py')) ?? (await readText(ctx.fs, base + '/__main__.py'))
+  const source =
+    (await readText(ctx.fs, base + '.py')) ?? (await readText(ctx.fs, base + '/__main__.py'))
   return importing(source ?? '', modules)
 }
 
@@ -732,7 +785,7 @@ async function gather(
       const stat = await ctx.fs.stat(path).catch(() => null)
       if (stat?.kind !== 'file') continue
       await visit(path)
-      if (/\.py$/.test(path)) sources.push((await readText(ctx.fs, path)) ?? '')
+      if (path.endsWith('.py')) sources.push((await readText(ctx.fs, path)) ?? '')
     }
   for (const source of sources)
     for (const match of source.matchAll(/["'](\/[^"'\n*?]+)["']/g))
