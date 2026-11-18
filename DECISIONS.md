@@ -1001,3 +1001,28 @@ Container and Vercel workspace file reads preserve a UTF-8 BOM and reject malfor
 On 2026-11-18 PST, `node bench/sandbox/bytes.ts` exercised both actual adapters with mocked local hosts. The pre-change source passed 24/54 fixed cases in one run. The changed source passed 54/54 in each of three fresh processes, with an observed count range of 54–54. A population interval is not applicable to this deterministic fixed suite. The cases cover split BOM and multibyte input, CRLF, zero through three terminal newlines, malformed UTF-8 without writes, missing files and unchanged lossy command output. The benchmark calls public workspace reads and writes, not a replacement decoder implementation. No cloud service is contacted.
 
 The exact repeated command is `for trial in 1 2 3; do unshare -Urn node bench/sandbox/bytes.ts > "output/sandbox-bytes-$trial.log" 2>&1 || exit; done`. Root independently reran `unshare -Urn node bench/sandbox/bytes.ts` and `node scripts/check-patches.ts ../tb-failure-fixes`: all 54 adapter checks and all 16 core cases passed, with five mutations caught. `npm run check:types`, `npm run build:ts`, focused formatting/lint and `git diff --check` passed. No new WASM artifact, deployment or paid benchmark result is implied.
+
+## 2026-11-18: Select a Matched Python Probe Image
+
+`bench/python/pip.ts` and `bench/python/replay.ts` accept `NANOCODE_PYTHON_DIST` for a matched `python.wasm` and `python.data` pair. `NANOCODE_DIST` still supplies `psh.wasm` and the default Python pair. Selection occurs once before the package loop, not per package. The original forty ordered name/code pairs and pass conditions are unchanged in `bench/python/probes.ts`.
+
+On 2026-11-18 PST, three fresh network-denied Node processes per profile ran all forty probes against frozen PyPI responses. The supplied standard pair passed 33/40 in all three runs, with count range 33–33. The retained Polars-enabled pair passed 34/40 in all three runs, with count range 34–34. Polars is the only changed outcome, with no lost passes. These are deterministic fixed-census counts, not a population confidence interval or full package compatibility. The remaining failures are statsmodels, SciPy, scikit-learn, lxml, cryptography and PyArrow, which require absent native modules. No probe was skipped, weakened or replaced with a stub.
+
+The exact replay entrypoint is `node --max-old-space-size=1024 bench/python/replay.ts FIXTURE_DIRECTORY NEW_OUTPUT_JSONL`. It permits only retained PyPI metadata and wheel GETs, verifies response size and SHA256, rejects cache misses without network fallback, and exclusively creates logs under `output/`. The canonical compact matrix SHA256 is `f07bd0eeb6344c76b827deda0984e140963b1214d22e87d71dd476d43917b208`. The older formatted matrix file has SHA256 `df47a6daa4870a8c1c7a3c135e91892c489834f144e41ad05d9f24f9478547e7`; parsed name/code pairs are identical.
+
+Retained qualification commands, from the probe checkout, were:
+
+```sh
+export NANOCODE_DIST=/home/hand/pyramid-workspace/core-hillclimb/python/releases/current/package/dist
+for trial in 501 502 503; do
+  unshare -Urn node --max-old-space-size=1024 bench/python/replay.ts /home/hand/pyramid-workspace/core-hillclimb/python/output/http "output/probes-round2/standard-$trial.jsonl" || exit
+done
+export NANOCODE_PYTHON_DIST=/home/hand/pyramid-workspace/core-hillclimb/polars-23/replay-root/packed/package
+for trial in 511 512 513; do
+  unshare -Urn node --max-old-space-size=1024 bench/python/replay.ts /home/hand/pyramid-workspace/core-hillclimb/python/output/http "output/probes-round2/polars-$trial.jsonl" || exit
+done
+```
+
+The optional image manifest records build source `3ddffa1c41c23fb587428f6010ab99ea8809ca92`, Python core `6ed92be87b3a2f704a7af857a2237b3fccafbb27`, and Polars source `1dc7792dcbe5531700a501a5704f5a78a63187c4`. Actual module SHA256 is `d575ba79093b0d0e543c4730a9440646e5afa6e5577cc63b508f93ead52113f4`; data SHA256 is `6ccdc7c3e3108b783ac9953395a17348e6d04479a242336626342af1f4d00c33`. Both profiles used psh SHA256 `4469bc939986f619b23571651e951dcb773d3b48d367389a4e6222410c4e0b01`. Root independently reproduced 34/40 on the integrated source under network denial and ran the actual `pip.ts` Polars probe successfully in three processes with the same frozen fetch boundary. A supplemental real Polars group-by/sum/sort returned the expected values with no network calls.
+
+This change exposes and qualifies an existing optional image. It does not port a native module, change the default interpreter, publish that image or establish Workers memory support. The standard image remains 33/40. Frozen fixtures and the optional image remain separately retained inputs, not files supplied by this source checkout. Replay refuses to overwrite an existing log. The factory's public artifact/reproduction gate remains open.

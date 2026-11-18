@@ -3,8 +3,9 @@ import { Bash, MemoryFileSystem } from '../../src/bash/index.ts'
 import { cases } from './probes.ts'
 
 const dist = process.env.NANOCODE_DIST ?? 'dist'
-const module = new WebAssembly.Module(readFileSync(dist + '/python.wasm'))
-const data = readFileSync(dist + '/python.data')
+const pythonDist = process.env.NANOCODE_PYTHON_DIST ?? dist
+const module = new WebAssembly.Module(readFileSync(pythonDist + '/python.wasm'))
+const data = readFileSync(pythonDist + '/python.data')
 const psh = new WebAssembly.Module(readFileSync(dist + '/psh.wasm'))
 
 const only = process.argv.slice(2)
