@@ -967,3 +967,6 @@ Update 2026-11-17: with python.wasm built from nanocode 21a7448dd (wasm errno ta
 ## 2026-11-18: Release the Pushed Master
 
 The package release command fetches master and rejects a local HEAD that differs from it. This prevents publishing a stale or unpublished SDK package under the release train.
+
+- 2026-11-18: Pin the agent SDK and Python source to the frozen `08a2d14ddcfedcd9fb0b08fffd200584cb09154e` epoch together. Keep the shell's independent `02b304a435916a35c49b09b501c42d11bd99cab1` pin unchanged. Build the complete release on the isolated release box; a source pin is not a published artifact or a deployment.
+- 2026-11-18: The optional unavailable-host diagnostic does not disable Python by default. Do not deploy a blanket Python-disabled Cloudflare demo: small existing Python/NumPy/plot workloads work today. The large pandas workload has a measured 151.4 MiB lower bound including the retained image/blob, not a Workers support claim; its per-run budget excludes imports. Keep the demo unchanged until a host-safe ceiling or separately measured heavy runner preserves supported Python.
