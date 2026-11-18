@@ -808,10 +808,6 @@ function decodeRan(bytes: Uint8Array): Ran {
   return { kind: 'cancelled', stderr, stdout }
 }
 
-export function prepare(module: WebAssembly.Module): void {
-  if (!instances.has(module)) instances.set(module, instantiate(module))
-}
-
 type RunOptions = {
   files: SyncFileSystem
   fresh?: boolean
