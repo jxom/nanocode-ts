@@ -142,7 +142,9 @@ export function pythonCommands(
       return 0
     }
     if (mode === 'version' && ctx.name === 'uv') {
-      ctx.stdout.write('uv (nanocode compatibility: uv pip and uv add run pip, uv run runs python3)\n')
+      ctx.stdout.write(
+        'uv (nanocode compatibility: uv pip and uv add run pip, uv run runs python3)\n',
+      )
       return 0
     }
     if (mode !== 'version' && mode.kind === 'pip') return pip(ctx, mode.argv)
@@ -157,7 +159,10 @@ export function pythonCommands(
       cpuMs: options.cpuMs,
       stepsPerMs: options.stepsPerMs,
     }
-    if (sci && mode !== 'version' && (await importsAny(ctx, mode, stdin, modules)))
+    if (
+      sci &&
+      (sci.mode === 'all' || (mode !== 'version' && (await importsAny(ctx, mode, stdin, modules))))
+    )
       return runSci(ctx, sci, run)
     const compiled = await rustModule(options)
     if (!compiled) {
@@ -815,6 +820,16 @@ async function runSci(
   }
   const cap = sci.sendBytes ?? ctx.limits.maxMemoryBytes
   const { files, left } = await gather(ctx, cap)
+  if (left) {
+    ctx.stderr.write(
+      'python3: the scientific interpreter was not dispatched: ' +
+        left +
+        ' files exceed sendBytes=' +
+        cap +
+        '\n',
+    )
+    return 1
+  }
   let result
   try {
     result = await sci.run(
@@ -832,7 +847,7 @@ async function runSci(
   } catch (error) {
     if (ctx.signal.aborted) return 130
     ctx.stderr.write(
-      'python3: the polars interpreter failed: ' +
+      'python3: the scientific interpreter failed: ' +
         (error instanceof Error ? error.message : String(error)) +
         '\n',
     )
@@ -849,13 +864,5 @@ async function runSci(
   }
   ctx.stdout.write(result.stdout)
   ctx.stderr.write(result.stderr)
-  if (left)
-    ctx.stderr.write(
-      'python3: the polars interpreter ran without ' +
-        left +
-        ' files past the ' +
-        Math.round(cap / 1048576) +
-        ' MiB of files it is sent\n',
-    )
   return result.status
 }

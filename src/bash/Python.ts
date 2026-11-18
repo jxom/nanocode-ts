@@ -29,6 +29,7 @@ export type Sci = (
   | { module: Loads; data: Data; run?: undefined }
   | { run(request: SciRequest, signal: AbortSignal): Promise<SciResult>; module?: undefined }
 ) & {
+  mode?: 'all' | 'imports'
   modules?: readonly string[]
   // The most bytes of files a remote run is sent, maxMemoryBytes by default: the files named on the
   // command line or quoted as absolute paths in the code, then the working directory, then site-packages.

@@ -121,7 +121,7 @@ const instances = new WeakMap<WebAssembly.Module, Instance>()
 // file, so the blob stays here, compressed, once per isolate and outside every instance's memory. The
 // module's custom section names the python.data it needs: its SHA-256 and layout (scripts/python.mjs).
 // A module baked without an image keeps the blob in its own data custom section instead.
-export type Image = { base: number; bytes: Uint8Array; data: Uint8Array }
+export type Image = { base: number; bytes: Uint8Array; data: Uint8Array; length: number }
 
 const imageSection = 'nanocode.python.image'
 
@@ -182,11 +182,15 @@ export async function provide(
   if (memory.length !== length) throw new Error('its memory image is corrupt')
   // The blob is copied out so that the bytes it came in, with the image's gzip, can be collected.
   const start = header.length + packed
-  images.set(module, {
+  const image = {
     base: view.getUint32(40, true),
-    bytes: memory,
+    bytes: bytes.slice(header.length, start),
     data: bytes.slice(start, start + blobLength),
-  })
+    length,
+  }
+  const instance = await instantiate(module, { image, memory })
+  images.set(module, image)
+  instances.set(module, instance)
 }
 
 const randomBytes = 65536
@@ -195,7 +199,16 @@ const text = new TextDecoder()
 
 const limits = ['output', 'sleep', 'steps', 'time', 'memory'] as const
 
-function instantiate(module: WebAssembly.Module): Instance {
+type InstantiateOptions = {
+  image?: Image
+  memory?: Uint8Array
+  running?: Set<Instance>
+}
+
+async function instantiate(
+  module: WebAssembly.Module,
+  options: InstantiateOptions = {},
+): Promise<Instance> {
   const state: Instance = {
     call: undefined,
     exports: undefined as unknown as Exports,
@@ -388,7 +401,7 @@ function instantiate(module: WebAssembly.Module): Instance {
       },
     },
   }
-  const image = images.get(module)
+  const image = options.image ?? images.get(module)
   if (!image && descriptor(module))
     throw new Error('python.wasm runs only with its python.data image')
   if (suspends) {
@@ -398,11 +411,21 @@ function instantiate(module: WebAssembly.Module): Instance {
   }
   state.exports = new WebAssembly.Instance(module, imports).exports as unknown as Exports
   if (suspends) state.call = jspi.promising!(state.exports.python_run) as () => Promise<unknown>
-  if (image)
-    new Uint8Array(state.exports.memory.buffer, image.base, image.bytes.length).set(image.bytes)
   state.initial = state.exports.memory.buffer.byteLength
-  state.held = state.exports.python_held?.() ?? 0
-  return state
+  state.spare = (options.running?.size ?? 0) > 0
+  options.running?.add(state)
+  try {
+    if (image) {
+      const bytes = options.memory ?? (await gunzip(image.bytes))
+      if (bytes.length !== image.length) throw new Error('its memory image is corrupt')
+      new Uint8Array(state.exports.memory.buffer, image.base, bytes.length).set(bytes)
+    }
+    state.held = state.exports.python_held?.() ?? 0
+    return state
+  } catch (error) {
+    options.running?.delete(state)
+    throw error
+  }
 }
 
 export function layered(
@@ -828,13 +851,12 @@ export function fits(module: WebAssembly.Module, memory: number): boolean {
   return instances.has(module) || used + image <= memory
 }
 
-function take(module: WebAssembly.Module, fresh: boolean | undefined): Instance {
+async function take(module: WebAssembly.Module, fresh: boolean | undefined): Promise<Instance> {
   const idle = instances.get(module)
   if (!fresh) instances.delete(module)
   const running = busy.get(module) ?? new Set<Instance>()
   busy.set(module, running)
-  const taken = idle && !fresh ? idle : instantiate(module)
-  if (taken !== idle) taken.spare = running.size > 0
+  const taken = idle && !fresh ? idle : await instantiate(module, { running })
   running.add(taken)
   return taken
 }
@@ -890,8 +912,11 @@ function release(module: WebAssembly.Module, instance: Instance) {
   instance.stopped = () => false
 }
 
-export function run(module: WebAssembly.Module, options: RunOptions & { spawn?: Spawn }): Ran {
-  const instance = take(module, options.fresh)
+export async function run(
+  module: WebAssembly.Module,
+  options: RunOptions & { spawn?: Spawn },
+): Promise<Ran> {
+  const instance = await take(module, options.fresh)
   try {
     begin(instance, options)
     return end(module, instance, instance.exports.python_run(), options.request)
@@ -906,7 +931,7 @@ export async function runAsync(
   module: WebAssembly.Module,
   options: RunOptions & { retry?: () => Promise<boolean>; spawn?: Suspended },
 ): Promise<Ran> {
-  const instance = take(module, options.fresh)
+  const instance = await take(module, options.fresh)
   try {
     begin(instance, options)
     instance.retry = options.retry
