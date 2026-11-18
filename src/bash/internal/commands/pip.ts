@@ -1252,7 +1252,12 @@ async function install(ctx: CommandContext, wanted: string[], flags: Flags): Pro
     const key = normalize(requirement.name)
     const previous = chosen.get(key)
     if (previous !== undefined) {
-      if (previous && !satisfies(previous, requirement.specs))
+      if (previous && !satisfies(previous, requirement.specs)) {
+        if (key === 'eth-utils')
+          throw new CommandError(
+            'No RustPython-compatible distribution found for ' + spelled(requirement),
+            1,
+          )
         warn(
           spelled(requirement) +
             ' wanted, but ' +
@@ -1262,6 +1267,7 @@ async function install(ctx: CommandContext, wanted: string[], flags: Flags): Pro
             ' was already chosen; keeping ' +
             previous,
         )
+      }
       continue
     }
     const carriedDist = modules.dists.get(key)
@@ -1285,6 +1291,12 @@ async function install(ctx: CommandContext, wanted: string[], flags: Flags): Pro
         )
       chosen.set(key, version)
       continue
+    }
+    if (key === 'eth-utils') {
+      requirement = { ...requirement, specs: [...requirement.specs, ['<', '5.3']] }
+      warn(
+        'eth-utils 5.3+ needs pydantic 2 and its compiled core; selecting a compatible release below 5.3',
+      )
     }
     const downgrade = downgrades[key]
     if (downgrade) {
@@ -1328,6 +1340,11 @@ async function install(ctx: CommandContext, wanted: string[], flags: Flags): Pro
     const stable = candidates.filter((entry) => !prerelease(entry.version))
     const pool = flags.pre || !stable.length ? candidates : stable
     if (!pool.length) {
+      if (key === 'eth-utils')
+        throw new CommandError(
+          'No RustPython-compatible distribution found for ' + spelled(requirement),
+          1,
+        )
       if (!requirement.specs.length)
         throw new CommandError('No matching distribution found for ' + spelled(requirement), 1)
       warn(
@@ -1421,6 +1438,27 @@ async function install(ctx: CommandContext, wanted: string[], flags: Flags): Pro
           (alternatives[key] ? '. Instead: ' + alternatives[key] : ''),
         1,
       )
+    }
+    if (key === 'eth-utils') {
+      const fallback = fields(unit.metadata, 'Requires-Dist').find((text) => {
+        const dependency = parseRequirement(text)
+        return (
+          normalize(dependency.name) === 'toolz' &&
+          /^implementation_name\s*==\s*(['"])pypy\1$/.test(dependency.marker)
+        )
+      })
+      if (fallback) {
+        const dependency = fallback.replace(
+          /implementation_name\s*==\s*(['"])pypy\1/,
+          'implementation_name == "rustpython"',
+        )
+        unit.metadata = unit.metadata.replace(
+          /\r?\n\r?\n|$/,
+          '\nRequires-Dist: ' + dependency + '\n\n',
+        )
+        unit.files.set(unit.distInfo + '/METADATA', encode(unit.metadata))
+        warn(proj.info.name + ': using its pure-Python toolz dependency on RustPython')
+      }
     }
     chosen.set(key, pick.text)
     if (have) {
