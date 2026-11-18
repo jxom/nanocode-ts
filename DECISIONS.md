@@ -981,3 +981,15 @@ A fixed 108-case local SDK suite ran in three isolated interleaved processes per
 ## 2026-11-18: Pin the Qualified Core Epoch
 
 Pin the SDK and Python source to `6ed92be87b3a2f704a7af857a2237b3fccafbb27`; retain the independent shell pin. The full WASM build completed without a memory stop. The actual baked platform module passed all nine mocked iOS import cases in three processes, versus five of nine for the previous baked module. This is Node-hosted contract evidence, not an iOS application or Workers memory qualification. The release includes the approved unconfirmed-logout feedback and unchanged Python dependency policy.
+
+## 2026-11-18: Carry the Patch Contract into SDK Builds
+
+The SDK pin advances from `7d4cbc88a4e284cdc716728090a7bd291803ecc4` to `664f49e0449e4793d19a8003a6ab27cb4c966b36`. The Python and shell source pins remain unchanged. The core patch planner preserves a file's final newline state and folds ordered same-target Delete/Add operations into one Write. Other repeated-target conflicts remain errors.
+
+`node scripts/check-patches.ts SDK_DIRECTORY` verifies the exact clean, tracked SDK revision before and after the core's offline patch regressions. It disables Shippy remote execution and preserves compiler wrappers. The command rejects a mismatched revision or tracked source changes. The core runner compiles the actual parser and patch implementation with rustc, without Cargo dependency acquisition.
+
+Validation on 2026-11-18 PST, hosted Linux, Node 24: `SHIPPY_REMOTE_BUILD=0 node scripts/check-patches.ts ../tb-failure-fixes` passed 16/16 fixed cases in each of three runs. The observed count range was 16–16. A population interval is not applicable to this deterministic fixed suite. All five intentional mutations were detected in each run. Logs are in `output/patch-regressions-{1,2,3}.log`. The cases cover final newline preservation, ordered replacement, path aliases, executable permissions and conflicting operations.
+
+`npm ci --offline --ignore-scripts --no-audit --no-fund`, `npm run check:types` and `npm run build:ts` passed. A separate strict TypeScript check covers the command: `node_modules/.bin/tsc --ignoreConfig --types node --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck scripts/check-patches.ts`. The native core backend check passed with `SHIPPY_REMOTE_BUILD=0 SHIPPY_EXEC=0 SHIPPY_PUSH=0 SHIPPY_PREFETCH=0 SHIPPY_PRIME=0 CARGO_NET_OFFLINE=true cargo check --locked --offline --lib -p nanocode-backend-codex` from the SDK directory.
+
+This is a tested source pin, not a rebuilt or published WASM release. The hosted toolchain has no wasm32 target installed. Existing release artifacts remain unchanged. No paid inference was run. Saved Terminal-Bench rewards cannot change through offline replay, and a later measured pass-rate improvement remains unverified.
