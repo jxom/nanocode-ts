@@ -1251,44 +1251,42 @@ async function install(ctx: CommandContext, wanted: string[], flags: Flags): Pro
     if (!evaluate(requirement.marker, [])) continue
     const key = normalize(requirement.name)
     const previous = chosen.get(key)
-    if (previous !== undefined) {
-      if (previous && !satisfies(previous, requirement.specs)) {
-        if (key === 'eth-utils')
-          throw new CommandError(
-            'No RustPython-compatible distribution found for ' + spelled(requirement),
-            1,
-          )
-        warn(
-          spelled(requirement) +
-            ' wanted, but ' +
-            key +
-            ' ' +
-            previous +
-            ' was already chosen; keeping ' +
-            previous,
+    if (previous !== undefined && (previous || !requirement.specs.length)) {
+      if (previous && !satisfies(previous, requirement.specs))
+        throw new CommandError(
+          spelled(requirement) + ' cannot satisfy the already chosen ' + key + ' ' + previous,
+          1,
         )
-      }
       continue
     }
     const carriedDist = modules.dists.get(key)
     const module = key.replace(/-/g, '_')
     if (carriedDist || modules.builtin.has(module) || modules.frozen.has(module)) {
-      const version = carriedDist?.[2] ?? ''
+      let version = carriedDist?.[2] ?? ''
+      if (!version && requirement.specs.length) {
+        const ran = await ctx.exec(
+          'python3 -c \'import importlib, json, sys; print(json.dumps(getattr(importlib.import_module(sys.argv[1]), "__version__", None)))\' ' +
+            module,
+        )
+        const value: unknown = ran.status === 0 ? JSON.parse(ran.stdout) : null
+        if (typeof value !== 'string' || !parseVersion(value))
+          throw new CommandError(
+            'cannot verify ' + spelled(requirement) + ': built into python.wasm without a version',
+            1,
+          )
+        version = value
+      }
+      if (version && !satisfies(version, requirement.specs))
+        throw new CommandError(
+          spelled(requirement) + ' cannot satisfy the built-in ' + key + ' ' + version,
+          1,
+        )
       say(
         'Requirement already satisfied: ' +
           requirement.name +
           (version ? ' ' + version : '') +
           ' (built into python.wasm)',
       )
-      if (version && !satisfies(version, requirement.specs))
-        warn(
-          spelled(requirement) +
-            ' wanted, but python.wasm carries ' +
-            key +
-            ' ' +
-            version +
-            ', which stays',
-        )
       chosen.set(key, version)
       continue
     }
