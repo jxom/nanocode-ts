@@ -129,6 +129,7 @@ export function pythonCommands(
 ): Record<string, CommandHandler> {
   const maxBytes = options.maxBytes ?? 64 * 1024 * 1024
   const handler: CommandHandler = async (given) => {
+    if (options.unavailable) throw new CommandError(options.unavailable, 126)
     const ctx = given.name === 'uv' ? uvRun(given) : given
     const mode = parse(ctx, ctx.args.slice())
     if (mode === 'help') {

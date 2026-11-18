@@ -1,4 +1,5 @@
 export type Options = {
+  unavailable?: string
   maxBytes?: number
   module?: false | WebAssembly.Module | (() => Promise<WebAssembly.Module>)
   // python.data, the memory image python.wasm starts from (gzip or not), or a function that loads it once

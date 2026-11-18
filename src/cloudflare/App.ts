@@ -929,6 +929,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
 
     private async serve(request: Request): Promise<Response> {
       const admitted = performance.now()
+      let operation = 'route'
       if (this.deleted) return json({ error: 'session deleted' }, 410)
       try {
         const url = new URL(request.url)
@@ -1312,6 +1313,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           const boundProvider =
             this.metadata.get(providerKey) ?? (initialized ? 'claude' : undefined)
           descriptor.provider = input.provider ?? boundProvider ?? 'claude'
+          operation = 'admit'
           const admitter = await this.instance(scope)
           lap('instance')
           const rejected = await admitter.admit(
@@ -1372,6 +1374,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           descriptor.thinking = input.thinking
           descriptor.web_search = input.web_search
           descriptor.project_instructions = input.project_instructions || undefined
+          operation = 'subscribe'
           await subscribing
           lap('subscribe')
           if (descriptor.provider === 'codex')
@@ -1395,6 +1398,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           policy(this.env.RECOVERY_DELAY_MS, 'RECOVERY_DELAY_MS')
           const current = this.metadata.get('authority')
           if (current && current !== identity) throw new Error('session authority mismatch')
+          operation = 'images'
           const images =
             options.workspace === false ||
             (descriptor.provider === 'codex' && workersAiModel(descriptor.model))
@@ -1417,6 +1421,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
               : {}),
             metadata: descriptor,
           }
+          operation = 'submit'
           const admitting = await this.instance(scope)
           submitted = await admitting.submit(
             scope,
@@ -1438,6 +1443,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
               409,
             )
           if (submitted.submitted === 'accepted') {
+            operation = 'bind'
             this.metadata.transaction(() => {
               this.metadata.insert('authority', identity)
               this.metadata.insert(providerKey, descriptor.provider!)
@@ -1481,6 +1487,7 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
           scope === ownerScope &&
           descriptor.hand === undefined &&
           this.resident(scope, descriptor)
+        operation = 'dispatch'
         if (direct) await this.dispatchFirst()
         lap('dispatch')
         const committing = accepted ? this.turnTimings.get(input.request_id) : undefined
@@ -1550,6 +1557,12 @@ export function create<E extends Env>(options: create.Options<E>): create.Return
         if (error instanceof URIError) return json({ error: 'invalid request encoding' }, 400)
         if (error instanceof Error && error.message.includes('SQLITE_TOOBIG'))
           return json({ error: "request exceeds the session's storage limit" }, 413)
+        console.error('Session operation failed', {
+          object_id: this.ctx.id.toString(),
+          method: request.method,
+          operation,
+          error: error instanceof Error ? error.stack ?? error.message : String(error),
+        })
         return json({ error: 'session operation failed' }, 503)
       }
     }
@@ -2500,9 +2513,10 @@ ${input.request_id}`
                 github: { archive: false, ...options.workspace?.github },
                 wasm: { interpreter },
                 ...(options.workspace?.psh ? { psh: options.workspace.psh } : {}),
-                ...(pythonModule
+                ...(pythonModule || workspaceOptions?.pythonUnavailable
                   ? {
                       python: {
+                        unavailable: workspaceOptions?.pythonUnavailable,
                         module: pythonModule,
                         data: () =>
                           options.workspace && options.workspace.pythonData
@@ -5479,6 +5493,7 @@ export declare namespace create {
           mounts?(authority: SessionAuthority, env: E): Record<string, FileSystem.FileSystem>
           psh?: WebAssembly.Module | Promise<WebAssembly.Module>
           pythonCpuMs?: number
+          pythonUnavailable?: string
           // python.wasm for the workspace's python3: nanocode-ts/python.wasm by default, false for none.
           pythonModule?:
             | WebAssembly.Module
