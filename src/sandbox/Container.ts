@@ -66,7 +66,7 @@ export function create(container: Handle, options: create.Options = {}): Workspa
       Shell.drain(process.stdout, { into: stdout }),
       Shell.drain(process.stderr, { into: stderr }),
     ])
-    return { code, stdout: stdout.text(), stderr: stderr.text() }
+    return { code, stdout, stderr: stderr.text() }
   }
 
   const boot = async () => {
@@ -146,7 +146,7 @@ export function create(container: Handle, options: create.Options = {}): Workspa
         throw new Error(
           result.stderr.trim() || 'reading ' + path + ' failed with exit code ' + result.code,
         )
-      return result.stdout
+      return result.stdout.text({ fatal: true, ignoreBOM: true })
     },
     write: (path, contents) => write(path, contents),
     remove: async (path) => {

@@ -78,7 +78,9 @@ export function create(options: create.Options): Workspace {
     read: async (path) => {
       const sandbox = await ready()
       const buffer = await sandbox.readFileToBuffer({ path: Shell.resolve(path, { cwd }) })
-      return buffer === null ? null : new TextDecoder().decode(buffer)
+      return buffer === null
+        ? null
+        : new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(buffer)
     },
     write: async (path, contents) => {
       const sandbox = await ready()

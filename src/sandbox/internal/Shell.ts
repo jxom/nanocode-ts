@@ -9,7 +9,7 @@ export const killAfterSeconds = 5
 export type Collector = {
   push(chunk: Uint8Array | string): void
   readonly truncated: boolean
-  text(): string
+  text(options?: TextDecoderOptions): string
 }
 
 export function collector(options: collector.Options): Collector {
@@ -31,14 +31,14 @@ export function collector(options: collector.Options): Collector {
     get truncated() {
       return truncated
     },
-    text() {
+    text(options: TextDecoderOptions = {}) {
       const joined = new Uint8Array(size)
       let offset = 0
       for (const chunk of chunks) {
         joined.set(chunk, offset)
         offset += chunk.length
       }
-      return new TextDecoder().decode(joined)
+      return new TextDecoder('utf-8', options).decode(joined)
     },
   }
 }
