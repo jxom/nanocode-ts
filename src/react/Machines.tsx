@@ -394,7 +394,9 @@ export function useUnlock(
         `Tempo ID did not revoke the key (${Machine.message(error)}). It stays valid until ${Machine.until(saved)} with what is left of its limit, but this page no longer keeps it.`,
       )
     }
-    await keyring.logout().catch(() => undefined)
+    await keyring.logout().catch((error: unknown) =>
+      note('error', `Server logout was not confirmed (${Machine.message(error)}).`),
+    )
     Wallet.forget()
     setConnected(undefined)
   }
