@@ -976,3 +976,8 @@ The package release command fetches master and rejects a local HEAD that differs
 The React unlock command reports a failed server logout without hiding it behind successful local cleanup. It still reports Tempo ID revocation separately and forgets the local connection; it does not retry either remote operation.
 
 A fixed 108-case local SDK suite ran in three isolated interleaved processes per variant against the published 6d58e23 and 41b0f57 packages and this source candidate. Both published packages passed 106/108 in all three runs; the candidate passed 108/108 in all three. The two changed cases combine an unconfirmed server logout with successful or failed Tempo ID revocation. Accounts, RPC, Mppx and React hooks are mocked provider boundaries; real WebAuthn, payment finality and browser UI are not validated. Normal `npm ci --ignore-scripts`, `npm run prepare` using the verified immutable WASM artifact, all three `npm run check:types` configurations and git diff checks pass. The candidate runs use its complete emitted JavaScript modules; no Rust/WASM rebuild was needed. The canonical published SDK stays 41b0f57.
+
+
+## 2026-11-18: Pin the Qualified Core Epoch
+
+Pin the SDK and Python source to `6ed92be87b3a2f704a7af857a2237b3fccafbb27`; retain the independent shell pin. The full WASM build completed without a memory stop. The actual baked platform module passed all nine mocked iOS import cases in three processes, versus five of nine for the previous baked module. This is Node-hosted contract evidence, not an iOS application or Workers memory qualification. The release includes the approved unconfirmed-logout feedback and unchanged Python dependency policy.
