@@ -19,6 +19,7 @@ export type Cell = {
   duration_ms?: number
   exit_code?: number
   images?: string[]
+  structured?: Record<string, unknown>
   details: string[]
   children: Cell[]
 }
@@ -416,6 +417,7 @@ export function finish(cell: Cell, options: finish.Options): Cell {
       } catch {}
     }
   }
+  if (event.structured && typeof event.structured === 'object') cell.structured = structured
   const images = imagesOf(event.structured, imagesOf(event.result))
   if (images.length) cell.images = images
   const output = cell.output.trim()
